@@ -202,33 +202,21 @@ textSourceLang.addEventListener("change", () => {
 
 // ── Swap languages (Text tab) ───────────────────────────────────────────────
 textSwapBtn.addEventListener("click", () => {
-  const srcCode = textSourceLang.value === "auto" ? detectedLangCode : textSourceLang.value;
-  if (!srcCode) return;
+  const sav_detect_language       = textSourceLang.value === "auto" ? detectedLangCode : textSourceLang.value;
+  if (!sav_detect_language) return;
 
-  // Step 1: save target language and target result to temp variables
-  const tempTargetLang   = textTargetLang.value;
-  const tempTargetResult = outputBox.querySelector(".placeholder") ? "" : outputBox.textContent.trim();
+  const sav_enter_text_to_translate = inputText.value;
+  const sav_target_language         = textTargetLang.value;
+  const sav_translation             = outputBox.querySelector(".placeholder") ? "" : outputBox.textContent.trim();
 
-  // Step 2: clear target language and target result
-  textTargetLang.value = "";
-  setOutput("");
-
-  // Step 3: move source detected language and source input → target language and target result
-  textTargetLang.value = srcCode;
-  if (inputText.value.trim()) setOutput(inputText.value.trim());
-
-  // Step 4: clear source language and source input
-  textSourceLang.value = "";
-  inputText.value = "";
-  updateCharCount(0);
-
-  // Step 5: move temp target language and temp target result → source language and source input
-  textSourceLang.value = tempTargetLang;
+  // Apply swap: each field receives its counterpart's saved value
+  textSourceLang.value = sav_target_language;
   resetTextDetectOption();
-  if (tempTargetResult) {
-    inputText.value = tempTargetResult;
-    updateCharCount(tempTargetResult.length);
-  }
+  inputText.value      = sav_translation;
+  updateCharCount(sav_translation.length);
+  textTargetLang.value = sav_detect_language;
+  if (sav_enter_text_to_translate) setOutput(sav_enter_text_to_translate);
+  else setOutput("");
 
   clearTimeout(translateTimer);
 });
