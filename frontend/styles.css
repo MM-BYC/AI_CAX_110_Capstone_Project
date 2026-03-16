@@ -24,10 +24,7 @@ header {
 header h1 {
   font-size: 2rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #6366f1, #a78bfa);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #e2e8f0;
 }
 
 .subtitle {
