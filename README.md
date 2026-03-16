@@ -74,3 +74,10 @@ Return result
 
 English · Spanish · French · German · Italian · Portuguese · Chinese · Japanese · Korean · Arabic · Russian · Hindi · Dutch · Polish · Turkish
 
+sample korean:
+사회초년생 포섭해 허위 임대차 계약서 꾸며 85억 대출받아 
+
+sample japanese:
+「NHKやさしいことばニュース」は、日本に住んでいる外国人の皆さんや、子どもたちに、できるだけやさしい日本語でニュースを伝えるサイトです。
+sample polish:
+W poniedziałkowym notowaniu światowego rankingu tenisistek Iga Świątek spadła z drugiego na trzecie miejsce, wyprzedziła ją Kazaszka Jelena Rybakina. Nadal prowadzi Białorusinka Aryna Sabalenka, która dzięki zwycięstwu w turnieju w Indian Wells powiększyła przewagę.
