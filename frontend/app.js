@@ -1,17 +1,19 @@
 const API_BASE = "http://127.0.0.1:8000";
 
-const sourceLang   = document.getElementById("sourceLanguage");
-const targetLang   = document.getElementById("targetLanguage");
-const inputText    = document.getElementById("inputText");
-const outputBox    = document.getElementById("outputText");
-const charCount    = document.getElementById("charCount");
-const detectedLang = document.getElementById("detectedLang");
-const translateBtn = document.getElementById("translateBtn");
-const copyBtn      = document.getElementById("copyBtn");
-const swapBtn      = document.getElementById("swapBtn");
-const spinner      = document.getElementById("spinner");
+// Text tab elements
+const textSourceLang = document.getElementById("textSourceLang");
+const textTargetLang = document.getElementById("textTargetLang");
+const inputText      = document.getElementById("inputText");
+const outputBox      = document.getElementById("outputText");
+const charCount      = document.getElementById("charCount");
+const detectedLang   = document.getElementById("detectedLang");
+const translateBtn   = document.getElementById("translateBtn");
+const copyBtn        = document.getElementById("copyBtn");
+const textSwapBtn    = document.getElementById("textSwapBtn");
 
-// Audio elements
+// Audio tab elements
+const audioSourceLang   = document.getElementById("audioSourceLang");
+const audioTargetLang   = document.getElementById("audioTargetLang");
 const audioFile         = document.getElementById("audioFile");
 const translateAudioBtn = document.getElementById("translateAudioBtn");
 const audioPlayer       = document.getElementById("audioPlayer");
@@ -25,6 +27,8 @@ const tabText  = document.getElementById("tabText");
 const tabAudio = document.getElementById("tabAudio");
 const textTab  = document.getElementById("textTab");
 const audioTab = document.getElementById("audioTab");
+
+const spinner = document.getElementById("spinner");
 
 // Language code → display name map
 const LANG_NAMES = {
@@ -49,53 +53,49 @@ tabAudio.addEventListener("click", () => {
   textTab.style.display = "none";
 });
 
-// ── Language detection helper ──────────────────────────────────────────────
+// ── Language detection helper (Text tab only) ──────────────────────────────
 let detectTimer = null;
 
 async function detectAndShowLanguage(text) {
-  if (!text.trim() || sourceLang.value !== "auto") return;
+  if (!text.trim() || textSourceLang.value !== "auto") return;
   try {
     const res = await fetch(`${API_BASE}/detect_language?text=${encodeURIComponent(text)}`, { method: "POST" });
     if (!res.ok) return;
     const data = await res.json();
-    const code = data.detected_language;
-    const name = LANG_NAMES[code] ?? code;
-    // Update the "Detect Language" option text to show what was detected
-    const detectOpt = sourceLang.querySelector('option[value="auto"]');
+    const name = LANG_NAMES[data.detected_language] ?? data.detected_language;
+    const detectOpt = textSourceLang.querySelector('option[value="auto"]');
     if (detectOpt) detectOpt.textContent = `Detected: ${name}`;
   } catch (_) {}
 }
 
-function resetDetectOption() {
-  const detectOpt = sourceLang.querySelector('option[value="auto"]');
+function resetTextDetectOption() {
+  const detectOpt = textSourceLang.querySelector('option[value="auto"]');
   if (detectOpt) detectOpt.textContent = "Detect Language";
 }
 
-// ── Character counter ──────────────────────────────────────────────────────
+// ── Character counter + live detection ─────────────────────────────────────
 inputText.addEventListener("input", () => {
   const len = inputText.value.length;
   charCount.textContent = `${len} character${len !== 1 ? "s" : ""}`;
-  // Live language detection when source is "auto"
   clearTimeout(detectTimer);
-  if (len > 5) {
+  if (len > 5 && textSourceLang.value === "auto") {
     detectTimer = setTimeout(() => detectAndShowLanguage(inputText.value), 600);
-  } else {
-    resetDetectOption();
+  } else if (len <= 5) {
+    resetTextDetectOption();
   }
 });
 
-sourceLang.addEventListener("change", () => {
-  if (sourceLang.value !== "auto") resetDetectOption();
+textSourceLang.addEventListener("change", () => {
+  if (textSourceLang.value !== "auto") resetTextDetectOption();
 });
 
-// ── Swap languages ─────────────────────────────────────────────────────────
-swapBtn.addEventListener("click", () => {
-  const tmp = sourceLang.value;
-  sourceLang.value = targetLang.value;
-  targetLang.value = tmp;
-  const outContent = outputBox.querySelector(".placeholder")
-    ? ""
-    : outputBox.textContent.trim();
+// ── Swap languages (Text tab) ───────────────────────────────────────────────
+textSwapBtn.addEventListener("click", () => {
+  if (textSourceLang.value === "auto") return; // can't swap detect
+  const tmp = textSourceLang.value;
+  textSourceLang.value = textTargetLang.value;
+  textTargetLang.value = tmp;
+  const outContent = outputBox.querySelector(".placeholder") ? "" : outputBox.textContent.trim();
   if (outContent) {
     inputText.value = outContent;
     inputText.dispatchEvent(new Event("input"));
@@ -113,14 +113,12 @@ translateBtn.addEventListener("click", async () => {
 
   try {
     const params = new URLSearchParams({
-      source: sourceLang.value === "auto" ? "en" : sourceLang.value,
-      target: targetLang.value,
+      source: textSourceLang.value === "auto" ? "en" : textSourceLang.value,
+      target: textTargetLang.value,
       text
     });
 
-    const res = await fetch(`${API_BASE}/translate_text?${params.toString()}`, {
-      method: "POST"
-    });
+    const res = await fetch(`${API_BASE}/translate_text?${params.toString()}`, { method: "POST" });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Unknown error" }));
@@ -130,9 +128,8 @@ translateBtn.addEventListener("click", async () => {
     const data = await res.json();
     const langName = LANG_NAMES[data.detected_language] ?? data.detected_language;
 
-    // Update source dropdown to show detected language
-    if (sourceLang.value === "auto") {
-      const detectOpt = sourceLang.querySelector('option[value="auto"]');
+    if (textSourceLang.value === "auto") {
+      const detectOpt = textSourceLang.querySelector('option[value="auto"]');
       if (detectOpt) detectOpt.textContent = `Detected: ${langName}`;
     }
 
@@ -161,8 +158,8 @@ translateAudioBtn.addEventListener("click", async () => {
     formData.append("file", file);
 
     const params = new URLSearchParams({
-      source: sourceLang.value,
-      target: targetLang.value
+      source: audioSourceLang.value === "auto" ? "en" : audioSourceLang.value,
+      target: audioTargetLang.value
     });
 
     const res = await fetch(`${API_BASE}/translate_audio?${params.toString()}`, {
@@ -178,23 +175,20 @@ translateAudioBtn.addEventListener("click", async () => {
     const data = await res.json();
     const langName = LANG_NAMES[data.detected_language] ?? data.detected_language;
 
-    // Update source dropdown to show detected language
-    if (sourceLang.value === "auto") {
-      const detectOpt = sourceLang.querySelector('option[value="auto"]');
+    // Update audio source dropdown only
+    if (audioSourceLang.value === "auto") {
+      const detectOpt = audioSourceLang.querySelector('option[value="auto"]');
       if (detectOpt) detectOpt.textContent = `Detected: ${langName}`;
     }
 
-    // Clear transcript
     audioTranscript.value = "";
 
-    // Show audio player and play
     const objectURL = URL.createObjectURL(file);
     audioPlayer.src = objectURL;
     audioPlayer.style.display = "block";
 
     const words = data.words || [];
 
-    // Stream words into the transcript field as audio plays
     audioPlayer.ontimeupdate = () => {
       const t = audioPlayer.currentTime;
       const heard = words.filter(w => w.start <= t).map(w => w.word).join("");
@@ -203,7 +197,6 @@ translateAudioBtn.addEventListener("click", async () => {
 
     audioPlayer.play();
 
-    // Show translation in the audio output box
     setAudioOutput(data.translation, `Detected: ${langName}`);
   } catch (err) {
     setAudioOutput(`Error: ${err.message}`, "");
