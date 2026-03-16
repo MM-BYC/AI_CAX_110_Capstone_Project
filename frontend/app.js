@@ -207,11 +207,14 @@ textSwapBtn.addEventListener("click", () => {
   textTargetLang.value = srcCode;
   resetTextDetectOption();
 
-  // Move translated text back to input and re-translate
+  // Move translated text back to input and re-translate instantly
   if (outContent) {
     inputText.value = outContent;
-    inputText.dispatchEvent(new Event("input"));
+    const len = outContent.length;
+    charCount.textContent = `${len} character${len !== 1 ? "s" : ""}`;
+    clearTimeout(translateTimer);
     setOutput("");
+    liveTranslate();
   }
 });
 
