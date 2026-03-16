@@ -91,15 +91,22 @@ async function detectAndShowLanguage(text) {
     const res = await fetch(`${API_BASE}/detect_language?text=${encodeURIComponent(text)}`, { method: "POST" });
     if (!res.ok) return;
     const data = await res.json();
-    const name = LANG_NAMES[data.detected_language] ?? data.detected_language;
-    const detectOpt = textSourceLang.querySelector('option[value="auto"]');
-    if (detectOpt) detectOpt.textContent = `Detected: ${name}`;
+    updateDetectOption(textSourceLang, data.detected_language);
   } catch (_) {}
 }
 
+function updateDetectOption(selectEl, langCode) {
+  const opt = selectEl.querySelector('option[value="auto"]');
+  if (!opt) return;
+  opt.textContent = langCode ? `Detected: ${LANG_NAMES[langCode] ?? langCode}` : "Detect Language";
+}
+
 function resetTextDetectOption() {
-  const detectOpt = textSourceLang.querySelector('option[value="auto"]');
-  if (detectOpt) detectOpt.textContent = "Detect Language";
+  updateDetectOption(textSourceLang, null);
+}
+
+function updateCharCount(len) {
+  charCount.textContent = `${len} character${len !== 1 ? "s" : ""}`;
 }
 
 // ── Live translate ──────────────────────────────────────────────────────────
@@ -107,9 +114,8 @@ let translateTimer   = null;
 let liveController   = null;
 let typewriterTimer  = null;
 let detectedLangCode = null;
-let swapSourceHint   = null; // known source lang carried across a swap
 
-async function liveTranslate() {
+async function liveTranslate(sourceOverride) {
   const text = inputText.value.trim();
   if (!text) { setOutput(""); return; }
 
@@ -118,16 +124,10 @@ async function liveTranslate() {
 
   showTypingIndicator();
 
-  // Use the swap hint if set, otherwise fall back to the selected/auto value
-  const sourceCode = swapSourceHint ?? (textSourceLang.value === "auto" ? "en" : textSourceLang.value);
-  swapSourceHint = null; // consume once
+  const sourceCode = sourceOverride ?? (textSourceLang.value === "auto" ? "en" : textSourceLang.value);
 
   try {
-    const params = new URLSearchParams({
-      source: sourceCode,
-      target: textTargetLang.value,
-      text
-    });
+    const params = new URLSearchParams({ source: sourceCode, target: textTargetLang.value, text });
 
     const res = await fetch(`${API_BASE}/translate_text?${params.toString()}`, {
       method: "POST",
@@ -141,12 +141,7 @@ async function liveTranslate() {
 
     const data = await res.json();
     detectedLangCode = data.detected_language;
-    const langName = LANG_NAMES[detectedLangCode] ?? detectedLangCode;
-
-    if (textSourceLang.value === "auto") {
-      const detectOpt = textSourceLang.querySelector('option[value="auto"]');
-      if (detectOpt) detectOpt.textContent = `Detected: ${langName}`;
-    }
+    if (textSourceLang.value === "auto") updateDetectOption(textSourceLang, detectedLangCode);
 
     typewriterOutput(data.translation);
   } catch (err) {
@@ -179,7 +174,7 @@ function typewriterOutput(text) {
 // ── Character counter + live detection ─────────────────────────────────────
 inputText.addEventListener("input", () => {
   const len = inputText.value.length;
-  charCount.textContent = `${len} character${len !== 1 ? "s" : ""}`;
+  updateCharCount(len);
 
   clearTimeout(detectTimer);
   if (len > 1 && textSourceLang.value === "auto") {
@@ -213,17 +208,13 @@ textSwapBtn.addEventListener("click", () => {
   textTargetLang.value = srcCode;
   resetTextDetectOption();
 
-  // Tell liveTranslate the exact source language for this one call
-  swapSourceHint = oldTarget;
-
-  // Move translated text back to input and re-translate instantly
+  // Move translated text back to input and re-translate instantly with known source
   if (outContent) {
     inputText.value = outContent;
-    const len = outContent.length;
-    charCount.textContent = `${len} character${len !== 1 ? "s" : ""}`;
+    updateCharCount(outContent.length);
     clearTimeout(translateTimer);
     setOutput("");
-    liveTranslate();
+    liveTranslate(oldTarget);
   }
 });
 
@@ -263,13 +254,7 @@ translateAudioBtn.addEventListener("click", async () => {
     }
 
     const data = await res.json();
-    const langName = LANG_NAMES[data.detected_language] ?? data.detected_language;
-
-    // Update audio source dropdown only
-    if (audioSourceLang.value === "auto") {
-      const detectOpt = audioSourceLang.querySelector('option[value="auto"]');
-      if (detectOpt) detectOpt.textContent = `Detected: ${langName}`;
-    }
+    if (audioSourceLang.value === "auto") updateDetectOption(audioSourceLang, data.detected_language);
 
     audioTranscript.value = "";
 
