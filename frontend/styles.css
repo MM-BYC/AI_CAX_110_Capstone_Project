@@ -233,17 +233,53 @@ textarea::placeholder { color: #475569; }
   margin-bottom: 0.75rem;
 }
 
+.drop-zone {
+  border: 2px dashed #6366f1;
+  border-radius: 10px;
+  padding: 2rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  margin-bottom: 0.75rem;
+}
+
+.drop-zone:hover, .drop-zone.drag-over {
+  background: #1e2440;
+  border-color: #818cf8;
+}
+
+.cloud-icon {
+  width: 64px;
+  height: 48px;
+  margin: 0 auto 0.75rem;
+  display: block;
+}
+
+.drop-label {
+  font-size: 0.95rem;
+  color: #e2e8f0;
+  margin-bottom: 0.25rem;
+}
+
+.drop-label span {
+  color: #818cf8;
+}
+
+.drop-sub {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.drop-sub.has-file {
+  color: #6ee7b7;
+  font-weight: 600;
+}
+
 .audio-controls {
   display: flex;
   gap: 1rem;
   align-items: center;
   flex-wrap: wrap;
-}
-
-input[type="file"] {
-  color: #94a3b8;
-  font-size: 0.9rem;
-  cursor: pointer;
 }
 
 .audio-result {

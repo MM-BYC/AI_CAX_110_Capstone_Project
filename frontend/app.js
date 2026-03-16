@@ -14,6 +14,8 @@ const textSwapBtn    = document.getElementById("textSwapBtn");
 const audioSourceLang   = document.getElementById("audioSourceLang");
 const audioTargetLang   = document.getElementById("audioTargetLang");
 const audioFile         = document.getElementById("audioFile");
+const dropZone          = document.getElementById("dropZone");
+const dropFileName      = document.getElementById("dropFileName");
 const translateAudioBtn = document.getElementById("translateAudioBtn");
 const audioPlayer       = document.getElementById("audioPlayer");
 const audioTranscript   = document.getElementById("audioTranscript");
@@ -36,6 +38,35 @@ const LANG_NAMES = {
   ko: "Korean", ar: "Arabic", ru: "Russian", hi: "Hindi",
   nl: "Dutch", pl: "Polish", tr: "Turkish", tl: "Tagalog"
 };
+
+// ── Drop zone ──────────────────────────────────────────────────────────────
+function showFileName(file) {
+  dropFileName.textContent = file ? file.name : "MP3, WAV, M4A, OGG supported";
+  dropFileName.classList.toggle("has-file", !!file);
+}
+
+dropZone.addEventListener("click", () => audioFile.click());
+
+audioFile.addEventListener("change", () => showFileName(audioFile.files[0]));
+
+dropZone.addEventListener("dragover", e => {
+  e.preventDefault();
+  dropZone.classList.add("drag-over");
+});
+
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+
+dropZone.addEventListener("drop", e => {
+  e.preventDefault();
+  dropZone.classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    audioFile.files = dt.files;
+    showFileName(file);
+  }
+});
 
 // ── Tab switching ───────────────────────────────────────────────────────────
 tabText.addEventListener("click", () => {
