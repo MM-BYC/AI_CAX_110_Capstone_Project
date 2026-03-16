@@ -223,6 +223,7 @@ translateAudioBtn.addEventListener("click", async () => {
       const t = audioPlayer.currentTime;
       const heard = words.filter(w => w.start <= t).map(w => w.word).join("");
       audioTranscript.value = heard;
+      audioTranscript.scrollTop = audioTranscript.scrollHeight;
     };
 
     audioPlayer.play();
