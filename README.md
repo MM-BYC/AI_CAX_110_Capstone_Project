@@ -41,7 +41,7 @@ Open `frontend/index.html` directly in a browser, or serve it:
 
 ```bash
 cd frontend
-python -m http.server 3000
+uv run python -m http.server 3000
 # Then open http://localhost:3000
 ```
 

@@ -64,22 +64,16 @@ translateBtn.addEventListener("click", async () => {
       text
     });
 
-    const res = await fetch(`${API_BASE}/translate_text`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" }
-    });
-
-    // FastAPI reads query params from the URL for POST with query string
-    const res2 = await fetch(`${API_BASE}/translate_text?${params.toString()}`, {
+    const res = await fetch(`${API_BASE}/translate_text?${params.toString()}`, {
       method: "POST"
     });
 
-    if (!res2.ok) {
-      const err = await res2.json().catch(() => ({ detail: "Unknown error" }));
-      throw new Error(err.detail || `HTTP ${res2.status}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Unknown error" }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
     }
 
-    const data = await res2.json();
+    const data = await res.json();
     const langName = LANG_NAMES[data.detected_language] ?? data.detected_language;
     setOutput(data.translation, `Detected: ${langName}`);
   } catch (err) {
