@@ -97,11 +97,9 @@
           <input type="file" id="audioFile" accept="audio/*" />
           <button class="btn btn-primary" id="translateAudioBtn">Translate Audio</button>
         </div>
+        <audio id="audioPlayer" controls style="display:none; width:100%; margin-top:12px;"></audio>
+        <div id="liveTranscription" class="live-transcription" style="display:none"></div>
         <div id="audioResult" class="audio-result" style="display:none">
-          <div class="result-row">
-            <strong>Transcribed:</strong>
-            <span id="transcribedText"></span>
-          </div>
           <div class="result-row">
             <strong>Detected language:</strong>
             <span id="audioDetected"></span>

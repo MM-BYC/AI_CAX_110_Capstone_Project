@@ -1,7 +1,11 @@
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from agent import translation_agent
+
+load_dotenv(Path(__file__).parent / ".env")
 
 app = FastAPI(title="Language Translation Agent", version="1.0.0")
 

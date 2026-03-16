@@ -16,8 +16,11 @@ def translation_agent(
     3. Translate to the target language
     """
     # Step 1: Convert speech if needed
+    words = []
     if is_audio:
-        text = speech_to_text(input_data)
+        transcription = speech_to_text(input_data)
+        text = transcription["text"]
+        words = transcription["words"]
     else:
         text = input_data
 
@@ -32,5 +35,6 @@ def translation_agent(
     return {
         "original_text": text,
         "detected_language": detected,
-        "translation": result
+        "translation": result,
+        "words": words
     }

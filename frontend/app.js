@@ -14,8 +14,9 @@ const spinner       = document.getElementById("spinner");
 // Audio elements
 const audioFile          = document.getElementById("audioFile");
 const translateAudioBtn  = document.getElementById("translateAudioBtn");
+const audioPlayer        = document.getElementById("audioPlayer");
+const liveTranscription  = document.getElementById("liveTranscription");
 const audioResult        = document.getElementById("audioResult");
-const transcribedText    = document.getElementById("transcribedText");
 const audioDetected      = document.getElementById("audioDetected");
 const audioTranslation   = document.getElementById("audioTranslation");
 
@@ -24,7 +25,7 @@ const LANG_NAMES = {
   en: "English", es: "Spanish", fr: "French", de: "German",
   it: "Italian", pt: "Portuguese", zh: "Chinese", ja: "Japanese",
   ko: "Korean", ar: "Arabic", ru: "Russian", hi: "Hindi",
-  nl: "Dutch", pl: "Polish", tr: "Turkish"
+  nl: "Dutch", pl: "Polish", tr: "Turkish", tl: "Tagalog"
 };
 
 // ── Character counter ──────────────────────────────────────────────────────
@@ -117,12 +118,33 @@ translateAudioBtn.addEventListener("click", async () => {
     const data = await res.json();
     const langName = LANG_NAMES[data.detected_language] ?? data.detected_language;
 
-    transcribedText.textContent  = data.original_text;
+    // Show audio player and wire up live word sync
+    const objectURL = URL.createObjectURL(file);
+    audioPlayer.src = objectURL;
+    audioPlayer.style.display = "block";
+
+    liveTranscription.textContent = "";
+    liveTranscription.style.display = "block";
+
+    const words = data.words || [];
+
+    // Remove any previous listener before adding a new one
+    audioPlayer.ontimeupdate = () => {
+      const t = audioPlayer.currentTime;
+      liveTranscription.textContent = words
+        .filter(w => w.start <= t)
+        .map(w => w.word)
+        .join("");
+    };
+
+    audioPlayer.play();
+
     audioDetected.textContent    = langName;
     audioTranslation.textContent = data.translation;
     audioResult.style.display    = "flex";
   } catch (err) {
-    transcribedText.textContent  = `Error: ${err.message}`;
+    liveTranscription.textContent = `Error: ${err.message}`;
+    liveTranscription.style.display = "block";
     audioDetected.textContent    = "";
     audioTranslation.textContent = "";
     audioResult.style.display    = "flex";

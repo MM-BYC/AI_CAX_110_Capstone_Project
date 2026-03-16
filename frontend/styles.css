@@ -259,3 +259,18 @@ input[type="file"] {
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Live transcription ── */
+.live-transcription {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  min-height: 56px;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
