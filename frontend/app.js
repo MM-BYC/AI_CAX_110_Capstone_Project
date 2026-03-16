@@ -103,10 +103,11 @@ function resetTextDetectOption() {
 }
 
 // ── Live translate ──────────────────────────────────────────────────────────
-let translateTimer  = null;
-let liveController  = null;
-let typewriterTimer = null;
+let translateTimer   = null;
+let liveController   = null;
+let typewriterTimer  = null;
 let detectedLangCode = null;
+let swapSourceHint   = null; // known source lang carried across a swap
 
 async function liveTranslate() {
   const text = inputText.value.trim();
@@ -117,9 +118,13 @@ async function liveTranslate() {
 
   showTypingIndicator();
 
+  // Use the swap hint if set, otherwise fall back to the selected/auto value
+  const sourceCode = swapSourceHint ?? (textSourceLang.value === "auto" ? "en" : textSourceLang.value);
+  swapSourceHint = null; // consume once
+
   try {
     const params = new URLSearchParams({
-      source: textSourceLang.value === "auto" ? "en" : textSourceLang.value,
+      source: sourceCode,
       target: textTargetLang.value,
       text
     });
@@ -200,12 +205,16 @@ textSwapBtn.addEventListener("click", () => {
   const srcCode = textSourceLang.value === "auto" ? detectedLangCode : textSourceLang.value;
   if (!srcCode) return; // nothing detected yet, nothing to swap
 
+  const oldTarget  = textTargetLang.value;
   const outContent = outputBox.querySelector(".placeholder") ? "" : outputBox.textContent.trim();
 
-  // Swap dropdown values
-  textSourceLang.value = textTargetLang.value;
+  // Source goes back to auto-detect; target becomes the previously detected language
+  textSourceLang.value = "auto";
   textTargetLang.value = srcCode;
   resetTextDetectOption();
+
+  // Tell liveTranslate the exact source language for this one call
+  swapSourceHint = oldTarget;
 
   // Move translated text back to input and re-translate instantly
   if (outContent) {
