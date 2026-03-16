@@ -11,8 +11,17 @@ from agent import translation_agent
 load_dotenv(Path(__file__).parent / ".env")
 
 # Pre-load lingua detector once at startup (eliminates cold-start latency)
-from lingua import LanguageDetectorBuilder
-_detector = LanguageDetectorBuilder.from_all_languages().with_low_accuracy_mode().build()
+# Restrict to only the languages the app supports — dramatically improves accuracy
+# by eliminating false positives from unrelated languages (e.g. Luganda vs Tagalog)
+from lingua import Language, LanguageDetectorBuilder
+
+_SUPPORTED = [
+    Language.ENGLISH, Language.SPANISH, Language.FRENCH, Language.GERMAN,
+    Language.ITALIAN, Language.PORTUGUESE, Language.CHINESE, Language.JAPANESE,
+    Language.KOREAN, Language.ARABIC, Language.RUSSIAN, Language.HINDI,
+    Language.DUTCH, Language.POLISH, Language.TURKISH, Language.TAGALOG,
+]
+_detector = LanguageDetectorBuilder.from_languages(*_SUPPORTED).build()
 _executor = ThreadPoolExecutor(max_workers=4)
 
 
