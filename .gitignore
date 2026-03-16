@@ -1,0 +1,19 @@
+# Environment variables — never commit real API keys
+backend/.env
+*.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+
+# Temp audio files
+backend/temp_*
+
+# uv
+.venv/
+uv.lock
