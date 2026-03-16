@@ -149,3 +149,11 @@ English · Spanish · French · German · Italian · Portuguese · Chinese · Ja
 ```text
 W poniedziałkowym notowaniu światowego rankingu tenisistek Iga Świątek spadła z drugiego na trzecie miejsce, wyprzedziła ją Kazaszka Jelena Rybakina.
 ```
+
+---
+
+## Codespaces Secret Key
+
+Store your `GROQ_API_KEY` as a GitHub Codespaces secret so it is automatically injected into the environment when you open the project in a Codespace — no `.env` file needed.
+
+![Codespaces Secret Key setup](assets/codespaces-secret-key.png)
