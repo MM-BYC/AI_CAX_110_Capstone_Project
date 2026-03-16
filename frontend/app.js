@@ -1,5 +1,7 @@
 const API_BASE = "http://127.0.0.1:8000";
 
+document.getElementById("copyright").textContent = `© ${new Date().getFullYear()} AI-Translate. All rights reserved.`;
+
 // Text tab elements
 const textSourceLang = document.getElementById("textSourceLang");
 const textTargetLang = document.getElementById("textTargetLang");
