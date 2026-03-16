@@ -1,4 +1,4 @@
-# AI Language Translator — Capstone Project
+# AI Translate — Capstone Project
 
 An agentic AI translation system powered by **Groq AI** and **OpenAI Whisper**.
 
