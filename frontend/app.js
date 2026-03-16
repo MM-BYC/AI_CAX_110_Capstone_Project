@@ -77,9 +77,9 @@ inputText.addEventListener("input", () => {
   const len = inputText.value.length;
   charCount.textContent = `${len} character${len !== 1 ? "s" : ""}`;
   clearTimeout(detectTimer);
-  if (len > 5 && textSourceLang.value === "auto") {
-    detectTimer = setTimeout(() => detectAndShowLanguage(inputText.value), 600);
-  } else if (len <= 5) {
+  if (len > 2 && textSourceLang.value === "auto") {
+    detectTimer = setTimeout(() => detectAndShowLanguage(inputText.value), 150);
+  } else if (len <= 2) {
     resetTextDetectOption();
   }
 });
