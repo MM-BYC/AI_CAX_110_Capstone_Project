@@ -3,6 +3,11 @@
 An agentic AI translation system powered by **Groq AI** and **OpenAI Whisper**.
 
 ---
+## Main screen presents two menus i.e. Text, Audio
+
+![Text Menu screen](assets/Text_screen.png)
+
+![Audio Menu screen](assets/Audio_screen.png)
 
 ## Technology Stack
 
@@ -156,4 +161,6 @@ W poniedziałkowym notowaniu światowego rankingu tenisistek Iga Świątek spad�
 
 Store your `GROQ_API_KEY` as a GitHub Codespaces secret so it is automatically injected into the environment when you open the project in a Codespace — no `.env` file needed.
 
-![Codespaces Secret Key setup](assets/codespaces-secret-key.png)
+![Codespaces Secret Key setup](assets/codespaces_secret_key.png)
+
+
