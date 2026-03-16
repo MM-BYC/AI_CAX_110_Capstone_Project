@@ -106,6 +106,7 @@ function resetTextDetectOption() {
 let translateTimer  = null;
 let liveController  = null;
 let typewriterTimer = null;
+let detectedLangCode = null;
 
 async function liveTranslate() {
   const text = inputText.value.trim();
@@ -134,7 +135,8 @@ async function liveTranslate() {
     }
 
     const data = await res.json();
-    const langName = LANG_NAMES[data.detected_language] ?? data.detected_language;
+    detectedLangCode = data.detected_language;
+    const langName = LANG_NAMES[detectedLangCode] ?? detectedLangCode;
 
     if (textSourceLang.value === "auto") {
       const detectOpt = textSourceLang.querySelector('option[value="auto"]');
@@ -195,11 +197,17 @@ textSourceLang.addEventListener("change", () => {
 
 // ── Swap languages (Text tab) ───────────────────────────────────────────────
 textSwapBtn.addEventListener("click", () => {
-  if (textSourceLang.value === "auto") return; // can't swap detect
-  const tmp = textSourceLang.value;
-  textSourceLang.value = textTargetLang.value;
-  textTargetLang.value = tmp;
+  const srcCode = textSourceLang.value === "auto" ? detectedLangCode : textSourceLang.value;
+  if (!srcCode) return; // nothing detected yet, nothing to swap
+
   const outContent = outputBox.querySelector(".placeholder") ? "" : outputBox.textContent.trim();
+
+  // Swap dropdown values
+  textSourceLang.value = textTargetLang.value;
+  textTargetLang.value = srcCode;
+  resetTextDetectOption();
+
+  // Move translated text back to input and re-translate
   if (outContent) {
     inputText.value = outContent;
     inputText.dispatchEvent(new Event("input"));
