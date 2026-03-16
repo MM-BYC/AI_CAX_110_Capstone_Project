@@ -6,14 +6,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from lingua import Language, LanguageDetectorBuilder
 from agent import translation_agent
 
 load_dotenv(Path(__file__).parent / ".env")
-
-# Pre-load lingua detector once at startup (eliminates cold-start latency)
-# Restrict to only the languages the app supports — dramatically improves accuracy
-# by eliminating false positives from unrelated languages (e.g. Luganda vs Tagalog)
-from lingua import Language, LanguageDetectorBuilder
 
 _SUPPORTED = [
     Language.ENGLISH, Language.SPANISH, Language.FRENCH, Language.GERMAN,
