@@ -15,7 +15,6 @@ const audioTargetLang   = document.getElementById("audioTargetLang");
 const audioFile         = document.getElementById("audioFile");
 const dropZone          = document.getElementById("dropZone");
 const dropFileName      = document.getElementById("dropFileName");
-const translateAudioBtn = document.getElementById("translateAudioBtn");
 const audioPlayer       = document.getElementById("audioPlayer");
 const audioTranscript   = document.getElementById("audioTranscript");
 const audioOutputBox    = document.getElementById("audioOutputText");
@@ -46,7 +45,10 @@ function showFileName(file) {
 
 dropZone.addEventListener("click", () => audioFile.click());
 
-audioFile.addEventListener("change", () => showFileName(audioFile.files[0]));
+audioFile.addEventListener("change", () => {
+  showFileName(audioFile.files[0]);
+  translateAudio();
+});
 
 dropZone.addEventListener("dragover", e => {
   e.preventDefault();
@@ -64,6 +66,7 @@ dropZone.addEventListener("drop", e => {
     dt.items.add(file);
     audioFile.files = dt.files;
     showFileName(file);
+    translateAudio();
   }
 });
 
@@ -224,15 +227,11 @@ textTargetLang.addEventListener("change", () => {
 });
 
 // ── Audio translation ──────────────────────────────────────────────────────
-translateAudioBtn.addEventListener("click", async () => {
+async function translateAudio() {
   const file = audioFile.files[0];
-  if (!file) {
-    alert("Please select an audio file first.");
-    return;
-  }
+  if (!file) return;
 
   showSpinner(true);
-  translateAudioBtn.disabled = true;
 
   try {
     const formData = new FormData();
@@ -278,9 +277,8 @@ translateAudioBtn.addEventListener("click", async () => {
     setAudioOutput(`Error: ${err.message}`);
   } finally {
     showSpinner(false);
-    translateAudioBtn.disabled = false;
   }
-});
+}
 
 // ── Copy buttons ───────────────────────────────────────────────────────────
 copyBtn.addEventListener("click", () => {
