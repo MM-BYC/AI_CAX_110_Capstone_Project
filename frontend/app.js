@@ -203,20 +203,34 @@ textSourceLang.addEventListener("change", () => {
 // ── Swap languages (Text tab) ───────────────────────────────────────────────
 textSwapBtn.addEventListener("click", () => {
   const srcCode = textSourceLang.value === "auto" ? detectedLangCode : textSourceLang.value;
-  if (!srcCode) return; // nothing detected yet, nothing to swap
+  if (!srcCode) return;
 
-  const oldTarget = textTargetLang.value;
+  // Step 1: save target language and target result to temp variables
+  const tempTargetLang   = textTargetLang.value;
+  const tempTargetResult = outputBox.querySelector(".placeholder") ? "" : outputBox.textContent.trim();
 
-  // Swap dropdowns only — input text and output are untouched
-  textSourceLang.value = oldTarget;
+  // Step 2: clear target language and target result
+  textTargetLang.value = "";
+  setOutput("");
+
+  // Step 3: move source detected language and source input → target language and target result
   textTargetLang.value = srcCode;
-  resetTextDetectOption();
+  if (inputText.value.trim()) setOutput(inputText.value.trim());
 
-  // Re-translate the existing input with the new language pair
-  if (inputText.value.trim()) {
-    clearTimeout(translateTimer);
-    liveTranslate();
+  // Step 4: clear source language and source input
+  textSourceLang.value = "";
+  inputText.value = "";
+  updateCharCount(0);
+
+  // Step 5: move temp target language and temp target result → source language and source input
+  textSourceLang.value = tempTargetLang;
+  resetTextDetectOption();
+  if (tempTargetResult) {
+    inputText.value = tempTargetResult;
+    updateCharCount(tempTargetResult.length);
   }
+
+  clearTimeout(translateTimer);
 });
 
 // ── Re-translate when target language changes (Text tab) ───────────────────
