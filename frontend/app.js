@@ -205,21 +205,17 @@ textSwapBtn.addEventListener("click", () => {
   const srcCode = textSourceLang.value === "auto" ? detectedLangCode : textSourceLang.value;
   if (!srcCode) return; // nothing detected yet, nothing to swap
 
-  const oldTarget  = textTargetLang.value;
-  const outContent = outputBox.querySelector(".placeholder") ? "" : outputBox.textContent.trim();
+  const oldTarget = textTargetLang.value;
 
-  // Source goes back to auto-detect; target becomes the previously detected language
-  textSourceLang.value = "auto";
+  // Swap dropdowns only — input text and output are untouched
+  textSourceLang.value = oldTarget;
   textTargetLang.value = srcCode;
   resetTextDetectOption();
 
-  // Move translated text back to input and re-translate instantly with known source
-  if (outContent) {
-    inputText.value = outContent;
-    updateCharCount(outContent.length);
+  // Re-translate the existing input with the new language pair
+  if (inputText.value.trim()) {
     clearTimeout(translateTimer);
-    setOutput("");
-    liveTranslate(oldTarget);
+    liveTranslate();
   }
 });
 
