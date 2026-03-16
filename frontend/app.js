@@ -49,10 +49,43 @@ tabAudio.addEventListener("click", () => {
   textTab.style.display = "none";
 });
 
+// ── Language detection helper ──────────────────────────────────────────────
+let detectTimer = null;
+
+async function detectAndShowLanguage(text) {
+  if (!text.trim() || sourceLang.value !== "auto") return;
+  try {
+    const res = await fetch(`${API_BASE}/detect_language?text=${encodeURIComponent(text)}`, { method: "POST" });
+    if (!res.ok) return;
+    const data = await res.json();
+    const code = data.detected_language;
+    const name = LANG_NAMES[code] ?? code;
+    // Update the "Detect Language" option text to show what was detected
+    const detectOpt = sourceLang.querySelector('option[value="auto"]');
+    if (detectOpt) detectOpt.textContent = `Detected: ${name}`;
+  } catch (_) {}
+}
+
+function resetDetectOption() {
+  const detectOpt = sourceLang.querySelector('option[value="auto"]');
+  if (detectOpt) detectOpt.textContent = "Detect Language";
+}
+
 // ── Character counter ──────────────────────────────────────────────────────
 inputText.addEventListener("input", () => {
   const len = inputText.value.length;
   charCount.textContent = `${len} character${len !== 1 ? "s" : ""}`;
+  // Live language detection when source is "auto"
+  clearTimeout(detectTimer);
+  if (len > 5) {
+    detectTimer = setTimeout(() => detectAndShowLanguage(inputText.value), 600);
+  } else {
+    resetDetectOption();
+  }
+});
+
+sourceLang.addEventListener("change", () => {
+  if (sourceLang.value !== "auto") resetDetectOption();
 });
 
 // ── Swap languages ─────────────────────────────────────────────────────────
@@ -80,7 +113,7 @@ translateBtn.addEventListener("click", async () => {
 
   try {
     const params = new URLSearchParams({
-      source: sourceLang.value,
+      source: sourceLang.value === "auto" ? "en" : sourceLang.value,
       target: targetLang.value,
       text
     });
@@ -96,6 +129,13 @@ translateBtn.addEventListener("click", async () => {
 
     const data = await res.json();
     const langName = LANG_NAMES[data.detected_language] ?? data.detected_language;
+
+    // Update source dropdown to show detected language
+    if (sourceLang.value === "auto") {
+      const detectOpt = sourceLang.querySelector('option[value="auto"]');
+      if (detectOpt) detectOpt.textContent = `Detected: ${langName}`;
+    }
+
     setOutput(data.translation, `Detected: ${langName}`);
   } catch (err) {
     setOutput(`Error: ${err.message}`, "");
@@ -137,6 +177,12 @@ translateAudioBtn.addEventListener("click", async () => {
 
     const data = await res.json();
     const langName = LANG_NAMES[data.detected_language] ?? data.detected_language;
+
+    // Update source dropdown to show detected language
+    if (sourceLang.value === "auto") {
+      const detectOpt = sourceLang.querySelector('option[value="auto"]');
+      if (detectOpt) detectOpt.textContent = `Detected: ${langName}`;
+    }
 
     // Clear transcript
     audioTranscript.value = "";

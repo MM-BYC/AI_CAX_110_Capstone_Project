@@ -18,6 +18,14 @@ app.add_middleware(
 )
 
 
+@app.post("/detect_language")
+async def detect_language_endpoint(text: str):
+    """Detect the language of the given text."""
+    from langdetect import detect
+    detected = detect(text)
+    return {"detected_language": detected}
+
+
 @app.post("/translate_text")
 async def translate_text(source: str, target: str, text: str):
     """Translate plain text from source language to target language."""
