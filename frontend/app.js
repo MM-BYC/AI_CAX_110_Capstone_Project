@@ -6,7 +6,6 @@ const textTargetLang = document.getElementById("textTargetLang");
 const inputText      = document.getElementById("inputText");
 const outputBox      = document.getElementById("outputText");
 const charCount      = document.getElementById("charCount");
-const detectedLang   = document.getElementById("detectedLang");
 const translateBtn   = document.getElementById("translateBtn");
 const copyBtn        = document.getElementById("copyBtn");
 const textSwapBtn    = document.getElementById("textSwapBtn");
@@ -99,7 +98,7 @@ textSwapBtn.addEventListener("click", () => {
   if (outContent) {
     inputText.value = outContent;
     inputText.dispatchEvent(new Event("input"));
-    setOutput("", "");
+    setOutput("");
   }
 });
 
@@ -133,9 +132,9 @@ translateBtn.addEventListener("click", async () => {
       if (detectOpt) detectOpt.textContent = `Detected: ${langName}`;
     }
 
-    setOutput(data.translation, `Detected: ${langName}`);
+    setOutput(data.translation);
   } catch (err) {
-    setOutput(`Error: ${err.message}`, "");
+    setOutput(`Error: ${err.message}`);
   } finally {
     showSpinner(false);
     translateBtn.disabled = false;
@@ -197,9 +196,9 @@ translateAudioBtn.addEventListener("click", async () => {
 
     audioPlayer.play();
 
-    setAudioOutput(data.translation, `Detected: ${langName}`);
+    setAudioOutput(data.translation);
   } catch (err) {
-    setAudioOutput(`Error: ${err.message}`, "");
+    setAudioOutput(`Error: ${err.message}`);
   } finally {
     showSpinner(false);
     translateAudioBtn.disabled = false;
@@ -222,7 +221,7 @@ audioCopyBtn.addEventListener("click", () => {
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-function setOutput(translation, detected) {
+function setOutput(translation) {
   if (translation) {
     outputBox.textContent = translation;
     copyBtn.style.display = "inline-block";
@@ -230,10 +229,9 @@ function setOutput(translation, detected) {
     outputBox.innerHTML = '<span class="placeholder">Translation will appear here...</span>';
     copyBtn.style.display = "none";
   }
-  detectedLang.textContent = detected;
 }
 
-function setAudioOutput(translation, detected) {
+function setAudioOutput(translation) {
   if (translation) {
     audioOutputBox.textContent = translation;
     audioCopyBtn.style.display = "inline-block";
@@ -241,7 +239,6 @@ function setAudioOutput(translation, detected) {
     audioOutputBox.innerHTML = '<span class="placeholder">Translation will appear here...</span>';
     audioCopyBtn.style.display = "none";
   }
-  audioDetectedLang.textContent = detected;
 }
 
 function showSpinner(visible) {
