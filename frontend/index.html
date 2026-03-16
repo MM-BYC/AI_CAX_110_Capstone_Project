@@ -14,7 +14,13 @@
     </header>
 
     <main>
-      <!-- Language selectors -->
+      <!-- Tab menu -->
+      <div class="tab-menu">
+        <button class="tab-btn active" id="tabText">Text</button>
+        <button class="tab-btn" id="tabAudio">Audio</button>
+      </div>
+
+      <!-- Language selectors (shared by both tabs) -->
       <div class="language-bar">
         <div class="lang-group">
           <label for="sourceLanguage">Source Language</label>
@@ -63,50 +69,60 @@
         </div>
       </div>
 
-      <!-- Text translation panel -->
-      <div class="panels">
-        <div class="panel">
-          <label for="inputText">Enter text to translate</label>
-          <textarea
-            id="inputText"
-            placeholder="Type your text here..."
-            rows="8"
-          ></textarea>
-          <div class="panel-footer">
-            <span id="charCount">0 characters</span>
-            <button class="btn btn-primary" id="translateBtn">Translate</button>
+      <!-- Text tab content -->
+      <div id="textTab" class="tab-content">
+        <div class="panels">
+          <div class="panel">
+            <label for="inputText">Enter text to translate</label>
+            <textarea
+              id="inputText"
+              placeholder="Type your text here..."
+              rows="8"
+            ></textarea>
+            <div class="panel-footer">
+              <span id="charCount">0 characters</span>
+              <button class="btn btn-primary" id="translateBtn">Translate</button>
+            </div>
           </div>
-        </div>
 
-        <div class="panel output-panel">
-          <label>Translation</label>
-          <div id="outputText" class="output-box">
-            <span class="placeholder">Translation will appear here...</span>
-          </div>
-          <div class="panel-footer">
-            <span id="detectedLang" class="detected-lang"></span>
-            <button class="btn btn-secondary" id="copyBtn" style="display:none">Copy</button>
+          <div class="panel output-panel">
+            <label>Translation</label>
+            <div id="outputText" class="output-box">
+              <span class="placeholder">Translation will appear here...</span>
+            </div>
+            <div class="panel-footer">
+              <span id="detectedLang" class="detected-lang"></span>
+              <button class="btn btn-secondary" id="copyBtn" style="display:none">Copy</button>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Audio translation panel -->
-      <div class="audio-section">
-        <h2>&#127908; Audio Translation</h2>
-        <div class="audio-controls">
-          <input type="file" id="audioFile" accept="audio/*" />
-          <button class="btn btn-primary" id="translateAudioBtn">Translate Audio</button>
-        </div>
-        <audio id="audioPlayer" controls style="display:none; width:100%; margin-top:12px;"></audio>
-        <div id="liveTranscription" class="live-transcription" style="display:none"></div>
-        <div id="audioResult" class="audio-result" style="display:none">
-          <div class="result-row">
-            <strong>Detected language:</strong>
-            <span id="audioDetected"></span>
+      <!-- Audio tab content -->
+      <div id="audioTab" class="tab-content" style="display:none">
+        <div class="panels">
+          <div class="panel">
+            <div class="audio-section">
+              <h2>&#127908; Upload Audio File</h2>
+              <div class="audio-controls">
+                <input type="file" id="audioFile" accept="audio/*" />
+                <button class="btn btn-primary" id="translateAudioBtn">Translate Audio</button>
+              </div>
+              <audio id="audioPlayer" controls style="display:none; width:100%; margin-top:12px;"></audio>
+            </div>
+            <label for="audioTranscript">Transcription</label>
+            <textarea id="audioTranscript" placeholder="Transcription will appear here as audio plays..." rows="8" readonly></textarea>
           </div>
-          <div class="result-row">
-            <strong>Translation:</strong>
-            <span id="audioTranslation"></span>
+
+          <div class="panel output-panel">
+            <label>Translation</label>
+            <div id="audioOutputText" class="output-box">
+              <span class="placeholder">Translation will appear here...</span>
+            </div>
+            <div class="panel-footer">
+              <span id="audioDetectedLang" class="detected-lang"></span>
+              <button class="btn btn-secondary" id="audioCopyBtn" style="display:none">Copy</button>
+            </div>
           </div>
         </div>
       </div>
