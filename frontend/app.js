@@ -6,7 +6,6 @@ const textTargetLang = document.getElementById("textTargetLang");
 const inputText      = document.getElementById("inputText");
 const outputBox      = document.getElementById("outputText");
 const charCount      = document.getElementById("charCount");
-const translateBtn   = document.getElementById("translateBtn");
 const copyBtn        = document.getElementById("copyBtn");
 const textSwapBtn    = document.getElementById("textSwapBtn");
 
@@ -103,15 +102,90 @@ function resetTextDetectOption() {
   if (detectOpt) detectOpt.textContent = "Detect Language";
 }
 
+// ── Live translate ──────────────────────────────────────────────────────────
+let translateTimer  = null;
+let liveController  = null;
+let typewriterTimer = null;
+
+async function liveTranslate() {
+  const text = inputText.value.trim();
+  if (!text) { setOutput(""); return; }
+
+  if (liveController) liveController.abort();
+  liveController = new AbortController();
+
+  showTypingIndicator();
+
+  try {
+    const params = new URLSearchParams({
+      source: textSourceLang.value === "auto" ? "en" : textSourceLang.value,
+      target: textTargetLang.value,
+      text
+    });
+
+    const res = await fetch(`${API_BASE}/translate_text?${params.toString()}`, {
+      method: "POST",
+      signal: liveController.signal
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Unknown error" }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const langName = LANG_NAMES[data.detected_language] ?? data.detected_language;
+
+    if (textSourceLang.value === "auto") {
+      const detectOpt = textSourceLang.querySelector('option[value="auto"]');
+      if (detectOpt) detectOpt.textContent = `Detected: ${langName}`;
+    }
+
+    typewriterOutput(data.translation);
+  } catch (err) {
+    if (err.name === "AbortError") return;
+    setOutput(`Error: ${err.message}`);
+  }
+}
+
+function showTypingIndicator() {
+  clearInterval(typewriterTimer);
+  outputBox.innerHTML = '<span class="typing-indicator"><span></span><span></span><span></span></span>';
+  copyBtn.style.display = "none";
+}
+
+function typewriterOutput(text) {
+  clearInterval(typewriterTimer);
+  outputBox.textContent = "";
+  copyBtn.style.display = "none";
+  let i = 0;
+  typewriterTimer = setInterval(() => {
+    if (i < text.length) {
+      outputBox.textContent += text[i++];
+    } else {
+      clearInterval(typewriterTimer);
+      copyBtn.style.display = "inline-block";
+    }
+  }, 18);
+}
+
 // ── Character counter + live detection ─────────────────────────────────────
 inputText.addEventListener("input", () => {
   const len = inputText.value.length;
   charCount.textContent = `${len} character${len !== 1 ? "s" : ""}`;
+
   clearTimeout(detectTimer);
   if (len > 1 && textSourceLang.value === "auto") {
     detectTimer = setTimeout(() => detectAndShowLanguage(inputText.value), 50);
   } else if (len <= 1) {
     resetTextDetectOption();
+  }
+
+  clearTimeout(translateTimer);
+  if (len > 0) {
+    translateTimer = setTimeout(liveTranslate, 300);
+  } else {
+    setOutput("");
   }
 });
 
@@ -133,43 +207,9 @@ textSwapBtn.addEventListener("click", () => {
   }
 });
 
-// ── Text translation ───────────────────────────────────────────────────────
-translateBtn.addEventListener("click", async () => {
-  const text = inputText.value.trim();
-  if (!text) return;
-
-  showSpinner(true);
-  translateBtn.disabled = true;
-
-  try {
-    const params = new URLSearchParams({
-      source: textSourceLang.value === "auto" ? "en" : textSourceLang.value,
-      target: textTargetLang.value,
-      text
-    });
-
-    const res = await fetch(`${API_BASE}/translate_text?${params.toString()}`, { method: "POST" });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: "Unknown error" }));
-      throw new Error(err.detail || `HTTP ${res.status}`);
-    }
-
-    const data = await res.json();
-    const langName = LANG_NAMES[data.detected_language] ?? data.detected_language;
-
-    if (textSourceLang.value === "auto") {
-      const detectOpt = textSourceLang.querySelector('option[value="auto"]');
-      if (detectOpt) detectOpt.textContent = `Detected: ${langName}`;
-    }
-
-    setOutput(data.translation);
-  } catch (err) {
-    setOutput(`Error: ${err.message}`);
-  } finally {
-    showSpinner(false);
-    translateBtn.disabled = false;
-  }
+// ── Re-translate when target language changes (Text tab) ───────────────────
+textTargetLang.addEventListener("change", () => {
+  if (inputText.value.trim()) liveTranslate();
 });
 
 // ── Audio translation ──────────────────────────────────────────────────────
