@@ -245,6 +245,29 @@ copyBtn.addEventListener("click", () => {
   });
 });
 
+// ── Re-translate transcription when target language changes (Audio tab) ────
+audioTargetLang.addEventListener("change", async () => {
+  const text = audioTranscript.value.trim();
+  if (!text) return;
+
+  showSpinner(true);
+  try {
+    const params = new URLSearchParams({
+      source: audioSourceLang.value === "auto" ? "en" : audioSourceLang.value,
+      target: audioTargetLang.value,
+      text
+    });
+    const res = await fetch(`${API_BASE}/translate_text?${params.toString()}`, { method: "POST" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    setAudioOutput(data.translation);
+  } catch (err) {
+    setAudioOutput(`Error: ${err.message}`);
+  } finally {
+    showSpinner(false);
+  }
+});
+
 audioCopyBtn.addEventListener("click", () => {
   navigator.clipboard.writeText(audioOutputBox.textContent.trim()).then(() => {
     audioCopyBtn.textContent = "Copied!";
