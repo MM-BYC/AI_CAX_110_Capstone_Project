@@ -19,6 +19,8 @@ AI_CAX_110_Capstone_Project/
     └── app.js           # API calls & UI logic
 ```
 
+# How to run
+
 ## Setup
 
 ### 1. Backend
@@ -71,3 +73,4 @@ Return result
 ## Supported Languages
 
 English · Spanish · French · German · Italian · Portuguese · Chinese · Japanese · Korean · Arabic · Russian · Hindi · Dutch · Polish · Turkish
+
