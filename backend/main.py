@@ -50,7 +50,8 @@ async def detect_language_endpoint(text: str):
 
 @app.post("/translate_text")
 async def translate_text(source: str, target: str, text: str):
-    """Translate plain text from source language to target language."""
+    """You are a multi lingual expert.
+    Translate plain text from source language to target language."""
     result = translation_agent(text, source, target, is_audio=False)
     return result
 
