@@ -135,6 +135,29 @@ English · Spanish · French · German · Italian · Portuguese · Chinese · Ja
 
 ---
 
+## Testing — Sample Audio Upload
+
+A sample audio file is included in the `assets/` folder for testing the audio translation feature:
+
+> 🔊 [Sample Audio.m4a](assets/Sample%20Audio.m4a)
+
+**How to use it:**
+
+1. Start both the backend and frontend servers (see [How to Run](#how-to-run) above).
+2. In the browser, click the **Audio** tab.
+3. Drag and drop `assets/Sample Audio.m4a` onto the upload zone, or click to browse and select it.
+4. Choose a **Target Language** from the dropdown.
+5. Click **Translate** — Whisper will transcribe the speech and Groq AI will translate it.
+
+The file is located at:
+
+```text
+assets/
+└── Sample Audio.m4a   ← use this file for upload testing
+```
+
+---
+
 ## Sample Inputs
 
 ### Korean
