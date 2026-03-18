@@ -30,7 +30,7 @@ An agentic AI translation system powered by **Groq AI** and **OpenAI Whisper**.
 
 | Model | Provider | Role |
 | --- | --- | --- |
-| **llama-3.1-8b-instant** | Groq / Meta | Text translation via chat completion |
+| **llama-3.3-70b-versatile** | Groq / Meta | Text translation via chat completion (configurable via `GROQ_MODEL` in `.env`) |
 | **Whisper base** | OpenAI | Offline speech transcription with word timestamps |
 
 ### Frontend
@@ -55,15 +55,20 @@ AI_CAX_110_Capstone_Project/
 ├── backend/
 │   ├── main.py          # FastAPI server & API endpoints
 │   ├── agent.py         # Agentic translation pipeline
-│   ├── translator.py    # Groq AI translation tool
+│   ├── translator.py    # Groq AI translation tool (uses full language names in prompt)
 │   ├── speech.py        # Whisper speech-to-text tool
 │   ├── startback.sh     # Backend start script
+│   ├── .env.model       # Documents the GROQ_MODEL env var value
 │   └── .env.example
-└── frontend/
-    ├── index.html        # UI with tab navigation, language dropdowns & text input
-    ├── styles.css        # Dark-theme styling
-    ├── app.js            # API calls & UI logic
-    └── startfront.sh     # Frontend start script
+├── frontend/
+│   ├── index.html        # UI with tab navigation, language dropdowns & text input
+│   ├── styles.css        # Dark-theme styling
+│   ├── app.js            # API calls & UI logic (swap, live translate, audio)
+│   ├── startfront.sh     # Frontend start script
+│   └── __tests__/
+│       └── app.test.js   # Frontend unit tests
+└── assets/
+    └── Sample Audio.m4a  # Sample audio file for testing audio translation
 ```
 
 ---
@@ -122,7 +127,7 @@ Whisper speech-to-text  (audio only — word timestamps for live sync)
        ↓
 Lingua language detection
        ↓
-Groq AI translation (llama-3.1-8b-instant)
+Groq AI translation (llama-3.3-70b-versatile)
        ↓
 Return result
 ```
@@ -155,6 +160,17 @@ The file is located at:
 assets/
 └── Sample Audio.m4a   ← use this file for upload testing
 ```
+
+---
+
+## Recent Fixes & Improvements
+
+| Area | Change |
+| --- | --- |
+| **Swap button** | After swapping, the new input text is immediately re-translated in the new language direction |
+| **Language prompt** | Translator now sends full language names (e.g. `"Tagalog"` instead of `"tl"`) so the LLM always resolves the target correctly |
+| **AI model** | Upgraded from `llama-3.1-8b-instant` to `llama-3.3-70b-versatile` for significantly better multilingual accuracy, including Tagalog |
+| **Model config** | Model is now configurable via the `GROQ_MODEL` environment variable in `.env` |
 
 ---
 
