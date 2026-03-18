@@ -178,7 +178,6 @@ select:focus {
 
 .panel {
   background: rgba(10, 12, 24, 0.72);
-  border: 1px solid rgba(99, 102, 241, 0.35);
   border-radius: 12px;
   padding: 1rem;
   display: flex;
