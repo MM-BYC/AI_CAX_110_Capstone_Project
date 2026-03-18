@@ -1,1 +1,1 @@
-uv run python -m http.server 3000
+uv run python server.py
