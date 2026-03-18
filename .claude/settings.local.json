@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/michaelm/Desktop/**)",
+      "Read(//Users/michaelm/Downloads/**)",
+      "Bash(mdfind \"kMDItemDisplayName == ''Image 3-16-26 at 3.46 PM.png''\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}

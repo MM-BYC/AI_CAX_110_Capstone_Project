@@ -63,10 +63,6 @@ header h1 {
 }
 
 .tab-btn {
-  background: transparent;
-}
-
-.tab-btn {
   background: none;
   border: none;
   border-bottom: 3px solid transparent;
