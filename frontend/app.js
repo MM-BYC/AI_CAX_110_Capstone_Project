@@ -119,6 +119,7 @@ let translateTimer   = null;
 let liveController   = null;
 let typewriterTimer  = null;
 let detectedLangCode = null;
+let lastTranslation  = "";
 
 async function liveTranslate(sourceOverride) {
   const text = inputText.value.trim();
@@ -148,6 +149,7 @@ async function liveTranslate(sourceOverride) {
     detectedLangCode = data.detected_language;
     if (textSourceLang.value === "auto") updateDetectOption(textSourceLang, detectedLangCode);
 
+    lastTranslation = data.translation;
     typewriterOutput(data.translation);
   } catch (err) {
     if (err.name === "AbortError") return;
@@ -205,17 +207,22 @@ textSwapBtn.addEventListener("click", () => {
   const sav_detect_language       = textSourceLang.value === "auto" ? detectedLangCode : textSourceLang.value;
   if (!sav_detect_language) return;
 
+  // Abort any in-flight request and stop the typewriter before reading state
+  if (liveController) { liveController.abort(); liveController = null; }
+  clearInterval(typewriterTimer);
+  clearTimeout(translateTimer);
+
   const sav_enter_text_to_translate = inputText.value;
   const sav_target_language         = textTargetLang.value;
-  const sav_translation             = outputBox.querySelector(".placeholder") ? "" : outputBox.textContent.trim();
+  const sav_translation             = lastTranslation;
 
   // Apply swap: each field receives its counterpart's saved value
   textSourceLang.value = sav_target_language;
   resetTextDetectOption();
+  lastTranslation      = sav_enter_text_to_translate;
   inputText.value      = sav_translation;
   updateCharCount(sav_translation.length);
   textTargetLang.value = sav_detect_language;
-  clearTimeout(translateTimer);
   if (inputText.value.trim()) liveTranslate();
   else setOutput("");
 });
@@ -320,9 +327,11 @@ audioCopyBtn.addEventListener("click", () => {
 // ── Helpers ────────────────────────────────────────────────────────────────
 function setOutput(translation) {
   if (translation) {
+    lastTranslation = translation;
     outputBox.textContent = translation;
     copyBtn.style.display = "inline-block";
   } else {
+    lastTranslation = "";
     outputBox.innerHTML = '<span class="placeholder">Translation will appear here...</span>';
     copyBtn.style.display = "none";
   }
