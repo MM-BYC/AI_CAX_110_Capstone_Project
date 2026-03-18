@@ -20,7 +20,7 @@ const dropFileName      = document.getElementById("dropFileName");
 const audioPlayer       = document.getElementById("audioPlayer");
 const audioTranscript   = document.getElementById("audioTranscript");
 const audioOutputBox    = document.getElementById("audioOutputText");
-const audioDetectedLang = document.getElementById("audioDetectedLang");
+// audioDetectedLang element removed from HTML — not used
 const audioCopyBtn      = document.getElementById("audioCopyBtn");
 
 // Tab elements
@@ -237,7 +237,7 @@ async function translateAudio() {
   const file = audioFile.files[0];
   if (!file) return;
 
-  showSpinner(true);
+  showSpinner(true, "Transcribing audio with Whisper… this may take up to 60 seconds");
 
   try {
     const formData = new FormData();
@@ -276,7 +276,7 @@ async function translateAudio() {
       audioTranscript.scrollTop = audioTranscript.scrollHeight;
     };
 
-    audioPlayer.play();
+    audioPlayer.play().catch(() => {});
 
     setAudioOutput(data.translation);
   } catch (err) {
@@ -347,6 +347,7 @@ function setAudioOutput(translation) {
   }
 }
 
-function showSpinner(visible) {
+function showSpinner(visible, message = "Translating…") {
   spinner.style.display = visible ? "flex" : "none";
+  if (visible) spinner.querySelector("p").textContent = message;
 }
