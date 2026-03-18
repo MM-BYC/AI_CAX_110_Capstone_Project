@@ -14,11 +14,20 @@ html, body {
 body {
   font-family: "Segoe UI", system-ui, sans-serif;
   color: #e2e8f0;
-  background-color: #000;
-  background-image: url('assets/wallpaper.gif');
-  background-size: cover;
-  background-position: center center;
-  background-repeat: no-repeat;
+  background: #000;
+  min-height: 100vh;
+}
+
+/* ── Animated GIF wallpaper ── */
+.wallpaper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  z-index: -1;
+  pointer-events: none;
 }
 
 /* ── Layout ── */
