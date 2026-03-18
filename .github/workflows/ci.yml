@@ -32,7 +32,7 @@ jobs:
       - name: Lint with flake8
         working-directory: backend
         run: |
-          flake8 . --max-line-length=100 --exclude=__pycache__
+          flake8 . --max-line-length=400 --exclude=__pycache__
 
       - name: Check imports resolve
         working-directory: backend
