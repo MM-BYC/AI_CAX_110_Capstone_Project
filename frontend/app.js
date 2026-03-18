@@ -215,10 +215,9 @@ textSwapBtn.addEventListener("click", () => {
   inputText.value      = sav_translation;
   updateCharCount(sav_translation.length);
   textTargetLang.value = sav_detect_language;
-  if (sav_enter_text_to_translate) setOutput(sav_enter_text_to_translate);
-  else setOutput("");
-
   clearTimeout(translateTimer);
+  if (inputText.value.trim()) liveTranslate();
+  else setOutput("");
 });
 
 // ── Re-translate when target language changes (Text tab) ───────────────────
