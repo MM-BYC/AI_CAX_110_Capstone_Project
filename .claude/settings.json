@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ffprobe -v quiet -show_entries stream=duration -of default=noprint_wrappers=1 \"/Users/michaelm/AI_Solutions_Developer_2026/AI_CAX_110_Capstone_Project/frontend/assets/matrix_60fps.mp4\")",
+      "Bash(kill 37284)",
+      "Bash(uv run:*)",
+      "Bash(kill 21573)",
+      "Bash(kill 22092)",
+      "Bash(kill 12754)",
+      "Read(//private/tmp/**)"
+    ]
+  }
+}
