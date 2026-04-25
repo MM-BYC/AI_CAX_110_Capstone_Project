@@ -16,3 +16,6 @@ dependencies = [
     "python-multipart>=0.0.22",
     "lingua-language-detector>=2.2.0",
 ]
+
+[tool.uv]
+package = false
