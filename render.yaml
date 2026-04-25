@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: ai-translate
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: "apt-get update && apt-get install -y ffmpeg && pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: GROQ_API_KEY
+        sync: false

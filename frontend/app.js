@@ -1,4 +1,9 @@
-const API_BASE = "http://127.0.0.1:8000";
+// In production the frontend is served by FastAPI itself, so use a same-origin
+// (relative) base. In local dev the static server runs on :3000 and needs to
+// hit the backend on :8000 explicitly.
+const API_BASE = (window.location.port === "3000" || window.location.protocol === "file:")
+  ? "http://127.0.0.1:8000"
+  : "";
 
 document.getElementById("copyright").textContent = `© ${new Date().getFullYear()} AI-Translate. All rights reserved.`;
 

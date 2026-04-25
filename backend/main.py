@@ -6,8 +6,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from lingua import Language, LanguageDetectorBuilder
 from agent import translation_agent
+
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -70,3 +73,7 @@ async def translate_audio(source: str, target: str, file: UploadFile):
         os.remove(filepath)
 
     return result
+
+
+# Serve the frontend as static files. Mounted last so API routes above take priority.
+app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
