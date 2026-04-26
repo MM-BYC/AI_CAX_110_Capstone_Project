@@ -7,7 +7,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load env before agent modules so GROQ_API_KEY is available at import time
-load_dotenv(Path(__file__).parent / ".env")
+env_file = Path(__file__).parent / ".env"
+if env_file.exists():
+    load_dotenv(env_file)
+else:
+    load_dotenv()  # Load from environment variables (Railway sets these directly)
 
 from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
