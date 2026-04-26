@@ -24,9 +24,19 @@ from fastapi.staticfiles import StaticFiles
 logger.info("FastAPI modules imported")
 
 logger.info("Importing agents...")
-from agents.orchestrator import run_text_pipeline, run_audio_pipeline
-from agents import language_detection_agent
-logger.info("Agents imported successfully")
+try:
+    logger.info("  Importing orchestrator...")
+    from agents.orchestrator import run_text_pipeline, run_audio_pipeline
+    logger.info("  ✓ Orchestrator imported")
+
+    logger.info("  Importing language_detection_agent...")
+    from agents import language_detection_agent
+    logger.info("  ✓ Language detection agent imported")
+
+    logger.info("✓ All agents imported successfully")
+except Exception as e:
+    logger.error(f"✗ Agent import failed: {e}", exc_info=True)
+    raise
 
 logger.info("Setting up frontend directory...")
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
