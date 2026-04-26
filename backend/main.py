@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 load_dotenv(override=False)
 
 from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from agents.orchestrator import run_text_pipeline, run_audio_pipeline
@@ -42,6 +43,15 @@ _rooms: dict = {}
 
 def _gen_room_id() -> str:
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+
+@app.get("/")
+async def root():
+    """Serve index.html for the SPA."""
+    index_file = FRONTEND_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    return {"message": "AI Translate API"}
 
 
 @app.get("/api/health")
