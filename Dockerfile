@@ -19,6 +19,9 @@ RUN pip install --no-cache-dir -U pip setuptools && \
 # Expose port for FastAPI
 EXPOSE 8000
 
+# Set Python path so agents module is discoverable
+ENV PYTHONPATH=/app/backend:$PYTHONPATH
+
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/docs')" || exit 1
