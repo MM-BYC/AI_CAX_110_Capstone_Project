@@ -2,10 +2,19 @@
 import os
 from groq import Groq
 
-try:
-    _client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-except Exception as e:
-    raise RuntimeError(f"Failed to initialize Groq client: {e}. Check that GROQ_API_KEY is set.")
+_client = None
+
+def _get_client():
+    global _client
+    if _client is None:
+        api_key = os.environ.get("GROQ_API_KEY")
+        if not api_key:
+            raise RuntimeError("GROQ_API_KEY environment variable is not set")
+        try:
+            _client = Groq(api_key=api_key)
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize Groq client: {e}")
+    return _client
 
 LANG_NAMES = {
     "en": "English", "es": "Spanish", "fr": "French", "de": "German",
@@ -16,6 +25,7 @@ LANG_NAMES = {
 
 
 def run(text: str, source: str, target: str, critique: str = "") -> str:
+    client = _get_client()
     source_name = LANG_NAMES.get(source, source)
     target_name = LANG_NAMES.get(target, target)
 
@@ -29,7 +39,7 @@ def run(text: str, source: str, target: str, critique: str = "") -> str:
         f"Return only the translated text with no commentary.{correction_note}\n\nText:\n{text}"
     )
 
-    response = _client.chat.completions.create(
+    response = client.chat.completions.create(
         model=os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
         messages=[{"role": "user", "content": prompt}],
     )

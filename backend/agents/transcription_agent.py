@@ -2,12 +2,22 @@
 import os
 from groq import Groq
 
-_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+_client = None
+
+def _get_client():
+    global _client
+    if _client is None:
+        api_key = os.environ.get("GROQ_API_KEY")
+        if not api_key:
+            raise RuntimeError("GROQ_API_KEY environment variable is not set")
+        _client = Groq(api_key=api_key)
+    return _client
 
 
 def run(audio_file: str) -> dict:
+    client = _get_client()
     with open(audio_file, "rb") as f:
-        transcription = _client.audio.transcriptions.create(
+        transcription = client.audio.transcriptions.create(
             file=f,
             model="whisper-large-v3-turbo",
             response_format="verbose_json",
