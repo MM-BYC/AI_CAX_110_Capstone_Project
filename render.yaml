@@ -2,12 +2,10 @@ services:
   - type: web
     name: ai-translate
     runtime: python
-    plan: free
-    rootDir: backend
-    buildCommand: "apt-get update && apt-get install -y ffmpeg && uv sync --no-root"
-    startCommand: "uv run uvicorn main:app --host 0.0.0.0 --port $PORT"
+    buildCommand: pip install --upgrade pip setuptools && pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
-        value: 3.12.7
+        value: 3.12
       - key: GROQ_API_KEY
         sync: false
