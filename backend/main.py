@@ -275,9 +275,9 @@ if FRONTEND_DIR.exists():
 else:
     logger.error(f"Frontend directory does not exist: {FRONTEND_DIR}")
 
-logger.info("Frontend serving DISABLED for debugging - API only")
-# TODO: Fix StaticFiles mount hanging issue
-# app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+# Frontend serving disabled - API only for now
+# The StaticFiles mount was hanging when html=True, causing 502 errors
+# TODO: Fix and re-enable frontend serving
 
 logger.info("=== App initialization complete ===")
 logger.info("Ready to handle requests")
