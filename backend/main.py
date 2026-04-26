@@ -197,7 +197,7 @@ async def translate_audio(source: str, target: str, file: UploadFile):
     return result
 
 
-# Serve the frontend as static files
+# Serve the frontend as static files (WITHOUT html=True to avoid intercepting API routes)
 logger = logging.getLogger(__name__)
 logger.info(f"Frontend directory: {FRONTEND_DIR}")
 logger.info(f"Frontend exists: {FRONTEND_DIR.exists()}")
@@ -206,7 +206,9 @@ if FRONTEND_DIR.exists():
     logger.info(f"Frontend files: {list(FRONTEND_DIR.glob('*'))}")
     try:
         logger.info("Mounting frontend StaticFiles at /...")
-        app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+        # html=False prevents StaticFiles from intercepting non-existent paths
+        # API routes (/api/*, /ws/*) take priority and won't be caught by this mount
+        app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=False), name="frontend")
         logger.info("✓ Frontend mounted successfully")
     except Exception as e:
         logger.error(f"✗ Failed to mount frontend: {e}", exc_info=True)
