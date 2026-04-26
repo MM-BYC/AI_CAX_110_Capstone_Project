@@ -600,20 +600,24 @@ async function convConnect(roomId) {
   convWs = new WebSocket(wsUrl);
 
   convWs.onopen = () => {
+    console.log("[Conv] WebSocket connected, sending join message");
     convWs.send(JSON.stringify({ type: "join", name, language: lang }));
   };
 
   convWs.onmessage = e => {
+    console.log("[Conv] Received:", e.data);
     const msg = JSON.parse(e.data);
     convHandleMessage(msg);
   };
 
   convWs.onclose = () => {
+    console.log("[Conv] WebSocket closed");
     convHandleDisconnect();
   };
 
-  convWs.onerror = () => {
-    convHandleDisconnect("Connection error");
+  convWs.onerror = (err) => {
+    console.error("[Conv] WebSocket error:", err);
+    convHandleDisconnect(`WebSocket connection failed.\n\nMake sure:\n1. Backend is running (port 8000)\n2. Check console (F12) for details`);
   };
 }
 
@@ -843,10 +847,18 @@ convCreateBtn.addEventListener("click", async () => {
 
   try {
     const res = await fetch(`${API_BASE}/create_room`);
+    if (!res.ok) {
+      alert(`Backend error (${res.status}). Is the server running on port 8000?`);
+      return;
+    }
     const data = await res.json();
+    if (!data.room_id) {
+      alert("Invalid response from server.");
+      return;
+    }
     await convConnect(data.room_id);
   } catch (e) {
-    alert("Failed to create room. Is the server running?");
+    alert(`Failed to create room: ${e.message}\n\nMake sure backend is running:\ncd backend && ./startback.sh`);
   }
 });
 
