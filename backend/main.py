@@ -48,9 +48,15 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app):
-    logger.info("⭐ FastAPI lifespan: startup")
-    yield
-    logger.info("⭐ FastAPI lifespan: shutdown")
+    logger.info("⭐ FastAPI lifespan: startup COMPLETE")
+    logger.info("✓ App is ready to handle requests")
+    try:
+        yield
+    except Exception as e:
+        logger.error(f"Error during lifespan: {e}", exc_info=True)
+        raise
+    finally:
+        logger.info("⭐ FastAPI lifespan: shutdown")
 
 app = FastAPI(title="AI Translate", version="2.0.0", lifespan=lifespan)
 logger.info("FastAPI app created")

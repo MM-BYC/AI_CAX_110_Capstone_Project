@@ -26,5 +26,5 @@ ENV PYTHONPATH=/app/backend:$PYTHONPATH
 # HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 #     CMD python -c "import requests; requests.get('http://localhost:8000/docs')" || exit 1
 
-# Start FastAPI with Uvicorn
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start FastAPI with Uvicorn - use PORT env var if set (Railway may set this)
+CMD sh -c "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"
