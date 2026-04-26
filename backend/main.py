@@ -43,7 +43,16 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 logger.info(f"Frontend dir: {FRONTEND_DIR}")
 
 logger.info("Creating FastAPI app...")
-app = FastAPI(title="AI Translate", version="2.0.0")
+
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app):
+    logger.info("⭐ FastAPI lifespan: startup")
+    yield
+    logger.info("⭐ FastAPI lifespan: shutdown")
+
+app = FastAPI(title="AI Translate", version="2.0.0", lifespan=lifespan)
 logger.info("FastAPI app created")
 
 logger.info("Adding CORS middleware...")
@@ -63,10 +72,17 @@ def _gen_room_id() -> str:
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
 
+@app.get("/")
+async def root():
+    """Root endpoint."""
+    logger.info("Received request: GET /")
+    return {"message": "API is running"}
+
+
 @app.get("/health")
 async def health():
     """Health check endpoint."""
-    logger.info("Received request: /health")
+    logger.info("Received request: GET /health")
     return {"status": "ok"}
 
 
