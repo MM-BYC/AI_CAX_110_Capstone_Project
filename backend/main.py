@@ -11,11 +11,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Load env before agent modules so GROQ_API_KEY is available at import time
-env_file = Path(__file__).parent / ".env"
-if env_file.exists():
-    load_dotenv(env_file)
-else:
-    load_dotenv()  # Load from environment variables (Railway sets these directly)
+# python-dotenv handles missing .env gracefully and reads from environment variables
+load_dotenv(override=False)
 
 from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
