@@ -587,6 +587,10 @@ function convGetWsBase() {
   return `${proto}//${host}`;
 }
 
+function convIsLocalDev() {
+  return window.location.port === "3000" || window.location.protocol === "file:";
+}
+
 async function convConnect(roomId) {
   const name = convNameInput.value.trim();
   const lang = convLangSelect.value;
@@ -610,14 +614,23 @@ async function convConnect(roomId) {
     convHandleMessage(msg);
   };
 
-  convWs.onclose = () => {
-    console.log("[Conv] WebSocket closed");
-    convHandleDisconnect();
+  convWs.onclose = (event) => {
+    console.log("[Conv] WebSocket closed", event);
+    // Only show error if it was an unexpected close (code != 1000)
+    if (event.code !== 1000 && convPosition >= 0) {
+      convHandleDisconnect("Connection closed unexpectedly");
+    } else if (convPosition >= 0) {
+      convHandleDisconnect();
+    }
   };
 
   convWs.onerror = (err) => {
     console.error("[Conv] WebSocket error:", err);
-    convHandleDisconnect(`WebSocket connection failed.\n\nMake sure:\n1. Backend is running (port 8000)\n2. Check console (F12) for details`);
+    const isProduction = !convIsLocalDev();
+    const errorMsg = isProduction
+      ? `WebSocket not supported on this server.\n\nThe Conversation feature works best on local development:\n\ncd backend && ./startback.sh\ncd frontend && ./startfront.sh\n\nThen open: http://localhost:3000`
+      : `WebSocket connection failed.\n\nMake sure backend is running:\ncd backend && ./startback.sh`;
+    convHandleDisconnect(errorMsg);
   };
 }
 
