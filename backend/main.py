@@ -3,8 +3,12 @@ import json
 import asyncio
 import random
 import string
+import logging
 from pathlib import Path
 from dotenv import load_dotenv
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load env before agent modules so GROQ_API_KEY is available at import time
 env_file = Path(__file__).parent / ".env"
@@ -41,6 +45,7 @@ def _gen_room_id() -> str:
 @app.get("/create_room")
 async def create_room():
     """Generate a new room ID for live conversation."""
+    logger.info("Received request: /create_room")
     room_id = _gen_room_id()
     while room_id in _rooms:
         room_id = _gen_room_id()
@@ -199,4 +204,12 @@ async def translate_audio(source: str, target: str, file: UploadFile):
 
 
 # Serve the frontend as static files. Mounted last so API routes above take priority.
-app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+logger.info(f"Frontend directory: {FRONTEND_DIR}")
+logger.info(f"Frontend directory exists: {FRONTEND_DIR.exists()}")
+if FRONTEND_DIR.exists():
+    logger.info(f"Frontend files: {list(FRONTEND_DIR.glob('*'))}")
+try:
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+    logger.info("Successfully mounted frontend")
+except Exception as e:
+    logger.error(f"Failed to mount frontend: {e}")
