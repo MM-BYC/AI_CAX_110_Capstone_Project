@@ -4,15 +4,17 @@ from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from dotenv import load_dotenv
+
+# Load env before agent modules so GROQ_API_KEY is available at import time
+load_dotenv(Path(__file__).parent / ".env")
+
 from fastapi import FastAPI, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from lingua import Language, LanguageDetectorBuilder
-from agent import translation_agent
+from agents.orchestrator import run_text_pipeline, run_audio_pipeline
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
-
-load_dotenv(Path(__file__).parent / ".env")
 
 _SUPPORTED = [
     Language.ENGLISH, Language.SPANISH, Language.FRENCH, Language.GERMAN,
@@ -55,7 +57,7 @@ async def detect_language_endpoint(text: str):
 async def translate_text(source: str, target: str, text: str):
     """You are a multi lingual expert.
     Translate plain text from source language to target language."""
-    result = translation_agent(text, source, target, is_audio=False)
+    result = run_text_pipeline(text, source, target)
     return result
 
 
@@ -66,7 +68,7 @@ async def translate_audio(source: str, target: str, file: UploadFile):
     with open(filepath, "wb") as f:
         f.write(await file.read())
 
-    result = translation_agent(filepath, source, target, is_audio=True)
+    result = run_audio_pipeline(filepath, source, target)
 
     # Clean up temp file
     if os.path.exists(filepath):
