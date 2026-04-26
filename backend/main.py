@@ -7,7 +7,10 @@ import logging
 from pathlib import Path
 from dotenv import load_dotenv
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Load env before agent modules so GROQ_API_KEY is available at import time
@@ -80,8 +83,14 @@ def _gen_room_id() -> str:
 @app.get("/")
 async def root():
     """Root endpoint."""
-    logger.info("Received request: GET /")
-    return {"message": "API is running"}
+    try:
+        logger.info("✓ Endpoint /: request received")
+        result = {"message": "API is running", "status": "ok"}
+        logger.info(f"✓ Endpoint /: returning {result}")
+        return result
+    except Exception as e:
+        logger.error(f"✗ Endpoint / error: {e}", exc_info=True)
+        raise
 
 
 @app.get("/health")
