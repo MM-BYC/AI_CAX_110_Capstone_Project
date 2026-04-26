@@ -283,7 +283,7 @@ async function translateAudio() {
 
     audioPlayer.ontimeupdate = () => {
       const t = audioPlayer.currentTime;
-      const heard = words.filter(w => w.start <= t).map(w => w.word).join("");
+      const heard = words.filter(w => w.start <= t).map(w => w.word.trim()).join(" ");
       audioTranscript.value = heard;
       audioTranscript.scrollTop = audioTranscript.scrollHeight;
     };
