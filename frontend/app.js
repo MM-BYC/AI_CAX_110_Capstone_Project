@@ -294,8 +294,8 @@ async function translateAudio() {
 // ── Copy buttons ───────────────────────────────────────────────────────────
 copyBtn.addEventListener("click", () => {
   navigator.clipboard.writeText(outputBox.textContent.trim()).then(() => {
-    copyBtn.textContent = "Copied!";
-    setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+    copyBtn.querySelector("span").textContent = "Copied!";
+    setTimeout(() => { copyBtn.querySelector("span").textContent = "Copy"; }, 1500);
   });
 });
 
@@ -324,8 +324,8 @@ audioTargetLang.addEventListener("change", async () => {
 
 audioCopyBtn.addEventListener("click", () => {
   navigator.clipboard.writeText(audioOutputBox.textContent.trim()).then(() => {
-    audioCopyBtn.textContent = "Copied!";
-    setTimeout(() => { audioCopyBtn.textContent = "Copy"; }, 1500);
+    audioCopyBtn.querySelector("span").textContent = "Copied!";
+    setTimeout(() => { audioCopyBtn.querySelector("span").textContent = "Copy"; }, 1500);
   });
 });
 
