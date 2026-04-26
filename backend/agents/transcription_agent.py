@@ -15,8 +15,12 @@ def run(audio_file: str) -> dict:
         )
 
     words = []
-    if hasattr(transcription, "words") and transcription.words:
-        for w in transcription.words:
+    raw_words = getattr(transcription, "words", None) or []
+    for w in raw_words:
+        # Groq SDK returns words as dicts, not objects
+        if isinstance(w, dict):
+            words.append({"word": w["word"], "start": w["start"], "end": w["end"]})
+        else:
             words.append({"word": w.word, "start": w.start, "end": w.end})
 
     return {"text": transcription.text.strip(), "words": words}
