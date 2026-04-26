@@ -2,7 +2,10 @@
 import os
 from groq import Groq
 
-_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+try:
+    _client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+except Exception as e:
+    raise RuntimeError(f"Failed to initialize Groq client: {e}. Check that GROQ_API_KEY is set.")
 
 LANG_NAMES = {
     "en": "English", "es": "Spanish", "fr": "French", "de": "German",
