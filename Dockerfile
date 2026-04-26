@@ -28,4 +28,6 @@ ENV PYTHONPATH=/app/backend:$PYTHONPATH
 
 # Start FastAPI with Uvicorn - use Railway PORT env var if set, otherwise default to 8000
 # TESTING: Use test_main (minimal app) to debug if anything works on Railway
+# Build timestamp: 2026-04-26-rebuild
+RUN echo "Build: test_main app"
 CMD sh -c "uvicorn backend.test_main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info"
