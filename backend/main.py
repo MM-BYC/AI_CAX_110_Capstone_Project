@@ -44,6 +44,13 @@ def _gen_room_id() -> str:
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
 
+@app.get("/api/health")
+async def health_check():
+    """API health check endpoint."""
+    logger.info("Health check called")
+    return {"status": "ok"}
+
+
 @app.get("/create_room")
 async def create_room():
     """Generate a new room ID for live conversation."""
@@ -191,5 +198,17 @@ async def translate_audio(source: str, target: str, file: UploadFile):
 
 
 # Serve the frontend as static files
+logger = logging.getLogger(__name__)
+logger.info(f"Frontend directory: {FRONTEND_DIR}")
+logger.info(f"Frontend exists: {FRONTEND_DIR.exists()}")
+
 if FRONTEND_DIR.exists():
-    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+    logger.info(f"Frontend files: {list(FRONTEND_DIR.glob('*'))}")
+    try:
+        logger.info("Mounting frontend StaticFiles at /...")
+        app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+        logger.info("✓ Frontend mounted successfully")
+    except Exception as e:
+        logger.error(f"✗ Failed to mount frontend: {e}", exc_info=True)
+else:
+    logger.error(f"Frontend directory not found: {FRONTEND_DIR}")
