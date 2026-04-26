@@ -43,8 +43,9 @@ const micBtn                = document.getElementById("micBtn");
 const liveStatus            = document.getElementById("liveStatus");
 const liveTranscript        = document.getElementById("liveTranscript");
 const liveOutputText        = document.getElementById("liveOutputText");
-const liveCopyBtn           = document.getElementById("liveCopyBtn");
+const liveCopyBtn            = document.getElementById("liveCopyBtn");
 const liveTranslationCopyBtn = document.getElementById("liveTranslationCopyBtn");
+const liveResetBtn           = document.getElementById("liveResetBtn");
 
 const spinner = document.getElementById("spinner");
 
@@ -456,6 +457,17 @@ function stopListening() {
 
 micBtn.addEventListener("click", () => {
   isListening ? stopListening() : startListening();
+});
+
+liveResetBtn.addEventListener("click", () => {
+  stopListening();
+  finalText = "";
+  clearTimeout(liveXlateTimer);
+  liveTranscript.innerHTML = '<span class="placeholder">Your speech will appear here…</span>';
+  liveOutputText.innerHTML = '<span class="placeholder">Translation will appear here…</span>';
+  liveCopyBtn.style.display = "none";
+  liveTranslationCopyBtn.style.display = "none";
+  liveStatus.textContent = "Click the mic to start listening";
 });
 
 async function translateLiveText(text) {
