@@ -20,7 +20,12 @@ from fastapi.staticfiles import StaticFiles
 from agents.orchestrator import run_text_pipeline, run_audio_pipeline
 from agents import language_detection_agent
 
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+# Frontend directory - works whether run from project root or from backend directory
+_current_file = Path(__file__).resolve()
+if _current_file.parent.name == "backend":
+    FRONTEND_DIR = _current_file.parent.parent / "frontend"
+else:
+    FRONTEND_DIR = _current_file.parent / "frontend"
 
 from contextlib import asynccontextmanager
 
