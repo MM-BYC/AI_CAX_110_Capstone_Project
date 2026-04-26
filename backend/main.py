@@ -245,18 +245,9 @@ if FRONTEND_DIR.exists():
 else:
     logger.error(f"Frontend directory does not exist: {FRONTEND_DIR}")
 
-logger.info("Mounting frontend StaticFiles...")
-try:
-    logger.info(f"  Creating StaticFiles instance for {FRONTEND_DIR}...")
-    static_files = StaticFiles(directory=FRONTEND_DIR, html=True)
-    logger.info("  ✓ StaticFiles instance created")
-
-    logger.info(f"  Mounting at '/'...")
-    app.mount("/", static_files, name="frontend")
-    logger.info("✓ Successfully mounted frontend StaticFiles")
-except Exception as e:
-    logger.error(f"✗ Failed to mount frontend: {e}", exc_info=True)
-    raise
+logger.info("Frontend serving DISABLED for debugging - API only")
+# TODO: Fix StaticFiles mount hanging issue
+# app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 
 logger.info("=== App initialization complete ===")
 logger.info("Ready to handle requests")
