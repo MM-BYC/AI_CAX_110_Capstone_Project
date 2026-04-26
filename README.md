@@ -1,13 +1,67 @@
 # AI Translate — Capstone Project
 
-An agentic AI translation system powered by **Groq AI** and **OpenAI Whisper**.
+An agentic AI translation system powered by **Groq AI** and **OpenAI Whisper**, with real-time conversational translation for paired devices.
 
 ---
-## Main screen presents two menus i.e. Text, Audio
 
-![Text Menu screen](assets/Text_screen.png)
+## 🎯 Features
 
-![Audio Menu screen](assets/Audio_screen.png)
+### 📝 Text Translation
+
+Instant translation of typed text with live language detection and typewriter-style output animation.
+
+### 🎙️ Audio Translation
+
+Upload audio files for transcription + translation with word-level synchronization to audio playback and quality review.
+
+### 🔴 Live Translation
+
+Real-time speech recognition and translation with streaming results.
+
+### 💬 Live Conversation *(NEW)*
+
+Two users on separate phones/devices connect via room codes and have a real-time conversation where each user sees the exchange entirely in their own language. Full WebSocket-powered streaming with zero perceptible delay.
+
+---
+
+## Tab Navigation
+
+The app features **four tabs** for different translation modes:
+
+### Tab 1: Text
+
+![Text Translation Tab](assets/Text_screen.png)
+
+- Type or paste text
+- Auto-detect source language
+- Live translation on every keystroke
+- Swap languages button
+- Copy translation to clipboard
+
+### Tab 2: Audio
+
+![Audio Translation Tab](assets/Audio_screen.png)
+
+- Drag and drop audio file (MP3, WAV, M4A, OGG)
+- Word-level transcription synced to playback
+- Full translation with quality review
+- Shows original + translation side-by-side
+
+### Tab 3: Live
+
+- **Mic button** to start/stop listening
+- Browser-based speech recognition
+- Streaming transcription display
+- Live translation output
+- Reset button to clear session
+
+### Tab 4: Conversation *(NEW)*
+
+Real-time multi-user translation flow:
+
+- **Setup Screen** — Enter your name, select your language, create or join a room
+- **Waiting Screen** — Share the 6-character room code with your partner
+- **Active Conversation Screen** — See both participants' names + languages, press YOUR mic to speak, watch translations appear in real-time
 
 ## Technology Stack
 
@@ -53,22 +107,28 @@ An agentic AI translation system powered by **Groq AI** and **OpenAI Whisper**.
 ```text
 AI_CAX_110_Capstone_Project/
 ├── backend/
-│   ├── main.py          # FastAPI server & API endpoints
-│   ├── agent.py         # Agentic translation pipeline
-│   ├── translator.py    # Groq AI translation tool (uses full language names in prompt)
-│   ├── speech.py        # Whisper speech-to-text tool
-│   ├── startback.sh     # Backend start script
-│   ├── .env.model       # Documents the GROQ_MODEL env var value
+│   ├── main.py                    # FastAPI server, REST API & WebSocket endpoints
+│   ├── startback.sh               # Backend start script
+│   ├── agents/
+│   │   ├── __init__.py
+│   │   ├── orchestrator.py        # Unified pipeline coordinator (text & audio)
+│   │   ├── transcription_agent.py # Groq Whisper API for speech-to-text
+│   │   ├── language_detection_agent.py # langdetect for language identification
+│   │   ├── translation_agent.py   # Groq LLM for translation
+│   │   └── quality_review_agent.py # Quality check + retry on failures
+│   ├── .env.model                 # Documents the GROQ_MODEL env var value
 │   └── .env.example
 ├── frontend/
-│   ├── index.html        # UI with tab navigation, language dropdowns & text input
-│   ├── styles.css        # Dark-theme styling
-│   ├── app.js            # API calls & UI logic (swap, live translate, audio)
-│   ├── startfront.sh     # Frontend start script
+│   ├── index.html                 # UI with 4 tabs (Text, Audio, Live, Conversation)
+│   ├── styles.css                 # Dark-theme styling
+│   ├── app.js                     # API calls, WebSocket logic, UI interactions
+│   ├── startfront.sh              # Frontend start script
 │   └── __tests__/
-│       └── app.test.js   # Frontend unit tests
+│       └── app.test.js            # Frontend unit tests
 └── assets/
-    └── Sample Audio.m4a  # Sample audio file for testing audio translation
+    ├── Text_screen.png            # Screenshot of Text tab
+    ├── Audio_screen.png           # Screenshot of Audio tab
+    └── Sample Audio.m4a           # Sample audio file for testing
 ```
 
 ---
@@ -106,17 +166,48 @@ cd frontend
 
 ## API Endpoints
 
+### REST Endpoints
+
 | Method | Endpoint | Description |
 | --- | --- | --- |
+| GET | `/create_room` | Generate a new 6-character room code for live conversation |
 | POST | `/translate_text?source=es&target=en&text=...` | Translate plain text |
-| POST | `/translate_audio?source=es&target=en` + file | Translate spoken audio |
-| POST | `/detect_language?text=...` | Detect language of text (used for live detection) |
+| POST | `/translate_audio?source=es&target=en` + file | Translate spoken audio with quality review |
+| POST | `/detect_language?text=...` | Detect language of text |
+
+### WebSocket Endpoint
+
+| Protocol | Endpoint | Description |
+| --- | --- | --- |
+| WS | `/ws/conversation/{room_id}` | Real-time paired conversation. Each user sends their speech via JSON messages; server translates and broadcasts to both participants. |
+
+**WebSocket Message Format:**
+
+Client → Server:
+
+```json
+{"type": "join", "name": "Alice", "language": "en"}
+{"type": "speech", "text": "Hello world", "is_final": true}
+{"type": "interim", "text": "Hel..."}
+```
+
+Server → Client:
+
+```json
+{"type": "joined", "position": 0, "room": "ABC123"}
+{"type": "paired", "users": [{"name": "Alice", "language": "en"}, {"name": "Bob", "language": "es"}]}
+{"type": "message", "from": "Alice", "original": "Hello", "translation": "Hola", "is_self": false}
+{"type": "interim", "from": "Alice", "text": "Hel..."}
+{"type": "partner_left"}
+```
 
 Interactive docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
 ---
 
 ## Agentic Pipeline
+
+### Text & Audio Translation
 
 ```text
 Input (text or audio)
@@ -125,12 +216,32 @@ Detect audio vs text
        ↓
 Whisper speech-to-text  (audio only — word timestamps for live sync)
        ↓
-Lingua language detection
+Language detection (langdetect)
        ↓
 Groq AI translation (llama-3.3-70b-versatile)
        ↓
+Quality review (audio only — retry on failure)
+       ↓
 Return result
 ```
+
+### Live Conversation Translation
+
+```text
+User A (English)                    User B (Spanish)
+    ↓                                   ↓
+Speech Recognition (Browser)        Speech Recognition (Browser)
+    ↓                                   ↓
+    └──→ WebSocket → Backend ←───────┘
+             ↓
+    Groq Translation (EN→ES & ES→EN)
+             ↓
+    Broadcast to both users
+             ↓
+User A sees: Spanish→English    User B sees: English→Spanish
+```
+
+Each user sees the **entire conversation in their own language** with original text shown for context.
 
 ---
 
@@ -140,7 +251,9 @@ English · Spanish · French · German · Italian · Portuguese · Chinese · Ja
 
 ---
 
-## Testing — Sample Audio Upload
+## Testing
+
+### Sample Audio Upload
 
 A sample audio file is included in the `assets/` folder for testing the audio translation feature:
 
@@ -159,6 +272,48 @@ The file is located at:
 ```text
 assets/
 └── Sample Audio.m4a   ← use this file for upload testing
+```
+
+### Live Conversation (Multi-Device Testing)
+
+Test the real-time conversation feature with two devices or two browser windows:
+
+**Device A (Alice, English speaker):**
+
+1. Open the app and go to the **Conversation** tab
+2. Enter name: `Alice`
+3. Select language: `English`
+4. Click **Create Room**
+5. Note the room code (e.g., `ABC123`)
+
+**Device B (Bob, Spanish speaker):**
+
+1. Open the app and go to the **Conversation** tab
+2. Enter name: `Bob`
+3. Select language: `Spanish`
+4. Enter the room code from Device A: `ABC123`
+5. Click **Join**
+
+**After pairing:**
+
+- Both devices show a **Conversation Screen** with two mic buttons
+- Alice sees a green pulsing mic button (hers), a gray button (Bob's)
+- Bob sees a gray button (Alice's), a green pulsing mic button (his)
+- When Alice clicks her mic and speaks English, Bob sees the Spanish translation in real-time
+- When Bob clicks his mic and speaks Spanish, Alice sees the English translation in real-time
+- Each user sees **the entire conversation in their own language** with original text in smaller text below
+
+**Example flow:**
+
+```text
+Alice (English):        Bob (Spanish):
+Press mic              (waiting)
+"Hello, how are        
+ you?"                 Sees: "Hola, ¿cómo estás?"
+                       Press mic
+                       "Estoy bien, gracias"
+Sees: "I'm doing       
+ well, thanks"         (continues conversation)
 ```
 
 ---
@@ -193,6 +348,29 @@ assets/
 ```text
 W poniedziałkowym notowaniu światowego rankingu tenisistek Iga Świątek spadła z drugiego na trzecie miejsce, wyprzedziła ją Kazaszka Jelena Rybakina.
 ```
+
+---
+
+## Screenshots
+
+The app includes four main tabs with distinct UIs:
+
+### 📸 To Capture Screenshots
+
+1. Start the backend and frontend servers
+2. Open `http://localhost:3000` in your browser
+3. Navigate to each tab and capture:
+
+   - **Text Tab**: Shows input/output panels side-by-side with language selectors and swap button
+   - **Audio Tab**: Shows file upload drop zone, audio player, transcription, and translation
+   - **Live Tab**: Shows mic button, live transcript, and translation output
+   - **Conversation Tab**: Shows room setup → waiting → conversation with dual mic controls
+
+Screenshots should be saved as:
+- `assets/Text_screen.png`
+- `assets/Audio_screen.png`
+- `assets/Live_screen.png` (new)
+- `assets/Conversation_screen.png` (new)
 
 ---
 
