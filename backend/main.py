@@ -12,24 +12,38 @@ logger = logging.getLogger(__name__)
 
 # Load env before agent modules so GROQ_API_KEY is available at import time
 # python-dotenv handles missing .env gracefully and reads from environment variables
+logger.info("=== Starting main.py ===")
+logger.info(f"GROQ_API_KEY present: {'GROQ_API_KEY' in os.environ}")
 load_dotenv(override=False)
+logger.info("load_dotenv completed")
 
+logger.info("Importing FastAPI modules...")
 from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+logger.info("FastAPI modules imported")
+
+logger.info("Importing agents...")
 from agents.orchestrator import run_text_pipeline, run_audio_pipeline
 from agents import language_detection_agent
+logger.info("Agents imported successfully")
 
+logger.info("Setting up frontend directory...")
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+logger.info(f"Frontend dir: {FRONTEND_DIR}")
 
+logger.info("Creating FastAPI app...")
 app = FastAPI(title="AI Translate", version="2.0.0")
+logger.info("FastAPI app created")
 
+logger.info("Adding CORS middleware...")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+logger.info("CORS middleware added")
 
 # Conversation rooms: room_id → {"conns": {pos: WebSocket|None}, "info": {pos: {name, language}|None}}
 _rooms: dict = {}
@@ -37,6 +51,13 @@ _rooms: dict = {}
 
 def _gen_room_id() -> str:
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint."""
+    logger.info("Received request: /health")
+    return {"status": "ok"}
 
 
 @app.get("/create_room")
@@ -201,12 +222,26 @@ async def translate_audio(source: str, target: str, file: UploadFile):
 
 
 # Serve the frontend as static files. Mounted last so API routes above take priority.
+logger.info("=== Frontend Setup ===")
 logger.info(f"Frontend directory: {FRONTEND_DIR}")
 logger.info(f"Frontend directory exists: {FRONTEND_DIR.exists()}")
 if FRONTEND_DIR.exists():
-    logger.info(f"Frontend files: {list(FRONTEND_DIR.glob('*'))}")
+    files = list(FRONTEND_DIR.glob('*'))
+    logger.info(f"Frontend files ({len(files)}): {[f.name for f in files]}")
+    index_html = FRONTEND_DIR / "index.html"
+    logger.info(f"index.html exists: {index_html.exists()}")
+    if index_html.exists():
+        logger.info(f"index.html size: {index_html.stat().st_size} bytes")
+else:
+    logger.error(f"Frontend directory does not exist: {FRONTEND_DIR}")
+
+logger.info("Mounting frontend StaticFiles...")
 try:
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
-    logger.info("Successfully mounted frontend")
+    logger.info("✓ Successfully mounted frontend StaticFiles")
 except Exception as e:
-    logger.error(f"Failed to mount frontend: {e}")
+    logger.error(f"✗ Failed to mount frontend: {e}", exc_info=True)
+    raise
+
+logger.info("=== App initialization complete ===")
+logger.info("Ready to handle requests")
