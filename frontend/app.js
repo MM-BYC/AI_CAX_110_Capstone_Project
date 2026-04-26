@@ -491,6 +491,11 @@ liveSourceLang.addEventListener("change", () => {
   if (isListening) { stopListening(); startListening(); }
 });
 
+// Re-translate existing transcript when target language changes
+liveTargetLang.addEventListener("change", () => {
+  if (finalText.trim()) translateLiveText(finalText.trim());
+});
+
 liveCopyBtn.addEventListener("click", () => {
   navigator.clipboard.writeText(liveTranscript.textContent.trim()).then(() => {
     liveCopyBtn.querySelector("span").textContent = "Copied!";
