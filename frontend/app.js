@@ -188,6 +188,13 @@ inputText.addEventListener("input", () => {
   const len = inputText.value.length;
   updateCharCount(len);
 
+  // When the field is cleared, reset source to auto so the next word typed
+  // gets detected fresh — even if a previous swap had locked it to a language.
+  if (len === 0 && textSourceLang.value !== "auto") {
+    textSourceLang.value = "auto";
+    resetTextDetectOption();
+  }
+
   clearTimeout(detectTimer);
   if (len > 1 && textSourceLang.value === "auto") {
     detectTimer = setTimeout(() => detectAndShowLanguage(inputText.value), 50);
