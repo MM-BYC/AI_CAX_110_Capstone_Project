@@ -55,14 +55,13 @@ async def lifespan(app):
 app = FastAPI(title="AI Translate", version="2.0.0", lifespan=lifespan)
 logger.info("FastAPI app created")
 
-logger.info("Adding CORS middleware...")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-logger.info("CORS middleware added")
+logger.info("CORS middleware DISABLED for debugging")
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 
 # Conversation rooms: room_id → {"conns": {pos: WebSocket|None}, "info": {pos: {name, language}|None}}
 _rooms: dict = {}
