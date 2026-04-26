@@ -11,7 +11,6 @@ dependencies = [
     "groq>=1.1.1",
     "langdetect>=1.0.9",
     "langid>=1.1.6",
-    "openai-whisper>=20250625",
     "python-dotenv>=1.2.2",
     "python-multipart>=0.0.22",
     "lingua-language-detector>=2.2.0",
