@@ -44,6 +44,12 @@ const LANG_NAMES = {
   nl: "Dutch", pl: "Polish", tr: "Turkish", tl: "Tagalog"
 };
 
+// ── Block file drops everywhere except the audio drop zone ─────────────────
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("drop", e => {
+  if (!dropZone.contains(e.target)) e.preventDefault();
+});
+
 // ── Drop zone ──────────────────────────────────────────────────────────────
 function showFileName(file) {
   dropFileName.textContent = file ? file.name : "MP3, WAV, M4A, OGG supported";
