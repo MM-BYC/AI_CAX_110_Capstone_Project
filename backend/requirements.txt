@@ -4,4 +4,3 @@ groq>=1.1.1
 langdetect>=1.0.9
 python-multipart>=0.0.22
 python-dotenv>=1.2.2
-lingua-language-detector>=2.2.0
