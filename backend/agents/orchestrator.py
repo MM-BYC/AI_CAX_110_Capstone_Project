@@ -61,4 +61,5 @@ def run_audio_pipeline(audio_file: str, source: str, target: str) -> dict:
         "detected_language": detected,
         "translation": translation,
         "words": words,
+        "quality": review,
     }

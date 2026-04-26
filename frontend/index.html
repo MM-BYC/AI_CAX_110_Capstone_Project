@@ -36,6 +36,10 @@
             <i data-lucide="radio"></i>
             <span>Live</span>
           </button>
+          <button class="tab-btn" id="tabConv">
+            <i data-lucide="users"></i>
+            <span>Conversation</span>
+          </button>
         </div>
 
         <!-- Text tab -->
@@ -201,8 +205,9 @@
               <div id="audioOutputText" class="output-box">
                 <span class="placeholder">Translation will appear here…</span>
               </div>
+              <div id="audioQualityCritique" class="quality-critique" style="display:none"></div>
               <div class="panel-footer">
-                <span></span>
+                <span id="audioQualityBadge" style="display:none"></span>
                 <button class="btn btn-secondary" id="audioCopyBtn" style="display:none">
                   <i data-lucide="copy"></i>
                   <span>Copy</span>
@@ -302,6 +307,126 @@
                   <i data-lucide="copy"></i>
                   <span>Copy</span>
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conversation tab -->
+        <div id="convTab" class="tab-content" style="display:none">
+          <!-- Setup screen -->
+          <div id="convSetup" class="conv-screen">
+            <div class="conv-setup-card">
+              <h2>Live Conversation</h2>
+              <p>Talk to someone in any language — real-time AI translation</p>
+
+              <div class="conv-field">
+                <label>Your Name</label>
+                <input type="text" id="convName" placeholder="Enter your name…" maxlength="30" />
+              </div>
+
+              <div class="conv-field">
+                <label>Your Language</label>
+                <select id="convLang">
+                  <option value="en">English</option>
+                  <option value="es">Spanish</option>
+                  <option value="fr">French</option>
+                  <option value="de">German</option>
+                  <option value="it">Italian</option>
+                  <option value="pt">Portuguese</option>
+                  <option value="zh">Chinese</option>
+                  <option value="ja">Japanese</option>
+                  <option value="ko">Korean</option>
+                  <option value="ar">Arabic</option>
+                  <option value="ru">Russian</option>
+                  <option value="hi">Hindi</option>
+                  <option value="nl">Dutch</option>
+                  <option value="pl">Polish</option>
+                  <option value="tr">Turkish</option>
+                  <option value="tl">Tagalog</option>
+                </select>
+              </div>
+
+              <div class="conv-actions">
+                <button class="btn btn-primary" id="convCreateBtn">
+                  <i data-lucide="plus-circle"></i>
+                  <span>Create Room</span>
+                </button>
+
+                <div class="conv-divider">Or join existing</div>
+
+                <div class="conv-join-row">
+                  <input type="text" id="convRoomInput" placeholder="Room code…" maxlength="6" />
+                  <button class="btn btn-secondary" id="convJoinBtn">
+                    <i data-lucide="log-in"></i>
+                    <span>Join</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Waiting screen -->
+          <div id="convWaiting" class="conv-screen" style="display:none">
+            <div class="conv-waiting-card">
+              <div class="conv-waiting-icon">
+                <i data-lucide="users"></i>
+              </div>
+              <h3>Share this room code</h3>
+              <div class="conv-room-code" id="convRoomCode">------</div>
+              <p class="conv-waiting-hint">Ask your partner to enter this code</p>
+              <div class="conv-waiting-spinner">
+                <div class="spinner"></div>
+              </div>
+              <p class="conv-waiting-status">Waiting for partner to connect…</p>
+              <button class="btn btn-secondary" id="convCancelBtn">
+                <i data-lucide="x"></i>
+                <span>Cancel</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Active conversation screen -->
+          <div id="convActive" class="conv-screen" style="display:none">
+            <div class="conv-users-bar">
+              <div class="conv-user-card" id="convUser0">
+                <div class="conv-user-avatar" id="convAvatar0">A</div>
+                <div class="conv-user-info">
+                  <span class="conv-user-name" id="convUserName0">—</span>
+                  <span class="conv-user-lang" id="convUserLang0">—</span>
+                </div>
+              </div>
+
+              <div class="conv-arrow">
+                <i data-lucide="arrow-left-right"></i>
+              </div>
+
+              <div class="conv-user-card" id="convUser1">
+                <div class="conv-user-avatar" id="convAvatar1">B</div>
+                <div class="conv-user-info">
+                  <span class="conv-user-name" id="convUserName1">—</span>
+                  <span class="conv-user-lang" id="convUserLang1">—</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="conv-messages" id="convMessages">
+              <div class="conv-start-hint">Press your mic to start speaking</div>
+            </div>
+
+            <div class="conv-mic-bar">
+              <div class="conv-mic-slot">
+                <button class="conv-mic-btn" id="convMicBtn0" disabled>
+                  <i data-lucide="mic"></i>
+                </button>
+                <span class="conv-mic-label" id="convMicLabel0">—</span>
+              </div>
+
+              <div class="conv-mic-slot">
+                <button class="conv-mic-btn" id="convMicBtn1" disabled>
+                  <i data-lucide="mic"></i>
+                </button>
+                <span class="conv-mic-label" id="convMicLabel1">—</span>
               </div>
             </div>
           </div>

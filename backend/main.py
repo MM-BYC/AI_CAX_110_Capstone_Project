@@ -1,11 +1,15 @@
 import os
+import json
+import asyncio
+import random
+import string
 from pathlib import Path
 from dotenv import load_dotenv
 
 # Load env before agent modules so GROQ_API_KEY is available at import time
 load_dotenv(Path(__file__).parent / ".env")
 
-from fastapi import FastAPI, UploadFile
+from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from agents.orchestrator import run_text_pipeline, run_audio_pipeline
@@ -21,6 +25,146 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Conversation rooms: room_id → {"conns": {pos: WebSocket|None}, "info": {pos: {name, language}|None}}
+_rooms: dict = {}
+
+
+def _gen_room_id() -> str:
+    return "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+
+@app.get("/create_room")
+async def create_room():
+    """Generate a new room ID for live conversation."""
+    room_id = _gen_room_id()
+    while room_id in _rooms:
+        room_id = _gen_room_id()
+    return {"room_id": room_id}
+
+
+@app.websocket("/ws/conversation/{room_id}")
+async def conversation_ws(websocket: WebSocket, room_id: str):
+    """WebSocket endpoint for live conversation between two users."""
+    await websocket.accept()
+
+    room = _rooms.get(room_id)
+    if room and len([v for v in room["conns"].values() if v is not None]) >= 2:
+        await websocket.send_json({"type": "error", "message": "Room is full"})
+        await websocket.close()
+        return
+
+    if room_id not in _rooms:
+        _rooms[room_id] = {"conns": {}, "info": {}}
+
+    room = _rooms[room_id]
+    occupied = set(k for k, v in room["conns"].items() if v is not None)
+    position = 0 if 0 not in occupied else 1
+    room["conns"][position] = websocket
+    room["info"][position] = None
+
+    try:
+        raw = await websocket.receive_text()
+        data = json.loads(raw)
+        if data.get("type") != "join":
+            return
+
+        room["info"][position] = {"name": data["name"], "language": data["language"]}
+
+        await websocket.send_json({"type": "joined", "position": position, "room": room_id})
+
+        # Notify both if paired
+        if (
+            room["conns"].get(0) and room["conns"].get(1)
+            and room["info"].get(0) and room["info"].get(1)
+        ):
+            for ws in room["conns"].values():
+                if ws:
+                    await ws.send_json({
+                        "type": "paired",
+                        "users": [room["info"][0], room["info"][1]]
+                    })
+
+        # Message loop
+        while True:
+            raw = await websocket.receive_text()
+            data = json.loads(raw)
+            msg_type = data.get("type")
+
+            if msg_type == "speech":
+                text = data.get("text", "").strip()
+                if not text:
+                    continue
+                my_info = room["info"].get(position)
+                partner_pos = 1 - position
+                partner_info = room["info"].get(partner_pos)
+                partner_ws = room["conns"].get(partner_pos)
+
+                if my_info and partner_info:
+                    try:
+                        result = await asyncio.wait_for(
+                            asyncio.to_thread(
+                                run_text_pipeline,
+                                text,
+                                my_info["language"],
+                                partner_info["language"],
+                            ),
+                            timeout=10.0,
+                        )
+                        translation = result.get("translation", text)
+                    except Exception:
+                        translation = text
+                else:
+                    translation = text
+
+                # Send to self
+                await websocket.send_json({
+                    "type": "message",
+                    "from": my_info["name"] if my_info else "You",
+                    "original": text,
+                    "translation": translation,
+                    "is_self": True,
+                })
+                # Send to partner
+                if partner_ws:
+                    try:
+                        await partner_ws.send_json({
+                            "type": "message",
+                            "from": my_info["name"] if my_info else "Partner",
+                            "original": text,
+                            "translation": translation,
+                            "is_self": False,
+                        })
+                    except Exception:
+                        pass
+
+            elif msg_type == "interim":
+                partner_pos = 1 - position
+                partner_ws = room["conns"].get(partner_pos)
+                my_info = room["info"].get(position)
+                if partner_ws and my_info:
+                    try:
+                        await partner_ws.send_json({
+                            "type": "interim",
+                            "from": my_info["name"],
+                            "text": data.get("text", ""),
+                        })
+                    except Exception:
+                        pass
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        room["conns"][position] = None
+        partner_pos = 1 - position
+        partner_ws = room["conns"].get(partner_pos)
+        if partner_ws:
+            try:
+                await partner_ws.send_json({"type": "partner_left"})
+            except Exception:
+                pass
+        if all(v is None for v in room["conns"].values()):
+            _rooms.pop(room_id, None)
 
 
 @app.post("/detect_language")
