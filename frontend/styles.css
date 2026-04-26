@@ -440,3 +440,58 @@ footer p {
   background: rgba(255,255,255,0.05);
   margin: 0.5rem 0;
 }
+
+/* ── Live tab ── */
+.live-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 0 1.5rem;
+}
+
+.mic-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 2px solid rgba(99, 102, 241, 0.4);
+  background: rgba(99, 102, 241, 0.08);
+  color: #818cf8;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.15s;
+}
+
+.mic-btn svg { width: 28px; height: 28px; }
+
+.mic-btn:hover {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.7);
+  color: #a5b4fc;
+  transform: scale(1.05);
+}
+
+.mic-btn.active {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #f87171;
+  animation: mic-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.25); }
+  50%       { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+}
+
+.live-status {
+  font-size: 0.8rem;
+  color: #4b5060;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.live-transcript-box .interim {
+  color: #4b5060;
+}

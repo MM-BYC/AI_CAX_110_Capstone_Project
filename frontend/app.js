@@ -31,8 +31,20 @@ const audioCopyBtn      = document.getElementById("audioCopyBtn");
 // Tab elements
 const tabText  = document.getElementById("tabText");
 const tabAudio = document.getElementById("tabAudio");
+const tabLive  = document.getElementById("tabLive");
 const textTab  = document.getElementById("textTab");
 const audioTab = document.getElementById("audioTab");
+const liveTab  = document.getElementById("liveTab");
+
+// Live tab elements
+const liveSourceLang        = document.getElementById("liveSourceLang");
+const liveTargetLang        = document.getElementById("liveTargetLang");
+const micBtn                = document.getElementById("micBtn");
+const liveStatus            = document.getElementById("liveStatus");
+const liveTranscript        = document.getElementById("liveTranscript");
+const liveOutputText        = document.getElementById("liveOutputText");
+const liveCopyBtn           = document.getElementById("liveCopyBtn");
+const liveTranslationCopyBtn = document.getElementById("liveTranslationCopyBtn");
 
 const spinner = document.getElementById("spinner");
 
@@ -84,19 +96,18 @@ dropZone.addEventListener("drop", e => {
 });
 
 // ── Tab switching ───────────────────────────────────────────────────────────
-tabText.addEventListener("click", () => {
-  tabText.classList.add("active");
-  tabAudio.classList.remove("active");
-  textTab.style.display = "block";
-  audioTab.style.display = "none";
-});
+function showTab(active) {
+  [tabText, tabAudio, tabLive].forEach(t => t.classList.remove("active"));
+  [textTab, audioTab, liveTab].forEach(t => { t.style.display = "none"; });
+  active.btn.classList.add("active");
+  active.panel.style.display = "block";
+  // Stop mic if leaving live tab
+  if (active.btn !== tabLive && isListening) stopListening();
+}
 
-tabAudio.addEventListener("click", () => {
-  tabAudio.classList.add("active");
-  tabText.classList.remove("active");
-  audioTab.style.display = "block";
-  textTab.style.display = "none";
-});
+tabText.addEventListener("click",  () => showTab({ btn: tabText,  panel: textTab }));
+tabAudio.addEventListener("click", () => showTab({ btn: tabAudio, panel: audioTab }));
+tabLive.addEventListener("click",  () => showTab({ btn: tabLive,  panel: liveTab }));
 
 // ── Language detection helper (Text tab only) ──────────────────────────────
 let detectTimer = null;
@@ -369,3 +380,115 @@ function showSpinner(visible, message = "Translating…") {
   spinner.style.display = visible ? "flex" : "none";
   if (visible) spinner.querySelector("p").textContent = message;
 }
+
+// ── Live Listen ─────────────────────────────────────────────────────────────
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+const LANG_LOCALES = {
+  en: "en-US", es: "es-ES", fr: "fr-FR", de: "de-DE",
+  it: "it-IT", pt: "pt-BR", zh: "zh-CN", ja: "ja-JP",
+  ko: "ko-KR", ar: "ar-SA", ru: "ru-RU", hi: "hi-IN",
+  nl: "nl-NL", pl: "pl-PL", tr: "tr-TR", tl: "fil-PH",
+};
+
+let recognition   = null;
+let isListening   = false;
+let finalText     = "";
+let liveXlateTimer = null;
+
+function startListening() {
+  if (!SpeechRecognition) {
+    liveStatus.textContent = "Speech recognition not supported — use Chrome or Edge";
+    return;
+  }
+
+  finalText = "";
+  liveTranscript.innerHTML = '<span class="placeholder">Listening…</span>';
+  liveOutputText.innerHTML = '<span class="placeholder">Translation will appear here…</span>';
+  liveCopyBtn.style.display = "none";
+  liveTranslationCopyBtn.style.display = "none";
+
+  recognition = new SpeechRecognition();
+  recognition.continuous     = true;
+  recognition.interimResults = true;
+  recognition.lang           = LANG_LOCALES[liveSourceLang.value] || "en-US";
+
+  recognition.onresult = e => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        finalText += e.results[i][0].transcript + " ";
+        clearTimeout(liveXlateTimer);
+        liveXlateTimer = setTimeout(() => translateLiveText(finalText.trim()), 400);
+      } else {
+        interim += e.results[i][0].transcript;
+      }
+    }
+    liveTranscript.innerHTML =
+      (finalText || "") +
+      (interim ? `<span class="interim">${interim}</span>` : "");
+    liveCopyBtn.style.display = finalText.trim() ? "inline-block" : "none";
+  };
+
+  // Auto-restart so recognition doesn't silently stop mid-session
+  recognition.onend = () => { if (isListening) recognition.start(); };
+
+  recognition.onerror = e => {
+    if (e.error === "not-allowed") {
+      liveStatus.textContent = "Microphone access denied — check browser permissions";
+    } else if (e.error !== "no-speech") {
+      liveStatus.textContent = `Error: ${e.error}`;
+    }
+  };
+
+  recognition.start();
+  isListening = true;
+  micBtn.classList.add("active");
+  liveStatus.textContent = "Listening…";
+}
+
+function stopListening() {
+  isListening = false;
+  if (recognition) { recognition.stop(); recognition = null; }
+  micBtn.classList.remove("active");
+  liveStatus.textContent = "Click the mic to start listening";
+}
+
+micBtn.addEventListener("click", () => {
+  isListening ? stopListening() : startListening();
+});
+
+async function translateLiveText(text) {
+  if (!text.trim()) return;
+  try {
+    const params = new URLSearchParams({
+      source: liveSourceLang.value,
+      target: liveTargetLang.value,
+      text,
+    });
+    const res = await fetch(`${API_BASE}/translate_text?${params}`, { method: "POST" });
+    if (!res.ok) return;
+    const data = await res.json();
+    liveOutputText.textContent = data.translation;
+    liveTranslationCopyBtn.style.display = "inline-block";
+  } catch (_) {}
+}
+
+// Restart recognition with new language if changed mid-session
+liveSourceLang.addEventListener("change", () => {
+  if (isListening) { stopListening(); startListening(); }
+});
+
+liveCopyBtn.addEventListener("click", () => {
+  navigator.clipboard.writeText(liveTranscript.textContent.trim()).then(() => {
+    liveCopyBtn.querySelector("span").textContent = "Copied!";
+    setTimeout(() => { liveCopyBtn.querySelector("span").textContent = "Copy"; }, 1500);
+  });
+});
+
+liveTranslationCopyBtn.addEventListener("click", () => {
+  navigator.clipboard.writeText(liveOutputText.textContent.trim()).then(() => {
+    liveTranslationCopyBtn.querySelector("span").textContent = "Copied!";
+    setTimeout(() => { liveTranslationCopyBtn.querySelector("span").textContent = "Copy"; }, 1500);
+  });
+});
