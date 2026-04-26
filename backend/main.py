@@ -7,70 +7,34 @@ import logging
 from pathlib import Path
 from dotenv import load_dotenv
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load env before agent modules so GROQ_API_KEY is available at import time
-# python-dotenv handles missing .env gracefully and reads from environment variables
-logger.info("=== Starting main.py ===")
-logger.info(f"GROQ_API_KEY present: {'GROQ_API_KEY' in os.environ}")
+# Load environment variables before importing agents
 load_dotenv(override=False)
-logger.info("load_dotenv completed")
 
-logger.info("Importing FastAPI modules...")
 from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-logger.info("FastAPI modules imported")
+from agents.orchestrator import run_text_pipeline, run_audio_pipeline
+from agents import language_detection_agent
 
-logger.info("Importing agents...")
-try:
-    logger.info("  Importing orchestrator...")
-    from agents.orchestrator import run_text_pipeline, run_audio_pipeline
-    logger.info("  ✓ Orchestrator imported")
-
-    logger.info("  Importing language_detection_agent...")
-    from agents import language_detection_agent
-    logger.info("  ✓ Language detection agent imported")
-
-    logger.info("✓ All agents imported successfully")
-except Exception as e:
-    logger.error(f"✗ Agent import failed: {e}", exc_info=True)
-    raise
-
-logger.info("Setting up frontend directory...")
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
-logger.info(f"Frontend dir: {FRONTEND_DIR}")
-
-logger.info("Creating FastAPI app...")
 
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app):
-    logger.info("⭐ FastAPI lifespan: startup COMPLETE")
-    logger.info("✓ App is ready to handle requests")
-    try:
-        yield
-    except Exception as e:
-        logger.error(f"Error during lifespan: {e}", exc_info=True)
-        raise
-    finally:
-        logger.info("⭐ FastAPI lifespan: shutdown")
+    yield
 
 app = FastAPI(title="AI Translate", version="2.0.0", lifespan=lifespan)
-logger.info("FastAPI app created")
 
-logger.info("CORS middleware DISABLED for debugging")
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["*"],
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Conversation rooms: room_id → {"conns": {pos: WebSocket|None}, "info": {pos: {name, language}|None}}
 _rooms: dict = {}
@@ -80,30 +44,9 @@ def _gen_room_id() -> str:
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
 
-@app.get("/")
-async def root():
-    """Root endpoint."""
-    try:
-        logger.info("✓ Endpoint /: request received")
-        result = {"message": "API is running", "status": "ok"}
-        logger.info(f"✓ Endpoint /: returning {result}")
-        return result
-    except Exception as e:
-        logger.error(f"✗ Endpoint / error: {e}", exc_info=True)
-        raise
-
-
-@app.get("/health")
-async def health():
-    """Health check endpoint."""
-    logger.info("Received request: GET /health")
-    return {"status": "ok"}
-
-
 @app.get("/create_room")
 async def create_room():
     """Generate a new room ID for live conversation."""
-    logger.info("Received request: /create_room")
     room_id = _gen_room_id()
     while room_id in _rooms:
         room_id = _gen_room_id()
@@ -162,53 +105,39 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                 text = data.get("text", "").strip()
                 if not text:
                     continue
-                my_info = room["info"].get(position)
+
+                my_info = room["info"][position]
                 partner_pos = 1 - position
-                partner_info = room["info"].get(partner_pos)
                 partner_ws = room["conns"].get(partner_pos)
+                partner_info = room["info"].get(partner_pos)
 
-                if my_info and partner_info:
-                    try:
-                        result = await asyncio.wait_for(
-                            asyncio.to_thread(
-                                run_text_pipeline,
-                                text,
-                                my_info["language"],
-                                partner_info["language"],
-                            ),
-                            timeout=10.0,
-                        )
-                        translation = result.get("translation", text)
-                    except Exception:
-                        translation = text
-                else:
-                    translation = text
+                if not partner_ws or not partner_info:
+                    continue
 
-                # Send to self
-                await websocket.send_json({
-                    "type": "message",
-                    "from": my_info["name"] if my_info else "You",
-                    "original": text,
-                    "translation": translation,
-                    "is_self": True,
-                })
-                # Send to partner
-                if partner_ws:
-                    try:
-                        await partner_ws.send_json({
-                            "type": "message",
-                            "from": my_info["name"] if my_info else "Partner",
-                            "original": text,
-                            "translation": translation,
-                            "is_self": False,
-                        })
-                    except Exception:
-                        pass
+                try:
+                    translation = await asyncio.to_thread(
+                        run_text_pipeline,
+                        text,
+                        my_info["language"],
+                        partner_info["language"]
+                    )
+                    translated_text = translation.get("translation", "")
+
+                    await partner_ws.send_json({
+                        "type": "message",
+                        "from": my_info["name"],
+                        "original": text,
+                        "translation": translated_text,
+                        "is_self": False
+                    })
+                except Exception as e:
+                    logger.error(f"Translation error: {e}")
 
             elif msg_type == "interim":
+                my_info = room["info"][position]
                 partner_pos = 1 - position
                 partner_ws = room["conns"].get(partner_pos)
-                my_info = room["info"].get(position)
+
                 if partner_ws and my_info:
                     try:
                         await partner_ws.send_json({
@@ -261,23 +190,6 @@ async def translate_audio(source: str, target: str, file: UploadFile):
     return result
 
 
-# Serve the frontend as static files. Mounted last so API routes above take priority.
-logger.info("=== Frontend Setup ===")
-logger.info(f"Frontend directory: {FRONTEND_DIR}")
-logger.info(f"Frontend directory exists: {FRONTEND_DIR.exists()}")
+# Serve the frontend as static files
 if FRONTEND_DIR.exists():
-    files = list(FRONTEND_DIR.glob('*'))
-    logger.info(f"Frontend files ({len(files)}): {[f.name for f in files]}")
-    index_html = FRONTEND_DIR / "index.html"
-    logger.info(f"index.html exists: {index_html.exists()}")
-    if index_html.exists():
-        logger.info(f"index.html size: {index_html.stat().st_size} bytes")
-else:
-    logger.error(f"Frontend directory does not exist: {FRONTEND_DIR}")
-
-# Frontend serving disabled - API only for now
-# The StaticFiles mount was hanging when html=True, causing 502 errors
-# TODO: Fix and re-enable frontend serving
-
-logger.info("=== App initialization complete ===")
-logger.info("Ready to handle requests")
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
