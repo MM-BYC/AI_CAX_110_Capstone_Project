@@ -247,7 +247,12 @@ else:
 
 logger.info("Mounting frontend StaticFiles...")
 try:
-    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+    logger.info(f"  Creating StaticFiles instance for {FRONTEND_DIR}...")
+    static_files = StaticFiles(directory=FRONTEND_DIR, html=True)
+    logger.info("  ✓ StaticFiles instance created")
+
+    logger.info(f"  Mounting at '/'...")
+    app.mount("/", static_files, name="frontend")
     logger.info("✓ Successfully mounted frontend StaticFiles")
 except Exception as e:
     logger.error(f"✗ Failed to mount frontend: {e}", exc_info=True)
