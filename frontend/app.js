@@ -455,10 +455,15 @@ function startListening() {
         interim += e.results[i][0].transcript;
       }
     }
+    const fullText = (finalText + interim).trim();
     liveTranscript.innerHTML =
       (finalText || "") +
       (interim ? `<span class="interim">${interim}</span>` : "");
     liveCopyBtn.style.display = finalText.trim() ? "inline-block" : "none";
+    if (fullText) {
+      clearTimeout(liveXlateTimer);
+      liveXlateTimer = setTimeout(() => translateLiveText(fullText), 50);
+    }
   };
 
   // Auto-restart so recognition doesn't silently stop mid-session
