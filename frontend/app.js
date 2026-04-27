@@ -523,10 +523,6 @@ async function detectLiveLanguage(text) {
     if (detected && detected !== liveDetectedLang) {
       liveDetectedLang = detected;
       liveSourceLang.value = detected;
-      if (isListening) {
-        stopListening();
-        startListening();
-      }
     }
   } catch (_) {}
 }
