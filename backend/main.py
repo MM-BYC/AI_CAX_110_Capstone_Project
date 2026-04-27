@@ -7,6 +7,10 @@ import logging
 from pathlib import Path
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+
+# Load environment variables BEFORE importing agents (they need GROQ_API_KEY)
+load_dotenv(override=False)
+
 from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,9 +20,6 @@ from agents import language_detection_agent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Load environment variables before importing agents
-load_dotenv(override=False)
 
 # Frontend directory - works whether run from project root or from backend directory
 _current_file = Path(__file__).resolve()
