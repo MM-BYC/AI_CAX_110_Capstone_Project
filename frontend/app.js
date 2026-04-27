@@ -422,10 +422,12 @@ const LANG_LOCALES = {
   nl: "nl-NL", pl: "pl-PL", tr: "tr-TR", tl: "fil-PH",
 };
 
-let recognition   = null;
-let isListening   = false;
-let finalText     = "";
+let recognition    = null;
+let isListening    = false;
+let finalText      = "";
 let liveXlateTimer = null;
+let liveDetectTimer = null;
+let liveDetectedLang = null;
 
 function startListening() {
   if (!SpeechRecognition) {
@@ -434,6 +436,7 @@ function startListening() {
   }
 
   finalText = "";
+  liveDetectedLang = null;
   liveTranscript.innerHTML = '<span class="placeholder">Listening…</span>';
   liveOutputText.innerHTML = '<span class="placeholder">Translation will appear here…</span>';
   liveCopyBtn.style.display = "none";
@@ -461,6 +464,8 @@ function startListening() {
       (interim ? `<span class="interim">${interim}</span>` : "");
     liveCopyBtn.style.display = finalText.trim() ? "inline-block" : "none";
     if (fullText) {
+      clearTimeout(liveDetectTimer);
+      liveDetectTimer = setTimeout(() => detectLiveLanguage(fullText), 100);
       clearTimeout(liveXlateTimer);
       liveXlateTimer = setTimeout(() => translateLiveText(fullText), 50);
     }
@@ -488,6 +493,7 @@ function stopListening() {
   if (recognition) { recognition.stop(); recognition = null; }
   micBtn.classList.remove("active");
   liveStatus.textContent = "Click the mic to start listening";
+  clearTimeout(liveDetectTimer);
 }
 
 micBtn.addEventListener("click", () => {
@@ -497,13 +503,33 @@ micBtn.addEventListener("click", () => {
 liveResetBtn.addEventListener("click", () => {
   stopListening();
   finalText = "";
+  liveDetectedLang = null;
   clearTimeout(liveXlateTimer);
+  clearTimeout(liveDetectTimer);
   liveTranscript.innerHTML = '<span class="placeholder">Your speech will appear here…</span>';
   liveOutputText.innerHTML = '<span class="placeholder">Translation will appear here…</span>';
   liveCopyBtn.style.display = "none";
   liveTranslationCopyBtn.style.display = "none";
   liveStatus.textContent = "Click the mic to start listening";
 });
+
+async function detectLiveLanguage(text) {
+  if (!text.trim() || text.length < 3) return;
+  try {
+    const res = await fetch(`${API_BASE}/detect_language?text=${encodeURIComponent(text)}`, { method: "POST" });
+    if (!res.ok) return;
+    const data = await res.json();
+    const detected = data.detected_language;
+    if (detected && detected !== liveDetectedLang) {
+      liveDetectedLang = detected;
+      liveSourceLang.value = detected;
+      if (isListening) {
+        stopListening();
+        startListening();
+      }
+    }
+  } catch (_) {}
+}
 
 async function translateLiveText(text) {
   if (!text.trim()) return;
