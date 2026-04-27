@@ -4,6 +4,7 @@ from groq import Groq
 
 _client = None
 
+
 def _get_client():
     global _client
     if _client is None:
@@ -15,6 +16,7 @@ def _get_client():
         except Exception as e:
             raise RuntimeError(f"Failed to initialize Groq client: {e}")
     return _client
+
 
 LANG_NAMES = {
     "en": "English", "es": "Spanish", "fr": "French", "de": "German",

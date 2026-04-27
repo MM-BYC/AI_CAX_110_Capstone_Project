@@ -5,20 +5,20 @@ import random
 import string
 import logging
 from pathlib import Path
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Load environment variables before importing agents
-load_dotenv(override=False)
-
 from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from agents.orchestrator import run_text_pipeline, run_audio_pipeline
 from agents import language_detection_agent
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Load environment variables before importing agents
+load_dotenv(override=False)
 
 # Frontend directory - works whether run from project root or from backend directory
 _current_file = Path(__file__).resolve()
@@ -27,7 +27,6 @@ if _current_file.parent.name == "backend":
 else:
     FRONTEND_DIR = _current_file.parent / "frontend"
 
-from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app):

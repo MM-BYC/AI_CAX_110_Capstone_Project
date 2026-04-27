@@ -4,6 +4,7 @@ from groq import Groq
 
 _client = None
 
+
 def _get_client():
     global _client
     if _client is None:
