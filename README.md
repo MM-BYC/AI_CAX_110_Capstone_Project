@@ -30,7 +30,7 @@ The app features **four tabs** for different translation modes:
 
 ### Tab 1: Text
 
-![Text Translation Tab](assets/text_screen.png)
+![Text Translation Tab](assets/text_screen.jpeg)
 
 - Type or paste text
 - Auto-detect source language
@@ -40,7 +40,7 @@ The app features **four tabs** for different translation modes:
 
 ### Tab 2: Audio
 
-![Audio Translation Tab](assets/audio_screen.png)
+![Audio Translation Tab](assets/audio_screen.jpeg)
 
 - Drag and drop audio file (MP3, WAV, M4A, OGG)
 - Word-level transcription synced to playback
@@ -48,7 +48,7 @@ The app features **four tabs** for different translation modes:
 - Shows original + translation side-by-side
 
 ### Tab 3: Live
-
+![Text Translation Tab](assets/live_screen.jpeg)
 - **Mic button** to start/stop listening
 - Browser-based speech recognition
 - Streaming transcription display
@@ -56,7 +56,7 @@ The app features **four tabs** for different translation modes:
 - Reset button to clear session
 
 ### Tab 4: Conversation *(NEW)*
-
+![Text Translation Tab](assets/conversation_screen.jpeg)
 Real-time multi-user translation flow:
 
 - **Setup Screen** — Enter your name, select your language, create or join a room
@@ -126,8 +126,10 @@ AI_CAX_110_Capstone_Project/
 │   └── __tests__/
 │       └── app.test.js            # Frontend unit tests
 └── assets/
-    ├── Text_screen.png            # Screenshot of Text tab
-    ├── Audio_screen.png           # Screenshot of Audio tab
+    ├── text_screen.jpeg           # Screenshot of Text tab
+    ├── audio_screen.jpeg          # Screenshot of Audio tab
+    ├── live_screen.jpeg           # Screenshot of Live tab
+    ├── conversation_screen.jpeg   # Screenshot of Conversation tab
     └── Sample Audio.m4a           # Sample audio file for testing
 ```
 
@@ -200,8 +202,6 @@ Server → Client:
 {"type": "interim", "from": "Alice", "text": "Hel..."}
 {"type": "partner_left"}
 ```
-
-Interactive docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
 ---
 
@@ -366,11 +366,12 @@ The app includes four main tabs with distinct UIs:
    - **Live Tab**: Shows mic button, live transcript, and translation output
    - **Conversation Tab**: Shows room setup → waiting → conversation with dual mic controls
 
-Screenshots should be saved as:
-- `assets/Text_screen.png`
-- `assets/Audio_screen.png`
-- `assets/Live_screen.png` (new)
-- `assets/Conversation_screen.png` (new)
+Screenshots are saved as:
+
+- `assets/text_screen.jpeg`
+- `assets/audio_screen.jpeg`
+- `assets/live_screen.jpeg`
+- `assets/conversation_screen.jpeg`
 
 ---
 
