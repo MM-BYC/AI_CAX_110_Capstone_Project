@@ -4,7 +4,7 @@
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { min-height: 100%; background: #f0f0f0; }
+html { min-height: 100%; background: #8e8e93; }
 
 body {
   font-family: "Inter", "Segoe UI", system-ui, sans-serif;
@@ -12,7 +12,7 @@ body {
   min-height: 100vh;
   background:
     radial-gradient(ellipse 90% 40% at 50% 0%, rgba(99, 102, 241, 0.07) 0%, transparent 60%),
-    #f0f0f0;
+    #8e8e93;
 }
 
 /* ── Layout ── */
