@@ -30,7 +30,7 @@ The app features **four tabs** for different translation modes:
 
 ### Tab 1: Text
 
-![Text Translation Tab](assets/Text_screen.png)
+![Text Translation Tab](assets/text_screen.png)
 
 - Type or paste text
 - Auto-detect source language
@@ -40,7 +40,7 @@ The app features **four tabs** for different translation modes:
 
 ### Tab 2: Audio
 
-![Audio Translation Tab](assets/Audio_screen.png)
+![Audio Translation Tab](assets/audio_screen.png)
 
 - Drag and drop audio file (MP3, WAV, M4A, OGG)
 - Word-level transcription synced to playback
