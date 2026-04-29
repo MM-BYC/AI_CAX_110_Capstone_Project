@@ -71,10 +71,15 @@ header h1 {
 }
 
 /* ── Tab menu ── */
+.tab-menu-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
 .tab-menu {
   display: flex;
   gap: 0.35rem;
-  margin: 0 auto 1.5rem;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 12px;
