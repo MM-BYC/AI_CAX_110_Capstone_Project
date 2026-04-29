@@ -4,15 +4,15 @@
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { min-height: 100%; background: #f5f7fa; }
+html { min-height: 100%; background: #e8f5f0; }
 
 body {
   font-family: "Inter", "Segoe UI", system-ui, sans-serif;
   color: #111827;
   min-height: 100vh;
   background:
-    radial-gradient(ellipse 90% 40% at 50% 0%, rgba(99, 102, 241, 0.06) 0%, transparent 60%),
-    #f5f7fa;
+    radial-gradient(ellipse 90% 40% at 50% 0%, rgba(52, 211, 153, 0.08) 0%, transparent 60%),
+    #e8f5f0;
 }
 
 /* ── Layout ── */
