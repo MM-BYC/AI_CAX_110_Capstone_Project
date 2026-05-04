@@ -288,6 +288,19 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                     except Exception:
                         pass
 
+            elif msg_type in ("webrtc_offer", "webrtc_answer", "webrtc_ice"):
+                target_id = data.get("target_id")
+                if target_id and target_id in room["conns"]:
+                    payload = {"type": msg_type, "from_id": user_id}
+                    if msg_type in ("webrtc_offer", "webrtc_answer"):
+                        payload["sdp"] = data.get("sdp")
+                    else:
+                        payload["candidate"] = data.get("candidate")
+                    try:
+                        await room["conns"][target_id].send_json(payload)
+                    except Exception:
+                        pass
+
     except WebSocketDisconnect:
         pass
     finally:

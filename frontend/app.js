@@ -824,13 +824,19 @@ function convHandleMessage(msg) {
       };
       convRenderParticipants();
       convAddSystemMsg(`${msg.user.name} joined the room.`);
+      webrtcOnUserJoined(msg.user.user_id);
       break;
 
     case "user_left":
+      webrtcOnUserLeft(msg.user_id);
       delete convUsers[msg.user_id];
       convRenderParticipants();
       convAddSystemMsg(`${msg.name} left the room.`);
       break;
+
+    case "webrtc_offer":  rtcHandleOffer(msg.from_id, msg.sdp);  break;
+    case "webrtc_answer": rtcHandleAnswer(msg.from_id, msg.sdp); break;
+    case "webrtc_ice":    rtcHandleIce(msg.from_id, msg.candidate); break;
 
     case "host_changed":
       if (msg.new_host_id === convUserId) {
@@ -954,6 +960,7 @@ async function convStartListening() {
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "mic_status", is_on: true }));
   convSetMicUI(true);
+  webrtcStartAudio();
 }
 
 function convStopListening() {
@@ -962,6 +969,7 @@ function convStopListening() {
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "mic_status", is_on: false }));
   convSetMicUI(false);
+  webrtcStopAudio();
 }
 
 convMicBtn.addEventListener("click", () => {
@@ -1051,6 +1059,7 @@ async function convStartCamera() {
   convSetCamUI(true);
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "camera_status", is_on: true }));
+  webrtcStartVideo(stream);
 }
 
 function convStopCamera() {
@@ -1064,6 +1073,7 @@ function convStopCamera() {
   convSetCamUI(false);
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "camera_status", is_on: false }));
+  webrtcStopVideo();
 }
 
 function convSetCamUI(isOn) {
@@ -1092,6 +1102,7 @@ function convHandleDisconnect(reason) {
 }
 
 function convReset() {
+  webrtcCloseAll();
   convStopListening();
   convStopCamera();
   if (convWs) { convWs.close(); convWs = null; }
@@ -1177,3 +1188,191 @@ convKeyboardInput.addEventListener("keydown", e => {
     convSendKeyboard();
   }
 });
+
+// ── WebRTC Module ─────────────────────────────────────────────────────────
+const WEBRTC_ICE = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+];
+
+const convVideoGrid = document.getElementById("convVideoGrid");
+
+let rtcPeers      = {};   // userId → RTCPeerConnection
+let rtcAudioTrack = null; // local mic audio track (for WebRTC)
+let rtcVideoTrack = null; // local camera video track (for WebRTC)
+
+function rtcLocalTracks() {
+  return [rtcAudioTrack, rtcVideoTrack].filter(Boolean);
+}
+
+function rtcCreatePeer(userId, isOffer) {
+  if (rtcPeers[userId]) return rtcPeers[userId];
+
+  const pc = new RTCPeerConnection({ iceServers: WEBRTC_ICE });
+  rtcPeers[userId] = pc;
+
+  rtcLocalTracks().forEach(t => pc.addTrack(t));
+
+  pc.ontrack = ({ track, streams }) => {
+    rtcShowRemote(userId, track, streams[0]);
+  };
+
+  pc.onicecandidate = ({ candidate }) => {
+    if (candidate && convWs?.readyState === WebSocket.OPEN) {
+      convWs.send(JSON.stringify({
+        type: "webrtc_ice", target_id: userId,
+        candidate: candidate.toJSON(),
+      }));
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+      rtcRemoveRemote(userId);
+      pc.close();
+      delete rtcPeers[userId];
+    }
+  };
+
+  if (isOffer) rtcNegotiate(userId, pc);
+  return pc;
+}
+
+async function rtcNegotiate(userId, pc) {
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    convWs?.readyState === WebSocket.OPEN && convWs.send(JSON.stringify({
+      type: "webrtc_offer", target_id: userId,
+      sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+    }));
+  } catch (e) { console.error("[WebRTC] negotiate:", e); }
+}
+
+async function rtcHandleOffer(fromId, sdp) {
+  let pc = rtcPeers[fromId];
+  if (!pc) pc = rtcCreatePeer(fromId, false);
+  try {
+    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    convWs?.readyState === WebSocket.OPEN && convWs.send(JSON.stringify({
+      type: "webrtc_answer", target_id: fromId,
+      sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+    }));
+  } catch (e) { console.error("[WebRTC] handle offer:", e); }
+}
+
+async function rtcHandleAnswer(fromId, sdp) {
+  try {
+    await rtcPeers[fromId]?.setRemoteDescription(new RTCSessionDescription(sdp));
+  } catch (e) { console.error("[WebRTC] handle answer:", e); }
+}
+
+async function rtcHandleIce(fromId, candidate) {
+  if (!candidate || !rtcPeers[fromId]) return;
+  try {
+    await rtcPeers[fromId].addIceCandidate(new RTCIceCandidate(candidate));
+  } catch (e) { console.error("[WebRTC] ICE:", e); }
+}
+
+function rtcShowRemote(userId, track, stream) {
+  let tile = document.getElementById(`conv-remote-${userId}`);
+  if (tile) {
+    const vid = tile.querySelector("video");
+    if (vid.srcObject && !vid.srcObject.getTracks().includes(track)) {
+      vid.srcObject.addTrack(track);
+    } else if (!vid.srcObject) {
+      vid.srcObject = stream || new MediaStream([track]);
+    }
+    return;
+  }
+  tile = document.createElement("div");
+  tile.className = "conv-remote-tile";
+  tile.id = `conv-remote-${userId}`;
+
+  const vid = document.createElement("video");
+  vid.autoplay = true;
+  vid.playsInline = true;
+  vid.srcObject = stream || new MediaStream([track]);
+
+  const label = document.createElement("div");
+  label.className = "conv-remote-tile-name";
+  label.textContent = convUsers[userId]?.name || "Participant";
+
+  tile.appendChild(vid);
+  tile.appendChild(label);
+  convVideoGrid.appendChild(tile);
+}
+
+function rtcRemoveRemote(userId) {
+  document.getElementById(`conv-remote-${userId}`)?.remove();
+}
+
+async function webrtcStartAudio() {
+  if (rtcAudioTrack) return;
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    rtcAudioTrack = s.getAudioTracks()[0];
+    // Add to existing peers
+    for (const [uid, pc] of Object.entries(rtcPeers)) {
+      if (!pc.getSenders().some(s => s.track?.kind === "audio")) {
+        pc.addTrack(rtcAudioTrack);
+        rtcNegotiate(uid, pc);
+      }
+    }
+    // Open connections to peers not yet connected
+    Object.keys(convUsers).filter(uid => uid !== convUserId && !rtcPeers[uid])
+      .forEach(uid => rtcCreatePeer(uid, true));
+  } catch (e) { console.error("[WebRTC] audio start:", e); }
+}
+
+function webrtcStopAudio() {
+  if (!rtcAudioTrack) return;
+  rtcAudioTrack.stop();
+  rtcAudioTrack = null;
+  for (const [uid, pc] of Object.entries(rtcPeers)) {
+    pc.getSenders().filter(s => s.track?.kind === "audio").forEach(s => pc.removeTrack(s));
+    rtcNegotiate(uid, pc);
+  }
+}
+
+function webrtcStartVideo(stream) {
+  const vt = stream.getVideoTracks()[0];
+  if (!vt) return;
+  rtcVideoTrack = vt;
+  for (const [uid, pc] of Object.entries(rtcPeers)) {
+    const sender = pc.getSenders().find(s => s.track?.kind === "video");
+    if (sender) { sender.replaceTrack(vt); }
+    else { pc.addTrack(vt); rtcNegotiate(uid, pc); }
+  }
+  Object.keys(convUsers).filter(uid => uid !== convUserId && !rtcPeers[uid])
+    .forEach(uid => rtcCreatePeer(uid, true));
+}
+
+function webrtcStopVideo() {
+  rtcVideoTrack = null;
+  for (const [uid, pc] of Object.entries(rtcPeers)) {
+    pc.getSenders().filter(s => s.track?.kind === "video").forEach(s => pc.removeTrack(s));
+    rtcNegotiate(uid, pc);
+  }
+}
+
+function webrtcOnUserJoined(userId) {
+  if (rtcAudioTrack || rtcVideoTrack) rtcCreatePeer(userId, true);
+}
+
+function webrtcOnUserLeft(userId) {
+  rtcPeers[userId]?.close();
+  delete rtcPeers[userId];
+  rtcRemoveRemote(userId);
+}
+
+function webrtcCloseAll() {
+  Object.values(rtcPeers).forEach(pc => pc.close());
+  rtcPeers = {};
+  rtcAudioTrack?.stop();
+  rtcAudioTrack = null;
+  rtcVideoTrack = null;
+  convVideoGrid.innerHTML = "";
+}

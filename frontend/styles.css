@@ -824,6 +824,46 @@ footer p {
   animation: mic-pulse-dot 1.2s ease-in-out infinite;
 }
 
+/* Remote video grid */
+.conv-video-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+.conv-video-grid:empty { display: none; }
+
+.conv-remote-tile {
+  position: relative;
+  width: 130px;
+  height: 98px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #111827;
+  flex-shrink: 0;
+  border: 2px solid rgba(99,102,241,0.35);
+}
+.conv-remote-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.conv-remote-tile-name {
+  position: absolute;
+  bottom: 4px;
+  left: 6px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0,0,0,0.55);
+  padding: 1px 5px;
+  border-radius: 3px;
+  max-width: calc(100% - 12px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Camera preview panel */
 .conv-cam-preview {
   display: flex;
