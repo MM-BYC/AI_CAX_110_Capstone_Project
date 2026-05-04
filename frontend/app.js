@@ -106,9 +106,10 @@ function showTab(active) {
   [textTab, audioTab, liveTab, convTab].forEach(t => { t.style.display = "none"; });
   active.btn.classList.add("active");
   active.panel.style.display = "block";
-  // Stop mics if leaving live or conversation tabs
+  // Stop mics/camera if leaving live or conversation tabs
   if (active.btn !== tabLive && isListening) stopListening();
   if (active.btn !== tabConv && convIsListening) convStopListening();
+  if (active.btn !== tabConv && convCamOn) convStopCamera();
 }
 
 tabText.addEventListener("click",  () => showTab({ btn: tabText,  panel: textTab }));
@@ -581,12 +582,14 @@ let convWs           = null;
 let convRoomId       = null;
 let convUserId       = null;   // this session's user_id assigned by server
 let convIsHost       = false;
-let convUsers        = {};     // user_id → {name, language, is_host, mic_on}
+let convUsers        = {};     // user_id → {name, language, is_host, mic_on, camera_on}
 let convIsListening  = false;
 let convRecognition  = null;
 let convXlateTimer   = null;
 let convFinalText    = "";
 let convInterimTimer = null;
+let convCamStream    = null;
+let convCamOn        = false;
 let _convReconnectAttempts = 0;
 const _CONV_MAX_RECONNECTS = 3;
 
@@ -604,6 +607,10 @@ const convParticipantsBar = document.getElementById("convParticipantsBar");
 const convMessages       = document.getElementById("convMessages");
 const convMicBtn         = document.getElementById("convMicBtn");
 const convMicLabel       = document.getElementById("convMicLabel");
+const convCamBtn         = document.getElementById("convCamBtn");
+const convCamLabel       = document.getElementById("convCamLabel");
+const convCamPreview     = document.getElementById("convCamPreview");
+const convCamVideo       = document.getElementById("convCamVideo");
 
 function convShowScreen(screen) {
   convSetup.style.display  = "none";
@@ -656,11 +663,17 @@ function convRenderParticipants() {
       chip.appendChild(badge);
     }
 
-    // Mic indicator
+    // Mic status dot (round, red when on)
     const micEl = document.createElement("div");
     micEl.className = "conv-participant-mic-dot" + (user.mic_on ? " on" : "");
     micEl.id = `conv-mic-dot-${uid}`;
     chip.appendChild(micEl);
+
+    // Camera status dot (square-ish, green when on)
+    const camEl = document.createElement("div");
+    camEl.className = "conv-participant-cam-dot" + (user.camera_on ? " on" : "");
+    camEl.id = `conv-cam-dot-${uid}`;
+    chip.appendChild(camEl);
 
     convParticipantsBar.appendChild(chip);
   });
@@ -671,6 +684,11 @@ function convUpdateChipMic(userId, isOn) {
   if (chip) chip.classList.toggle("speaking", isOn);
   const dot = document.getElementById(`conv-mic-dot-${userId}`);
   if (dot) dot.className = "conv-participant-mic-dot" + (isOn ? " on" : "");
+}
+
+function convUpdateChipCam(userId, isOn) {
+  const dot = document.getElementById(`conv-cam-dot-${userId}`);
+  if (dot) dot.className = "conv-participant-cam-dot" + (isOn ? " on" : "");
 }
 
 // ── Message rendering ──────────────────────────────────────────────────────
@@ -836,6 +854,11 @@ function convHandleMessage(msg) {
       convUpdateChipMic(msg.user_id, msg.is_on);
       break;
 
+    case "user_camera_status":
+      if (convUsers[msg.user_id]) convUsers[msg.user_id].camera_on = msg.is_on;
+      convUpdateChipCam(msg.user_id, msg.is_on);
+      break;
+
     case "error":
       alert(msg.message || "Could not join room.");
       convReset();
@@ -945,6 +968,92 @@ convMicBtn.addEventListener("click", () => {
   convIsListening ? convStopListening() : convStartListening();
 });
 
+// ── Camera start / stop ────────────────────────────────────────────────────
+async function convStartCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    alert("Camera is not supported in this browser.");
+    return;
+  }
+  if (!window.isSecureContext) {
+    alert(
+      "Camera access requires a secure connection.\n\n" +
+      "Open this app via HTTPS or http://localhost."
+    );
+    return;
+  }
+
+  if (navigator.permissions) {
+    try {
+      const perm = await navigator.permissions.query({ name: "camera" });
+      if (perm.state === "denied") {
+        alert(
+          "Camera is blocked for this site.\n\n" +
+          "To unblock it:\n" +
+          "1. Click the lock (or ⓘ) icon in the address bar.\n" +
+          "2. Set Camera to Allow.\n" +
+          "3. Reload the page and try again."
+        );
+        return;
+      }
+    } catch (_) {}
+  }
+
+  try {
+    convCamStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    convCamVideo.srcObject = convCamStream;
+    convCamPreview.style.display = "flex";
+    convCamOn = true;
+    convSetCamUI(true);
+    convWs?.readyState === WebSocket.OPEN &&
+      convWs.send(JSON.stringify({ type: "camera_status", is_on: true }));
+  } catch (err) {
+    if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+      alert(
+        "Camera access was denied.\n\n" +
+        "To fix:\n" +
+        "1. Click the lock (or ⓘ) icon in the address bar.\n" +
+        "2. Set Camera to Allow.\n" +
+        "3. Reload the page and try again.\n\n" +
+        "If on macOS, also check System Settings → Privacy & Security → Camera."
+      );
+    } else if (err.name === "NotFoundError") {
+      alert("No camera found. Please connect a camera and try again.");
+    } else {
+      alert(`Camera error: ${err.message}`);
+    }
+  }
+}
+
+function convStopCamera() {
+  if (convCamStream) {
+    convCamStream.getTracks().forEach(t => t.stop());
+    convCamStream = null;
+  }
+  convCamVideo.srcObject = null;
+  convCamPreview.style.display = "none";
+  convCamOn = false;
+  convSetCamUI(false);
+  convWs?.readyState === WebSocket.OPEN &&
+    convWs.send(JSON.stringify({ type: "camera_status", is_on: false }));
+}
+
+function convSetCamUI(isOn) {
+  convCamBtn.classList.toggle("active", isOn);
+  convCamBtn.innerHTML = isOn
+    ? '<i data-lucide="video"></i>'
+    : '<i data-lucide="video-off"></i>';
+  convCamLabel.textContent = isOn ? "Camera on — tap to stop" : "Tap for camera";
+  lucide.createIcons({ nodes: [convCamBtn] });
+  if (convUserId && convUsers[convUserId]) {
+    convUsers[convUserId].camera_on = isOn;
+    convUpdateChipCam(convUserId, isOn);
+  }
+}
+
+convCamBtn.addEventListener("click", () => {
+  convCamOn ? convStopCamera() : convStartCamera();
+});
+
 // ── Reset / disconnect ─────────────────────────────────────────────────────
 function convHandleDisconnect(reason) {
   if (convWs) { convWs.onclose = null; convWs.onerror = null; convWs = null; }
@@ -955,6 +1064,7 @@ function convHandleDisconnect(reason) {
 
 function convReset() {
   convStopListening();
+  convStopCamera();
   if (convWs) { convWs.close(); convWs = null; }
   convRoomId  = null;
   convUserId  = null;

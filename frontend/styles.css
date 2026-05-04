@@ -810,6 +810,37 @@ footer p {
   50%      { transform: scale(1.5); opacity: 0.7; }
 }
 
+/* Camera status dot on chip */
+.conv-participant-cam-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;   /* square-ish to visually differ from the round mic dot */
+  background: #e5e7eb;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+.conv-participant-cam-dot.on {
+  background: #10b981;
+  animation: mic-pulse-dot 1.2s ease-in-out infinite;
+}
+
+/* Camera preview panel */
+.conv-cam-preview {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.5rem 0;
+  border-top: 1px solid #e5e7eb;
+}
+.conv-cam-preview video {
+  width: 140px;
+  height: 105px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #111827;
+  border: 2px solid rgba(99,102,241,0.4);
+  transform: scaleX(-1);  /* mirror for natural selfie orientation */
+}
+
 /* Messages */
 .conv-messages {
   min-height: 280px;

@@ -397,13 +397,24 @@
               <div class="conv-start-hint">Press your mic to start speaking</div>
             </div>
 
-            <!-- Single mic button -->
+            <!-- Camera preview (shown when camera is on) -->
+            <div class="conv-cam-preview" id="convCamPreview" style="display:none">
+              <video id="convCamVideo" autoplay muted playsinline></video>
+            </div>
+
+            <!-- Mic + Camera buttons -->
             <div class="conv-mic-bar">
               <div class="conv-mic-slot">
                 <button class="conv-mic-btn" id="convMicBtn">
                   <i data-lucide="mic-off"></i>
                 </button>
                 <span class="conv-mic-label" id="convMicLabel">Tap to speak</span>
+              </div>
+              <div class="conv-mic-slot">
+                <button class="conv-mic-btn" id="convCamBtn">
+                  <i data-lucide="video-off"></i>
+                </button>
+                <span class="conv-mic-label" id="convCamLabel">Tap for camera</span>
               </div>
             </div>
 

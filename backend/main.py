@@ -114,6 +114,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
         "language": data["language"],
         "is_host": is_host,
         "mic_on": False,
+        "camera_on": False,
     }
 
     # Confirm join with full room snapshot
@@ -216,6 +217,22 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                     try:
                         await other_ws.send_json({
                             "type": "user_mic_status",
+                            "user_id": user_id,
+                            "is_on": is_on,
+                        })
+                    except Exception:
+                        pass
+
+            elif msg_type == "camera_status":
+                is_on = bool(data.get("is_on", False))
+                if user_id in room["info"]:
+                    room["info"][user_id]["camera_on"] = is_on
+                for other_id, other_ws in list(room["conns"].items()):
+                    if other_id == user_id or not other_ws:
+                        continue
+                    try:
+                        await other_ws.send_json({
+                            "type": "user_camera_status",
                             "user_id": user_id,
                             "is_on": is_on,
                         })
