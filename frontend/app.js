@@ -790,12 +790,13 @@ function convClearInterim() {
 const _typingUsers = {};   // user_id → {name, color, timerId}
 
 function convShowTyping(userId, name) {
-  // Refresh auto-clear timer
+  // Each heartbeat resets the expiry timer — if no heartbeat arrives within
+  // _TYPING_EXPIRE_MS the indicator self-clears (handles disconnects / lost stop signals)
   if (_typingUsers[userId]) clearTimeout(_typingUsers[userId].timerId);
   _typingUsers[userId] = {
     name,
     color: convColorFor(userId),
-    timerId: setTimeout(() => convClearTyping(userId), 4000),
+    timerId: setTimeout(() => convClearTyping(userId), _TYPING_EXPIRE_MS),
   };
   _convRenderTypingBar();
 }
@@ -1206,6 +1207,8 @@ function convReset() {
   _paletteIndex = 0;
   Object.keys(_typingUsers).forEach(k => { clearTimeout(_typingUsers[k].timerId); delete _typingUsers[k]; });
   clearTimeout(_typingTimer);
+  clearInterval(_typingHeartbeat);
+  _typingHeartbeat = null;
   _isTyping = false;
   convMessages.innerHTML = '<div class="conv-start-hint">Press your mic to start speaking</div>';
   convRoomCode.textContent = "------";
@@ -1349,20 +1352,45 @@ convInviteModal.addEventListener("click", e => {
 const convKeyboardInput = document.getElementById("convKeyboardInput");
 const convKeyboardSend  = document.getElementById("convKeyboardSend");
 
-let _typingTimer = null;
-let _isTyping    = false;
+// Typing heartbeat — best practice used by Slack / WhatsApp / iMessage:
+//   • Send typing=true ONCE on first keystroke (not on every keystroke)
+//   • Resend typing=true every HEARTBEAT_MS while the user is still composing
+//   • Send typing=false immediately on send, clear, or blur
+//   • Receiver auto-expires the indicator after EXPIRE_MS — handles
+//     disconnects / lost stop signals with no zombie "X is typing…"
+const _TYPING_HEARTBEAT_MS = 3000;
+const _TYPING_EXPIRE_MS    = 5000;  // slightly longer than heartbeat for network slack
 
-function convSendTyping(on) {
+let _typingTimer     = null;
+let _typingHeartbeat = null;
+let _isTyping        = false;
+
+function _typingSend(on) {
   if (_isTyping === on || convWs?.readyState !== WebSocket.OPEN) return;
   _isTyping = on;
   convWs.send(JSON.stringify({ type: "typing", is_typing: on }));
 }
 
+function _typingStart() {
+  if (!_isTyping) {
+    _typingSend(true);
+    _typingHeartbeat = setInterval(() => {
+      if (convWs?.readyState === WebSocket.OPEN)
+        convWs.send(JSON.stringify({ type: "typing", is_typing: true }));
+    }, _TYPING_HEARTBEAT_MS);
+  }
+}
+
+function _typingStop() {
+  clearInterval(_typingHeartbeat);
+  _typingHeartbeat = null;
+  _typingSend(false);
+}
+
 function convSendKeyboard() {
   const text = convKeyboardInput.value.trim();
   if (!text || convWs?.readyState !== WebSocket.OPEN) return;
-  clearTimeout(_typingTimer);
-  convSendTyping(false);
+  _typingStop();
   convWs.send(JSON.stringify({ type: "keyboard", text }));
   convKeyboardInput.value = "";
   convKeyboardSend.disabled = false;
@@ -1375,14 +1403,15 @@ convKeyboardInput.addEventListener("keydown", e => {
 });
 
 convKeyboardInput.addEventListener("input", () => {
-  clearTimeout(_typingTimer);
   if (convKeyboardInput.value.trim().length > 0) {
-    convSendTyping(true);
-    _typingTimer = setTimeout(() => convSendTyping(false), 800);
+    _typingStart();
   } else {
-    convSendTyping(false);
+    _typingStop();
   }
 });
+
+// Stop typing indicator when user clicks/tabs away from the field
+convKeyboardInput.addEventListener("blur", () => _typingStop());
 
 // ── WebRTC Module ─────────────────────────────────────────────────────────
 const WEBRTC_ICE = [
