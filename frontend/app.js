@@ -1228,7 +1228,7 @@ function rtcCreatePeer(userId, isOffer) {
   };
 
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+    if (pc.connectionState === "failed") {
       rtcRemoveRemote(userId);
       pc.close();
       delete rtcPeers[userId];
