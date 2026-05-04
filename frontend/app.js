@@ -1371,15 +1371,17 @@ function convSendKeyboard() {
 convKeyboardSend.addEventListener("click", convSendKeyboard);
 
 convKeyboardInput.addEventListener("keydown", e => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    convSendKeyboard();
-    return;
-  }
-  // Signal typing start; reset the stop-timer on every keystroke
-  convSendTyping(true);
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); convSendKeyboard(); }
+});
+
+convKeyboardInput.addEventListener("input", () => {
   clearTimeout(_typingTimer);
-  _typingTimer = setTimeout(() => convSendTyping(false), 2500);
+  if (convKeyboardInput.value.trim().length > 0) {
+    convSendTyping(true);
+    _typingTimer = setTimeout(() => convSendTyping(false), 800);
+  } else {
+    convSendTyping(false);
+  }
 });
 
 // ── WebRTC Module ─────────────────────────────────────────────────────────
