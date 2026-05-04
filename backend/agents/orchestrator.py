@@ -5,6 +5,7 @@ from agents import (
     translation_agent,
     quality_review_agent,
     keyboard_agent,
+    conversation_agent,
 )
 
 MAX_RETRIES = 1
@@ -26,6 +27,44 @@ def run_text_pipeline(text: str, source: str, target: str) -> dict:
         "detected_language": detected,
         "translation": translation,
         "words": [],
+    }
+
+
+def run_conversation_pipeline(text: str, source: str, target: str) -> dict:
+    """
+    Per-participant conversation pipeline with full anti-hallucination guardrails.
+
+    Conversation Agent (clean fillers) → Language Detection Agent
+    → Strict Translation Agent (system prompt + temperature=0)
+    → Quality Review Agent → Retry with critique (if flagged)
+    """
+    # Conversation Agent — remove fillers, normalise whitespace
+    cleaned = conversation_agent.run(text, source_lang=source)
+
+    # Language Detection Agent — confirm source language
+    detected = language_detection_agent.run(cleaned)
+    effective_source = detected if detected != source else source
+
+    # Strict Translation Agent
+    translation = translation_agent.run(cleaned, effective_source, target, strict=True)
+
+    # Quality Review Agent → retry once with critique if hallucination detected
+    review = {"passed": True, "critique": ""}
+    for _ in range(MAX_RETRIES):
+        review = quality_review_agent.run(cleaned, translation, effective_source, target)
+        if review["passed"]:
+            break
+        translation = translation_agent.run(
+            cleaned, effective_source, target,
+            critique=review["critique"], strict=True,
+        )
+
+    return {
+        "original_text": text,
+        "cleaned_text": cleaned,
+        "detected_language": detected,
+        "translation": translation,
+        "quality": review,
     }
 
 

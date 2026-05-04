@@ -15,7 +15,7 @@ from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from agents.orchestrator import run_text_pipeline, run_audio_pipeline, run_keyboard_pipeline
+from agents.orchestrator import run_text_pipeline, run_audio_pipeline, run_keyboard_pipeline, run_conversation_pipeline
 from agents import language_detection_agent
 
 logging.basicConfig(level=logging.INFO)
@@ -172,7 +172,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                             translated = text
                         else:
                             result = await asyncio.to_thread(
-                                run_text_pipeline,
+                                run_conversation_pipeline,
                                 text,
                                 my_info["language"],
                                 other_info["language"],
@@ -226,7 +226,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                     "is_self": True,
                 })
 
-                # Translate via Keyboard pipeline and deliver to every other participant
+                # Translate via conversation pipeline and deliver to every other participant
                 for other_id, other_ws in list(room["conns"].items()):
                     if other_id == user_id or not other_ws:
                         continue
@@ -238,7 +238,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                             translated = text
                         else:
                             result = await asyncio.to_thread(
-                                run_keyboard_pipeline,
+                                run_conversation_pipeline,
                                 text,
                                 my_info["language"],
                                 other_info["language"],

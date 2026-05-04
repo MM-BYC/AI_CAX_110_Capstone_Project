@@ -26,7 +26,16 @@ LANG_NAMES = {
 }
 
 
-def run(text: str, source: str, target: str, critique: str = "") -> str:
+_STRICT_SYSTEM = (
+    "You are a professional translation engine. "
+    "Your ONLY job is to translate text faithfully and literally. "
+    "NEVER add, remove, or change any information. "
+    "NEVER add explanations, greetings, commentary, or cultural notes. "
+    "Output ONLY the translated text — nothing else."
+)
+
+
+def run(text: str, source: str, target: str, critique: str = "", strict: bool = False) -> str:
     client = _get_client()
     source_name = LANG_NAMES.get(source, source)
     target_name = LANG_NAMES.get(target, target)
@@ -41,8 +50,14 @@ def run(text: str, source: str, target: str, critique: str = "") -> str:
         f"Return only the translated text with no commentary.{correction_note}\n\nText:\n{text}"
     )
 
+    messages = []
+    if strict:
+        messages.append({"role": "system", "content": _STRICT_SYSTEM})
+    messages.append({"role": "user", "content": prompt})
+
     response = client.chat.completions.create(
         model=os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
+        temperature=0 if strict else 0.3,
     )
     return response.choices[0].message.content.strip()
