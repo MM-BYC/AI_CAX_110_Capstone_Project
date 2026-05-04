@@ -15,7 +15,7 @@ from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from agents.orchestrator import run_text_pipeline, run_audio_pipeline
+from agents.orchestrator import run_text_pipeline, run_audio_pipeline, run_keyboard_pipeline
 from agents import language_detection_agent
 
 logging.basicConfig(level=logging.INFO)
@@ -206,6 +206,55 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                         })
                     except Exception:
                         pass
+
+            elif msg_type == "keyboard":
+                text = data.get("text", "").strip()
+                if not text:
+                    continue
+
+                my_info = room["info"].get(user_id)
+                if not my_info:
+                    continue
+
+                # Echo original back to sender
+                await websocket.send_json({
+                    "type": "message",
+                    "from_id": user_id,
+                    "from": my_info["name"],
+                    "original": text,
+                    "translation": text,
+                    "is_self": True,
+                })
+
+                # Translate via Keyboard pipeline and deliver to every other participant
+                for other_id, other_ws in list(room["conns"].items()):
+                    if other_id == user_id or not other_ws:
+                        continue
+                    other_info = room["info"].get(other_id)
+                    if not other_info:
+                        continue
+                    try:
+                        if other_info["language"] == my_info["language"]:
+                            translated = text
+                        else:
+                            result = await asyncio.to_thread(
+                                run_keyboard_pipeline,
+                                text,
+                                my_info["language"],
+                                other_info["language"],
+                            )
+                            translated = result.get("translation", text)
+
+                        await other_ws.send_json({
+                            "type": "message",
+                            "from_id": user_id,
+                            "from": my_info["name"],
+                            "original": text,
+                            "translation": translated,
+                            "is_self": False,
+                        })
+                    except Exception as e:
+                        logger.error(f"Keyboard translation error for {other_id}: {e}")
 
             elif msg_type == "mic_status":
                 is_on = bool(data.get("is_on", False))

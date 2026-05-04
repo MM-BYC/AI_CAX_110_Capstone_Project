@@ -1156,3 +1156,24 @@ convCopyCodeBtn.addEventListener("click", () => {
     setTimeout(() => { convCopyCodeBtn.title = "Copy room code"; }, 1500);
   });
 });
+
+// ── Keyboard Input Module ──────────────────────────────────────────────────
+const convKeyboardInput = document.getElementById("convKeyboardInput");
+const convKeyboardSend  = document.getElementById("convKeyboardSend");
+
+function convSendKeyboard() {
+  const text = convKeyboardInput.value.trim();
+  if (!text || convWs?.readyState !== WebSocket.OPEN) return;
+  convWs.send(JSON.stringify({ type: "keyboard", text }));
+  convKeyboardInput.value = "";
+  convKeyboardSend.disabled = false;
+}
+
+convKeyboardSend.addEventListener("click", convSendKeyboard);
+
+convKeyboardInput.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    convSendKeyboard();
+  }
+});

@@ -4,6 +4,7 @@ from agents import (
     language_detection_agent,
     translation_agent,
     quality_review_agent,
+    keyboard_agent,
 )
 
 MAX_RETRIES = 1
@@ -25,6 +26,21 @@ def run_text_pipeline(text: str, source: str, target: str) -> dict:
         "detected_language": detected,
         "translation": translation,
         "words": [],
+    }
+
+
+def run_keyboard_pipeline(text: str, source: str, target: str) -> dict:
+    """
+    Keyboard pipeline: Keyboard Agent → Language Detection Agent → Translation Agent
+    """
+    cleaned = keyboard_agent.run(text)
+    detected = language_detection_agent.run(cleaned)
+    effective_source = detected if detected != source else source
+    translation = translation_agent.run(cleaned, effective_source, target)
+    return {
+        "original_text": cleaned,
+        "detected_language": detected,
+        "translation": translation,
     }
 
 

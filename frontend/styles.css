@@ -1002,3 +1002,57 @@ footer p {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Keyboard input bar */
+.conv-keyboard-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 0 0;
+  border-top: 1px solid #e5e7eb;
+}
+
+.conv-keyboard-input {
+  flex: 1;
+  padding: 0.6rem 0.875rem;
+  border: 1.5px solid #d1d5db;
+  border-radius: 24px;
+  font-size: 0.9rem;
+  color: #111827;
+  background: #f9fafb;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.conv-keyboard-input:focus {
+  border-color: #6366f1;
+  background: #ffffff;
+}
+
+.conv-keyboard-send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: none;
+  background: #6366f1;
+  color: #ffffff;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.conv-keyboard-send:hover {
+  background: #4f46e5;
+  transform: scale(1.07);
+}
+
+.conv-keyboard-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.conv-keyboard-send svg { width: 18px; height: 18px; }
