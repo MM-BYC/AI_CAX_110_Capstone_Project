@@ -593,6 +593,22 @@ let convCamOn        = false;
 let _convReconnectAttempts = 0;
 const _CONV_MAX_RECONNECTS = 3;
 
+// Persistent colour palette — one colour per participant (8 distinct)
+const _PARTICIPANT_PALETTE = [
+  "#4f8ef7", "#e84393", "#22b573", "#f7a540",
+  "#a259f7", "#e85c3a", "#2ec4b6", "#b59b00",
+];
+const _participantColors = {};   // user_id → hex colour
+let   _paletteIndex = 0;
+
+function convColorFor(userId) {
+  if (!_participantColors[userId]) {
+    _participantColors[userId] = _PARTICIPANT_PALETTE[_paletteIndex % _PARTICIPANT_PALETTE.length];
+    _paletteIndex++;
+  }
+  return _participantColors[userId];
+}
+
 const convSetup          = document.getElementById("convSetup");
 const convActive         = document.getElementById("convActive");
 const convNameInput      = document.getElementById("convName");
@@ -631,14 +647,17 @@ function convRenderParticipants() {
   convParticipantsBar.innerHTML = "";
   Object.entries(convUsers).forEach(([uid, user]) => {
     const isMe = uid === convUserId;
+    const color = convColorFor(uid);
 
     const chip = document.createElement("div");
     chip.className = "conv-participant-chip" + (isMe ? " me" : "");
     chip.id = `conv-chip-${uid}`;
+    chip.style.borderLeftColor = color;
 
     const avatar = document.createElement("div");
     avatar.className = "conv-participant-avatar-sm";
     avatar.textContent = user.name[0].toUpperCase();
+    avatar.style.background = color;
 
     const info = document.createElement("div");
     info.className = "conv-participant-chip-info";
@@ -646,6 +665,13 @@ function convRenderParticipants() {
     const nameEl = document.createElement("div");
     nameEl.className = "conv-participant-chip-name";
     nameEl.textContent = user.name + (isMe ? " (You)" : "");
+
+    // Language badge (e.g. "ES", "FR")
+    const langBadge = document.createElement("span");
+    langBadge.className = "conv-lang-badge";
+    langBadge.textContent = user.language.toUpperCase();
+    langBadge.style.background = color;
+    nameEl.appendChild(langBadge);
 
     const langEl = document.createElement("div");
     langEl.className = "conv-participant-chip-lang";
@@ -695,24 +721,42 @@ function convUpdateChipCam(userId, isOn) {
 function convAddMessage(msg) {
   convClearInterim();
 
+  const color = convColorFor(msg.from_id);
+
   const bubble = document.createElement("div");
   bubble.className = `conv-bubble ${msg.is_self ? "self" : "partner"}`;
+  bubble.style.borderLeftColor = color;
 
   const nameEl = document.createElement("div");
   nameEl.className = "conv-bubble-name";
+  nameEl.style.color = color;
   nameEl.textContent = msg.from;
 
+  // Main content — show translated text to others, original to self
   const mainEl = document.createElement("div");
   mainEl.className = "conv-bubble-main";
   mainEl.textContent = msg.is_self ? msg.original : msg.translation;
 
-  const subEl = document.createElement("div");
-  subEl.className = "conv-bubble-sub";
-  subEl.textContent = msg.is_self ? `→ ${msg.translation}` : `Original: ${msg.original}`;
+  // "Show original" toggle (always available for non-self messages)
+  const hasOriginal = !msg.is_self && msg.original && msg.original !== msg.translation;
+  let showingOriginal = false;
+
+  const toggleBtn = document.createElement("button");
+  toggleBtn.className = "conv-toggle-original";
+  if (!hasOriginal) {
+    toggleBtn.style.display = "none";
+  } else {
+    toggleBtn.textContent = "Show original";
+    toggleBtn.addEventListener("click", () => {
+      showingOriginal = !showingOriginal;
+      mainEl.textContent = showingOriginal ? msg.original : msg.translation;
+      toggleBtn.textContent = showingOriginal ? "Show translation" : "Show original";
+    });
+  }
 
   bubble.appendChild(nameEl);
   bubble.appendChild(mainEl);
-  bubble.appendChild(subEl);
+  bubble.appendChild(toggleBtn);
 
   convMessages.querySelector(".conv-start-hint")?.remove();
   convMessages.appendChild(bubble);
@@ -730,6 +774,7 @@ function convShowInterim(fromId, fromName, text) {
   convMessages.scrollTop = convMessages.scrollHeight;
   const dot = document.getElementById(`conv-mic-dot-${fromId}`);
   if (dot) dot.classList.add("pulsing");
+  convUpdateCaption(fromId, text + "…", false);
 }
 
 function convClearInterim() {
@@ -849,6 +894,7 @@ function convHandleMessage(msg) {
 
     case "message":
       convAddMessage(msg);
+      if (!msg.is_self) convUpdateCaption(msg.from_id, msg.translation, true);
       break;
 
     case "interim":
@@ -1110,6 +1156,9 @@ function convReset() {
   convUserId  = null;
   convIsHost  = false;
   convUsers   = {};
+  // Reset colour assignments for next session
+  Object.keys(_participantColors).forEach(k => delete _participantColors[k]);
+  _paletteIndex = 0;
   convMessages.innerHTML = '<div class="conv-start-hint">Press your mic to start speaking</div>';
   convRoomCode.textContent = "------";
   convShowScreen(convSetup);
@@ -1372,9 +1421,12 @@ function rtcShowRemoteVideo(userId, track) {
     return;
   }
 
+  const color = convColorFor(userId);
+
   tile = document.createElement("div");
   tile.className = "conv-remote-tile";
   tile.id = `conv-remote-${userId}`;
+  tile.style.borderColor = color;
 
   const vid = document.createElement("video");
   vid.autoplay    = true;
@@ -1385,11 +1437,29 @@ function rtcShowRemoteVideo(userId, track) {
   const label = document.createElement("div");
   label.className = "conv-remote-tile-name";
   label.textContent = convUsers[userId]?.name || "Participant";
+  label.style.background = color;
+
+  // Live caption overlay
+  const caption = document.createElement("div");
+  caption.className = "conv-remote-caption";
+  caption.id = `conv-caption-${userId}`;
 
   tile.appendChild(vid);
+  tile.appendChild(caption);
   tile.appendChild(label);
   convVideoGrid.appendChild(tile);
   vid.play().catch(() => {});
+}
+
+function convUpdateCaption(userId, text, isFinal) {
+  const el = document.getElementById(`conv-caption-${userId}`);
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle("final", isFinal);
+  if (isFinal) {
+    clearTimeout(el._clearTimer);
+    el._clearTimer = setTimeout(() => { el.textContent = ""; }, 4000);
+  }
 }
 
 function rtcPlayRemoteAudio(userId, track) {

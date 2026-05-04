@@ -747,6 +747,7 @@ footer p {
   padding: 0.35rem 0.65rem;
   background: #f9fafb;
   border: 1.5px solid #e5e7eb;
+  border-left: 3px solid transparent;
   border-radius: 999px;
   flex-shrink: 0;
   transition: border-color 0.15s, background 0.15s;
@@ -767,7 +768,7 @@ footer p {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #7c3aed);
+  background: #6366f1; /* overridden inline per participant */
   color: white;
   font-weight: 700;
   font-size: 0.62rem;
@@ -859,7 +860,7 @@ footer p {
   overflow: hidden;
   background: #111827;
   flex-shrink: 0;
-  border: 2px solid rgba(99,102,241,0.35);
+  border: 2px solid #6366f1; /* overridden inline per participant */
 }
 .conv-remote-tile video {
   width: 100%;
@@ -869,7 +870,9 @@ footer p {
 .conv-remote-tile-name {
   position: absolute;
   bottom: 4px;
-  left: 6px;
+  left: 0;
+  right: 0;
+  text-align: center;
   font-size: 0.62rem;
   font-weight: 700;
   color: #fff;
@@ -975,6 +978,63 @@ footer p {
 .conv-bubble.self .conv-bubble-sub {
   text-align: right;
 }
+
+/* Participant colour left-accent on bubbles */
+.conv-bubble.partner {
+  border-left: 3px solid transparent;
+  padding-left: 0.3rem;
+}
+
+/* "Show original" toggle button inside bubble */
+.conv-toggle-original {
+  font-size: 0.67rem;
+  font-weight: 500;
+  color: #6366f1;
+  background: none;
+  border: none;
+  padding: 0.1rem 0.4rem;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.conv-toggle-original:hover { opacity: 1; }
+
+/* Language code badge on participant chip name */
+.conv-lang-badge {
+  display: inline-block;
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #fff;
+  background: #6366f1;
+  border-radius: 3px;
+  padding: 0.05rem 0.28rem;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+  line-height: 1.6;
+}
+
+/* Live caption overlay on remote video tile */
+.conv-remote-caption {
+  position: absolute;
+  bottom: 26px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.68rem;
+  color: #fff;
+  background: rgba(0,0,0,0.6);
+  padding: 3px 6px;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
+  min-height: 0;
+  transition: opacity 0.3s;
+}
+.conv-remote-caption:empty { display: none; }
+.conv-remote-caption.final { opacity: 1; }
 
 /* Interim bubble */
 .conv-interim {
