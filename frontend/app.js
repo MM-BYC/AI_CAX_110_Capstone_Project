@@ -1284,6 +1284,7 @@ function rtcShowRemote(userId, track, stream) {
       vid.srcObject.addTrack(track);
     } else if (!vid.srcObject) {
       vid.srcObject = stream || new MediaStream([track]);
+      vid.play().catch(() => {});
     }
     return;
   }
@@ -1303,6 +1304,7 @@ function rtcShowRemote(userId, track, stream) {
   tile.appendChild(vid);
   tile.appendChild(label);
   convVideoGrid.appendChild(tile);
+  vid.play().catch(() => {});
 }
 
 function rtcRemoveRemote(userId) {
