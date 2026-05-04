@@ -998,16 +998,25 @@ async function convStartCamera() {
     } catch (_) {}
   }
 
+  // Confirm a video input device is actually present before requesting access.
   try {
-    convCamStream = await navigator.mediaDevices.getUserMedia({ video: true });
-    convCamVideo.srcObject = convCamStream;
-    convCamPreview.style.display = "flex";
-    convCamOn = true;
-    convSetCamUI(true);
-    convWs?.readyState === WebSocket.OPEN &&
-      convWs.send(JSON.stringify({ type: "camera_status", is_on: true }));
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const hasCamera = devices.some(d => d.kind === "videoinput");
+    if (!hasCamera) {
+      alert("No camera detected on this device. Please connect a camera and try again.");
+      return;
+    }
+  } catch (_) {}
+
+  // Try to open the camera. If the browser rejects the boolean shorthand
+  // (`video: true`) with a constraint error, retry with an empty constraints
+  // object — both are spec-equivalent but some engines handle them differently.
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
   } catch (err) {
-    if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+    const n = err.name;
+    if (n === "NotAllowedError" || n === "PermissionDeniedError") {
       alert(
         "Camera access was denied.\n\n" +
         "To fix:\n" +
@@ -1016,12 +1025,32 @@ async function convStartCamera() {
         "3. Reload the page and try again.\n\n" +
         "If on macOS, also check System Settings → Privacy & Security → Camera."
       );
-    } else if (err.name === "NotFoundError") {
+      return;
+    }
+    if (n === "NotReadableError" || n === "TrackStartError") {
+      alert("Camera is already in use by another application. Close it and try again.");
+      return;
+    }
+    if (n === "NotFoundError" || n === "DevicesNotFoundError") {
       alert("No camera found. Please connect a camera and try again.");
-    } else {
-      alert(`Camera error: ${err.message}`);
+      return;
+    }
+    // Constraint / overconstrained / unknown — retry with minimal constraints.
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: {}, audio: false });
+    } catch (_) {
+      alert("Could not open camera. Make sure no other app is using it, then try again.");
+      return;
     }
   }
+
+  convCamStream = stream;
+  convCamVideo.srcObject = stream;
+  convCamPreview.style.display = "flex";
+  convCamOn = true;
+  convSetCamUI(true);
+  convWs?.readyState === WebSocket.OPEN &&
+    convWs.send(JSON.stringify({ type: "camera_status", is_on: true }));
 }
 
 function convStopCamera() {
