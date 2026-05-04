@@ -475,10 +475,19 @@ function startListening() {
   recognition.onend = () => { if (isListening) recognition.start(); };
 
   recognition.onerror = e => {
-    if (e.error === "not-allowed") {
-      liveStatus.textContent = "Microphone access denied — check browser permissions";
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      stopListening();
+      liveStatus.textContent = "Microphone blocked — see instructions below";
+      alert(
+        "Microphone access was denied.\n\n" +
+        "To fix:\n" +
+        "1. Click the lock (or ⓘ) icon in the address bar.\n" +
+        "2. Set Microphone to Allow.\n" +
+        "3. Reload the page and try again.\n\n" +
+        "If on macOS, also check System Settings → Privacy & Security → Microphone."
+      );
     } else if (e.error !== "no-speech") {
-      liveStatus.textContent = `Error: ${e.error}`;
+      liveStatus.textContent = `Microphone error: ${e.error}`;
     }
   };
 
@@ -835,13 +844,40 @@ function convHandleMessage(msg) {
 }
 
 // ── Mic start / stop ───────────────────────────────────────────────────────
-function convStartListening() {
+async function convStartListening() {
   if (!SpeechRecognition) {
-    alert("Speech recognition not supported — use Chrome or Edge");
+    alert("Speech recognition is not supported — please use Chrome or Edge.");
     return;
   }
+
+  // Microphone requires a secure context (HTTPS or localhost).
+  if (!window.isSecureContext) {
+    alert(
+      "Microphone access requires a secure connection.\n\n" +
+      "Open this app via HTTPS or http://localhost instead of a plain HTTP address."
+    );
+    return;
+  }
+
   const myInfo = convUsers[convUserId];
   if (!myInfo) return;
+
+  // Check permission state before starting so we can give specific guidance.
+  if (navigator.permissions) {
+    try {
+      const perm = await navigator.permissions.query({ name: "microphone" });
+      if (perm.state === "denied") {
+        alert(
+          "Microphone is blocked for this site.\n\n" +
+          "To unblock it:\n" +
+          "1. Click the lock (or ⓘ) icon in your browser's address bar.\n" +
+          "2. Set Microphone to Allow.\n" +
+          "3. Reload the page and try again."
+        );
+        return;
+      }
+    } catch (_) { /* Permissions API unavailable — proceed and let onerror handle it */ }
+  }
 
   convFinalText = "";
   convRecognition = new SpeechRecognition();
@@ -875,10 +911,18 @@ function convStartListening() {
   };
 
   convRecognition.onend = () => { if (convIsListening) convRecognition.start(); };
+
   convRecognition.onerror = e => {
-    if (e.error === "not-allowed") {
-      alert("Microphone access denied — check browser permissions");
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
       convStopListening();
+      alert(
+        "Microphone access was denied.\n\n" +
+        "To fix:\n" +
+        "1. Click the lock (or ⓘ) icon in the address bar.\n" +
+        "2. Set Microphone to Allow.\n" +
+        "3. Reload the page and try again.\n\n" +
+        "If on macOS, also check System Settings → Privacy & Security → Microphone."
+      );
     }
   };
 
