@@ -5,6 +5,9 @@ const API_BASE = (window.location.port === "3000" || window.location.protocol ==
   ? "http://127.0.0.1:8000"
   : "";
 
+// Safari only allows one tab at a time to hold the microphone.
+const _isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
 document.getElementById("copyright").textContent = `© ${new Date().getFullYear()} AI-Translate. All rights reserved.`;
 
 // Text tab elements
@@ -973,15 +976,24 @@ async function convStartListening() {
   convRecognition.onerror = e => {
     if (e.error === "not-allowed" || e.error === "service-not-allowed") {
       convStopListening();
+      const safariNote = _isSafari
+        ? "Safari limitation detected:\n" +
+          "  Safari allows only ONE tab to use the mic at a time.\n" +
+          "  If another tab in this Safari window is using the mic,\n" +
+          "  that tab blocks all others.\n\n" +
+          "  ► To test multi-participant locally, use Chrome or Firefox\n" +
+          "    where multiple tabs can each use the mic simultaneously.\n" +
+          "  ► In production (different devices / phones), this is not an issue.\n\n"
+        : "";
       alert(
         "Microphone blocked — browser cannot access the mic.\n\n" +
-        "Most likely fix (macOS):\n" +
+        safariNote +
+        "macOS check:\n" +
         "  System Settings → Privacy & Security → Microphone\n" +
-        "  → make sure your browser (Chrome/Safari) is toggled ON\n\n" +
-        "Also check in the browser:\n" +
-        "  Click the lock icon (⓪) in the address bar\n" +
-        "  → Site Settings → Microphone → Allow\n" +
-        "  → then reload the page."
+        "  → make sure your browser is toggled ON\n\n" +
+        "Browser check:\n" +
+        "  Click the lock icon in the address bar\n" +
+        "  → Site Settings → Microphone → Allow → reload the page."
       );
     }
   };
@@ -1479,7 +1491,19 @@ async function webrtcStartAudio() {
     // Open connections to peers not yet connected
     Object.keys(convUsers).filter(uid => uid !== convUserId && !rtcPeers[uid])
       .forEach(uid => rtcCreatePeer(uid, true));
-  } catch (e) { console.error("[WebRTC] audio start:", e); }
+  } catch (e) {
+    console.error("[WebRTC] audio start:", e);
+    if (e.name === "NotAllowedError" && _isSafari) {
+      convStopListening();
+      alert(
+        "Safari mic conflict:\n\n" +
+        "Safari allows only ONE tab to use the mic at a time.\n" +
+        "Another tab in this Safari window already holds the mic.\n\n" +
+        "► Use Chrome or Firefox to test multiple participants in separate tabs.\n" +
+        "► On real devices (separate phones/computers) this is not a problem."
+      );
+    }
+  }
 }
 
 function webrtcStopAudio() {
