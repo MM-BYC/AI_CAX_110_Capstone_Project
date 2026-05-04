@@ -766,10 +766,6 @@ async function convConnect(roomId) {
   const name = convNameInput.value.trim();
   const lang = convLangSelect.value;
 
-  // Create AudioContext here — inside a user-click handler — so it's always activated.
-  if (!rtcAudioContext) rtcAudioContext = new AudioContext();
-  if (rtcAudioContext.state === "suspended") rtcAudioContext.resume();
-
   const wsUrl = `${convGetWsBase()}/ws/conversation/${roomId}`;
   convWs = new WebSocket(wsUrl);
 
@@ -1317,8 +1313,10 @@ function rtcShowRemoteVideo(userId, track) {
 }
 
 function rtcPlayRemoteAudio(userId, track) {
-  if (!rtcAudioContext) return;
-  // Disconnect any previous source for this user
+  // Lazy-create AudioContext on first remote audio arrival — by this point the
+  // user has clicked Join/Create and the page is activated, so resume() works.
+  if (!rtcAudioContext) rtcAudioContext = new AudioContext();
+  if (rtcAudioContext.state === "suspended") rtcAudioContext.resume();
   rtcAudioSources[userId]?.disconnect();
   const source = rtcAudioContext.createMediaStreamSource(new MediaStream([track]));
   source.connect(rtcAudioContext.destination);
