@@ -656,128 +656,159 @@ footer p {
   letter-spacing: 0.1em;
 }
 
-/* Waiting screen */
-.conv-waiting-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: rgba(99, 102, 241, 0.08);
-  border: 2px solid rgba(99, 102, 241, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto;
-  color: #6366f1;
-}
-
-.conv-waiting-icon svg { width: 28px; height: 28px; }
-
-.conv-waiting-card h3 {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #111827;
-  margin: 0;
-}
-
-.conv-room-code {
-  font-size: 2.5rem;
-  font-weight: 700;
-  letter-spacing: 0.25em;
-  color: #6366f1;
-  font-family: monospace;
-  padding: 0.75rem 1.25rem;
-  background: rgba(99, 102, 241, 0.06);
-  border-radius: 12px;
-  border: 1px solid rgba(99, 102, 241, 0.2);
-  text-align: center;
-}
-
-.conv-waiting-hint {
-  font-size: 0.8rem;
-  color: #6b7280;
-  margin: 0;
-}
-
-.conv-waiting-spinner {
-  display: flex;
-  justify-content: center;
-  margin: 0.5rem 0;
-}
-
-.conv-waiting-status {
-  font-size: 0.8rem;
-  color: #6b7280;
-  margin: 0;
-}
-
-.conv-waiting-card .btn-secondary {
-  width: 100%;
-  justify-content: center;
-}
-
-/* Active conversation */
-.conv-users-bar {
+/* ── Room header bar ── */
+.conv-room-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.75rem 1rem;
+  padding: 0.55rem 0.9rem;
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  margin-bottom: 1rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  margin-bottom: 0.75rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
-.conv-user-card {
+.conv-room-bar-left {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  flex: 1;
+  gap: 0.45rem;
 }
 
-.conv-user-card:last-child {
-  justify-content: flex-end;
-  flex-direction: row-reverse;
+.conv-room-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
 }
 
-.conv-user-avatar {
-  width: 38px;
-  height: 38px;
+.conv-room-code-inline {
+  font-family: monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #6366f1;
+}
+
+.conv-copy-code-btn {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 0.2rem 0.3rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.conv-copy-code-btn:hover { background: #f3f4f6; color: #374151; }
+.conv-copy-code-btn svg { width: 13px; height: 13px; }
+
+.conv-leave-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+}
+
+/* ── Participants chips bar ── */
+.conv-participants-bar {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.1rem 0 0.75rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #e5e7eb transparent;
+}
+
+.conv-participant-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.65rem;
+  background: #f9fafb;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 999px;
+  flex-shrink: 0;
+  transition: border-color 0.15s, background 0.15s;
+  cursor: default;
+}
+
+.conv-participant-chip.me {
+  background: rgba(99,102,241,0.06);
+  border-color: rgba(99,102,241,0.3);
+}
+
+.conv-participant-chip.speaking {
+  border-color: rgba(239,68,68,0.5);
+  background: rgba(239,68,68,0.06);
+}
+
+.conv-participant-avatar-sm {
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: linear-gradient(135deg, #6366f1, #7c3aed);
   color: white;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.62rem;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-.conv-user-info {
+.conv-participant-chip-info {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  line-height: 1.2;
 }
 
-.conv-user-name {
-  font-size: 0.875rem;
+.conv-participant-chip-name {
+  font-size: 0.78rem;
   font-weight: 600;
   color: #111827;
 }
 
-.conv-user-lang {
-  font-size: 0.7rem;
-  color: #6b7280;
+.conv-participant-chip-lang {
+  font-size: 0.63rem;
+  color: #9ca3af;
 }
 
-.conv-arrow {
-  color: #d1d5db;
+.conv-host-badge {
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #d97706;
+  background: rgba(217,119,6,0.1);
+  border: 1px solid rgba(217,119,6,0.3);
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+}
+
+/* Mic status dot on chip */
+.conv-participant-mic-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e5e7eb;
   flex-shrink: 0;
+  transition: background 0.2s;
 }
-
-.conv-arrow svg { width: 18px; height: 18px; }
+.conv-participant-mic-dot.on {
+  background: #ef4444;
+  animation: mic-pulse-dot 1.2s ease-in-out infinite;
+}
+.conv-participant-mic-dot.pulsing {
+  background: #d97706;
+  animation: mic-pulse-dot 0.8s ease-in-out infinite;
+}
+@keyframes mic-pulse-dot {
+  0%,100% { transform: scale(1);   opacity: 1; }
+  50%      { transform: scale(1.5); opacity: 0.7; }
+}
 
 /* Messages */
 .conv-messages {
@@ -881,7 +912,6 @@ footer p {
 /* Mic bar */
 .conv-mic-bar {
   display: flex;
-  gap: 2rem;
   justify-content: center;
   padding: 1rem 0;
   border-top: 1px solid #e5e7eb;
@@ -923,18 +953,6 @@ footer p {
   border-color: rgba(239, 68, 68, 0.6);
   color: #ef4444;
   animation: mic-pulse 1.5s ease-in-out infinite;
-}
-
-.conv-mic-btn.partner-speaking {
-  background: rgba(217, 119, 6, 0.08);
-  border-color: rgba(217, 119, 6, 0.5);
-  color: #d97706;
-  animation: mic-pulse-amber 1.5s ease-in-out infinite;
-}
-
-@keyframes mic-pulse-amber {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.2); }
-  50% { box-shadow: 0 0 0 12px rgba(217, 119, 6, 0); }
 }
 
 .conv-mic-btn:disabled {

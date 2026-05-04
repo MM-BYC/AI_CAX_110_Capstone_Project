@@ -42,12 +42,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Conversation rooms: room_id → {"conns": {pos: WebSocket|None}, "info": {pos: {name, language}|None}}
+# Conversation rooms: room_id → {
+#   "conns":   {user_id: WebSocket},
+#   "info":    {user_id: {name, language, is_host, mic_on}},
+#   "host_id": str | None
+# }
 _rooms: dict = {}
 
 
 def _gen_room_id() -> str:
     return "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+
+def _gen_user_id() -> str:
+    return "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
 
 
 @app.get("/")
@@ -76,47 +84,57 @@ async def create_room():
 
 @app.websocket("/ws/conversation/{room_id}")
 async def conversation_ws(websocket: WebSocket, room_id: str):
-    """WebSocket endpoint for live conversation between two users."""
+    """WebSocket endpoint for live multi-user conversation."""
     await websocket.accept()
 
-    room = _rooms.get(room_id)
-    if room and len([v for v in room["conns"].values() if v is not None]) >= 2:
-        await websocket.send_json({"type": "error", "message": "Room is full"})
+    if room_id not in _rooms:
+        _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None}
+
+    room = _rooms[room_id]
+
+    # Wait for join message
+    try:
+        raw = await asyncio.wait_for(websocket.receive_text(), timeout=15)
+        data = json.loads(raw)
+        if data.get("type") != "join":
+            await websocket.close()
+            return
+    except (asyncio.TimeoutError, Exception):
         await websocket.close()
         return
 
-    if room_id not in _rooms:
-        _rooms[room_id] = {"conns": {}, "info": {}}
+    user_id = _gen_user_id()
+    is_host = room["host_id"] is None
+    if is_host:
+        room["host_id"] = user_id
 
-    room = _rooms[room_id]
-    occupied = set(k for k, v in room["conns"].items() if v is not None)
-    position = 0 if 0 not in occupied else 1
-    room["conns"][position] = websocket
-    room["info"][position] = None
+    room["conns"][user_id] = websocket
+    room["info"][user_id] = {
+        "name": data["name"],
+        "language": data["language"],
+        "is_host": is_host,
+        "mic_on": False,
+    }
+
+    # Confirm join with full room snapshot
+    await websocket.send_json({
+        "type": "joined",
+        "user_id": user_id,
+        "room": room_id,
+        "is_host": is_host,
+        "users": [{"user_id": uid, **info} for uid, info in room["info"].items()],
+    })
+
+    # Announce arrival to everyone already in the room
+    new_user = {"user_id": user_id, **room["info"][user_id]}
+    for uid, ws in list(room["conns"].items()):
+        if uid != user_id:
+            try:
+                await ws.send_json({"type": "user_joined", "user": new_user})
+            except Exception:
+                pass
 
     try:
-        raw = await websocket.receive_text()
-        data = json.loads(raw)
-        if data.get("type") != "join":
-            return
-
-        room["info"][position] = {"name": data["name"], "language": data["language"]}
-
-        await websocket.send_json({"type": "joined", "position": position, "room": room_id})
-
-        # Notify both if paired
-        if (
-            room["conns"].get(0) and room["conns"].get(1)
-            and room["info"].get(0) and room["info"].get(1)
-        ):
-            for ws in room["conns"].values():
-                if ws:
-                    await ws.send_json({
-                        "type": "paired",
-                        "users": [room["info"][0], room["info"][1]]
-                    })
-
-        # Message loop
         while True:
             raw = await websocket.receive_text()
             data = json.loads(raw)
@@ -127,44 +145,79 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                 if not text:
                     continue
 
-                my_info = room["info"][position]
-                partner_pos = 1 - position
-                partner_ws = room["conns"].get(partner_pos)
-                partner_info = room["info"].get(partner_pos)
-
-                if not partner_ws or not partner_info:
+                my_info = room["info"].get(user_id)
+                if not my_info:
                     continue
 
-                try:
-                    translation = await asyncio.to_thread(
-                        run_text_pipeline,
-                        text,
-                        my_info["language"],
-                        partner_info["language"]
-                    )
-                    translated_text = translation.get("translation", "")
+                # Echo original back to speaker
+                await websocket.send_json({
+                    "type": "message",
+                    "from_id": user_id,
+                    "from": my_info["name"],
+                    "original": text,
+                    "translation": text,
+                    "is_self": True,
+                })
 
-                    await partner_ws.send_json({
-                        "type": "message",
-                        "from": my_info["name"],
-                        "original": text,
-                        "translation": translated_text,
-                        "is_self": False
-                    })
-                except Exception as e:
-                    logger.error(f"Translation error: {e}")
+                # Translate and deliver to every other participant
+                for other_id, other_ws in list(room["conns"].items()):
+                    if other_id == user_id or not other_ws:
+                        continue
+                    other_info = room["info"].get(other_id)
+                    if not other_info:
+                        continue
+                    try:
+                        if other_info["language"] == my_info["language"]:
+                            translated = text
+                        else:
+                            result = await asyncio.to_thread(
+                                run_text_pipeline,
+                                text,
+                                my_info["language"],
+                                other_info["language"],
+                            )
+                            translated = result.get("translation", text)
+
+                        await other_ws.send_json({
+                            "type": "message",
+                            "from_id": user_id,
+                            "from": my_info["name"],
+                            "original": text,
+                            "translation": translated,
+                            "is_self": False,
+                        })
+                    except Exception as e:
+                        logger.error(f"Translation error for {other_id}: {e}")
 
             elif msg_type == "interim":
-                my_info = room["info"][position]
-                partner_pos = 1 - position
-                partner_ws = room["conns"].get(partner_pos)
-
-                if partner_ws and my_info:
+                my_info = room["info"].get(user_id)
+                if not my_info:
+                    continue
+                for other_id, other_ws in list(room["conns"].items()):
+                    if other_id == user_id or not other_ws:
+                        continue
                     try:
-                        await partner_ws.send_json({
+                        await other_ws.send_json({
                             "type": "interim",
+                            "from_id": user_id,
                             "from": my_info["name"],
                             "text": data.get("text", ""),
+                        })
+                    except Exception:
+                        pass
+
+            elif msg_type == "mic_status":
+                is_on = bool(data.get("is_on", False))
+                if user_id in room["info"]:
+                    room["info"][user_id]["mic_on"] = is_on
+                for other_id, other_ws in list(room["conns"].items()):
+                    if other_id == user_id or not other_ws:
+                        continue
+                    try:
+                        await other_ws.send_json({
+                            "type": "user_mic_status",
+                            "user_id": user_id,
+                            "is_on": is_on,
                         })
                     except Exception:
                         pass
@@ -172,15 +225,37 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
     except WebSocketDisconnect:
         pass
     finally:
-        room["conns"][position] = None
-        partner_pos = 1 - position
-        partner_ws = room["conns"].get(partner_pos)
-        if partner_ws:
-            try:
-                await partner_ws.send_json({"type": "partner_left"})
-            except Exception:
-                pass
-        if all(v is None for v in room["conns"].values()):
+        user_name = (room["info"].get(user_id) or {}).get("name", "Someone")
+        room["conns"].pop(user_id, None)
+        room["info"].pop(user_id, None)
+
+        # Pass host role to next participant if host left
+        if room.get("host_id") == user_id:
+            remaining = list(room["conns"].keys())
+            if remaining:
+                new_host_id = remaining[0]
+                room["host_id"] = new_host_id
+                if new_host_id in room["info"]:
+                    room["info"][new_host_id]["is_host"] = True
+                try:
+                    await room["conns"][new_host_id].send_json({
+                        "type": "host_changed",
+                        "new_host_id": new_host_id,
+                    })
+                except Exception:
+                    pass
+            else:
+                room["host_id"] = None
+
+        # Notify remaining participants
+        for uid, ws in list(room["conns"].items()):
+            if ws:
+                try:
+                    await ws.send_json({"type": "user_left", "user_id": user_id, "name": user_name})
+                except Exception:
+                    pass
+
+        if not room["conns"]:
             _rooms.pop(room_id, None)
 
 

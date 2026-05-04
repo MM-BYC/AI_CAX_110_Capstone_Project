@@ -567,169 +567,104 @@ liveTranslationCopyBtn.addEventListener("click", () => {
   });
 });
 
-// ── Live Conversation ──────────────────────────────────────────────────────
-let convWs = null;
-let convPosition = -1;
-let convUsers = [null, null];
-let convRecognition = null;
-let convIsListening = false;
-let convXlateTimer = null;
-let convFinalText = "";
+// ── Live Conversation (multi-user) ────────────────────────────────────────
+let convWs           = null;
+let convRoomId       = null;
+let convUserId       = null;   // this session's user_id assigned by server
+let convIsHost       = false;
+let convUsers        = {};     // user_id → {name, language, is_host, mic_on}
+let convIsListening  = false;
+let convRecognition  = null;
+let convXlateTimer   = null;
+let convFinalText    = "";
 let convInterimTimer = null;
+let _convReconnectAttempts = 0;
+const _CONV_MAX_RECONNECTS = 3;
 
-const convSetup = document.getElementById("convSetup");
-const convWaiting = document.getElementById("convWaiting");
-const convActive = document.getElementById("convActive");
-const convNameInput = document.getElementById("convName");
-const convLangSelect = document.getElementById("convLang");
-const convCreateBtn = document.getElementById("convCreateBtn");
-const convJoinBtn = document.getElementById("convJoinBtn");
-const convRoomInput = document.getElementById("convRoomInput");
-const convCancelBtn = document.getElementById("convCancelBtn");
-const convRoomCode = document.getElementById("convRoomCode");
-const convMessages = document.getElementById("convMessages");
-const convMicBtn0 = document.getElementById("convMicBtn0");
-const convMicBtn1 = document.getElementById("convMicBtn1");
-const convMicLabel0 = document.getElementById("convMicLabel0");
-const convMicLabel1 = document.getElementById("convMicLabel1");
-const convUserName0 = document.getElementById("convUserName0");
-const convUserName1 = document.getElementById("convUserName1");
-const convUserLang0 = document.getElementById("convUserLang0");
-const convUserLang1 = document.getElementById("convUserLang1");
-const convAvatar0 = document.getElementById("convAvatar0");
-const convAvatar1 = document.getElementById("convAvatar1");
+const convSetup          = document.getElementById("convSetup");
+const convActive         = document.getElementById("convActive");
+const convNameInput      = document.getElementById("convName");
+const convLangSelect     = document.getElementById("convLang");
+const convCreateBtn      = document.getElementById("convCreateBtn");
+const convJoinBtn        = document.getElementById("convJoinBtn");
+const convRoomInput      = document.getElementById("convRoomInput");
+const convRoomCode       = document.getElementById("convRoomCode");
+const convCopyCodeBtn    = document.getElementById("convCopyCodeBtn");
+const convLeaveBtn       = document.getElementById("convLeaveBtn");
+const convParticipantsBar = document.getElementById("convParticipantsBar");
+const convMessages       = document.getElementById("convMessages");
+const convMicBtn         = document.getElementById("convMicBtn");
+const convMicLabel       = document.getElementById("convMicLabel");
 
 function convShowScreen(screen) {
-  convSetup.style.display = "none";
-  convWaiting.style.display = "none";
+  convSetup.style.display  = "none";
   convActive.style.display = "none";
-  screen.style.display = "block";
+  screen.style.display     = "block";
 }
 
 function convGetWsBase() {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const host = (window.location.port === "3000" || window.location.protocol === "file:")
+  const host  = (window.location.port === "3000" || window.location.protocol === "file:")
     ? "127.0.0.1:8000"
     : window.location.host;
   return `${proto}//${host}`;
 }
 
-function convIsLocalDev() {
-  return window.location.port === "3000" || window.location.protocol === "file:";
-}
+// ── Participant chip rendering ─────────────────────────────────────────────
+function convRenderParticipants() {
+  convParticipantsBar.innerHTML = "";
+  Object.entries(convUsers).forEach(([uid, user]) => {
+    const isMe = uid === convUserId;
 
-let _convReconnectAttempts = 0;
-const _CONV_MAX_RECONNECTS = 3;
+    const chip = document.createElement("div");
+    chip.className = "conv-participant-chip" + (isMe ? " me" : "");
+    chip.id = `conv-chip-${uid}`;
 
-async function convConnect(roomId) {
-  const name = convNameInput.value.trim();
-  const lang = convLangSelect.value;
+    const avatar = document.createElement("div");
+    avatar.className = "conv-participant-avatar-sm";
+    avatar.textContent = user.name[0].toUpperCase();
 
-  if (!name) {
-    alert("Please enter your name.");
-    return;
-  }
+    const info = document.createElement("div");
+    info.className = "conv-participant-chip-info";
 
-  const wsUrl = `${convGetWsBase()}/ws/conversation/${roomId}`;
-  convWs = new WebSocket(wsUrl);
+    const nameEl = document.createElement("div");
+    nameEl.className = "conv-participant-chip-name";
+    nameEl.textContent = user.name + (isMe ? " (You)" : "");
 
-  convWs.onopen = () => {
-    console.log("[Conv] WebSocket connected, sending join message");
-    _convReconnectAttempts = 0;
-    convWs.send(JSON.stringify({ type: "join", name, language: lang }));
-  };
+    const langEl = document.createElement("div");
+    langEl.className = "conv-participant-chip-lang";
+    langEl.textContent = LANG_NAMES[user.language] || user.language;
 
-  convWs.onmessage = e => {
-    console.log("[Conv] Received:", e.data);
-    const msg = JSON.parse(e.data);
-    convHandleMessage(msg);
-  };
+    info.appendChild(nameEl);
+    info.appendChild(langEl);
+    chip.appendChild(avatar);
+    chip.appendChild(info);
 
-  convWs.onclose = (event) => {
-    console.log("[Conv] WebSocket closed", event);
-    if (event.code !== 1000 && convPosition >= 0) {
-      if (_convReconnectAttempts < _CONV_MAX_RECONNECTS) {
-        _convReconnectAttempts++;
-        const delay = _convReconnectAttempts * 2000;
-        console.log(`[Conv] Reconnecting in ${delay}ms (attempt ${_convReconnectAttempts})`);
-        convAddSystemMsg(`Connection lost. Reconnecting…`);
-        setTimeout(() => convConnect(roomId), delay);
-      } else {
-        convHandleDisconnect("Connection lost. Please rejoin.");
-      }
-    } else if (convPosition >= 0) {
-      convHandleDisconnect();
-    } else {
-      // WebSocket closed before we ever joined — restore the button
-      convCreateBtn.disabled = false;
-      convCreateBtn.querySelector("span").textContent = "Create Room";
-      if (event.code !== 1000) {
-        alert("Could not connect to server. Please try again.");
-      }
+    if (user.is_host) {
+      const badge = document.createElement("span");
+      badge.className = "conv-host-badge";
+      badge.textContent = "Host";
+      chip.appendChild(badge);
     }
-  };
 
-  convWs.onerror = (err) => {
-    console.error("[Conv] WebSocket error:", err);
-    // onerror is always followed by onclose, so reconnect logic runs there
-  };
+    // Mic indicator
+    const micEl = document.createElement("div");
+    micEl.className = "conv-participant-mic-dot" + (user.mic_on ? " on" : "");
+    micEl.id = `conv-mic-dot-${uid}`;
+    chip.appendChild(micEl);
+
+    convParticipantsBar.appendChild(chip);
+  });
 }
 
-function convHandleMessage(msg) {
-  switch (msg.type) {
-    case "joined":
-      convPosition = msg.position;
-      convRoomCode.textContent = msg.room;
-      convShowScreen(convWaiting);
-      break;
-
-    case "error":
-      alert(msg.message || "Could not join room.");
-      convReset();
-      break;
-
-    case "paired":
-      convUsers = msg.users;
-      convSetupActiveScreen();
-      convShowScreen(convActive);
-      break;
-
-    case "message":
-      convAddMessage(msg);
-      convClearInterim();
-      break;
-
-    case "interim":
-      convShowInterim(msg.from, msg.text);
-      break;
-
-    case "partner_left":
-      convAddSystemMsg("Partner disconnected.");
-      convStopListening();
-      convMicBtn0.disabled = true;
-      convMicBtn1.disabled = true;
-      break;
-  }
+function convUpdateChipMic(userId, isOn) {
+  const chip = document.getElementById(`conv-chip-${userId}`);
+  if (chip) chip.classList.toggle("speaking", isOn);
+  const dot = document.getElementById(`conv-mic-dot-${userId}`);
+  if (dot) dot.className = "conv-participant-mic-dot" + (isOn ? " on" : "");
 }
 
-function convSetupActiveScreen() {
-  for (let i = 0; i < 2; i++) {
-    const user = convUsers[i];
-    if (!user) continue;
-    document.getElementById(`convUserName${i}`).textContent = user.name;
-    document.getElementById(`convUserLang${i}`).textContent = LANG_NAMES[user.language] || user.language;
-    document.getElementById(`convAvatar${i}`).textContent = user.name[0].toUpperCase();
-    document.getElementById(`convMicLabel${i}`).textContent = user.name;
-  }
-
-  const myBtn = convPosition === 0 ? convMicBtn0 : convMicBtn1;
-  const partnerBtn = convPosition === 0 ? convMicBtn1 : convMicBtn0;
-  myBtn.disabled = false;
-  partnerBtn.disabled = true;
-
-  convMessages.innerHTML = '<div class="conv-start-hint">Press your mic to start speaking</div>';
-}
-
+// ── Message rendering ──────────────────────────────────────────────────────
 function convAddMessage(msg) {
   convClearInterim();
 
@@ -752,82 +687,167 @@ function convAddMessage(msg) {
   bubble.appendChild(mainEl);
   bubble.appendChild(subEl);
 
-  const hint = convMessages.querySelector(".conv-start-hint");
-  if (hint) hint.remove();
-
+  convMessages.querySelector(".conv-start-hint")?.remove();
   convMessages.appendChild(bubble);
   convMessages.scrollTop = convMessages.scrollHeight;
 }
 
-function convShowInterim(fromName, text) {
-  let interim = convMessages.querySelector(".conv-interim");
-  if (!interim) {
-    interim = document.createElement("div");
-    interim.className = "conv-interim";
-    convMessages.appendChild(interim);
+function convShowInterim(fromId, fromName, text) {
+  let el = convMessages.querySelector(".conv-interim");
+  if (!el) {
+    el = document.createElement("div");
+    el.className = "conv-interim";
+    convMessages.appendChild(el);
   }
-  interim.textContent = `${fromName}: ${text}…`;
+  el.textContent = `${fromName}: ${text}…`;
   convMessages.scrollTop = convMessages.scrollHeight;
-
-  const partnerPos = 1 - convPosition;
-  const partnerBtn = partnerPos === 0 ? convMicBtn0 : convMicBtn1;
-  partnerBtn.classList.add("partner-speaking");
+  const dot = document.getElementById(`conv-mic-dot-${fromId}`);
+  if (dot) dot.classList.add("pulsing");
 }
 
 function convClearInterim() {
-  const interim = convMessages.querySelector(".conv-interim");
-  if (interim) interim.remove();
-
-  const partnerPos = 1 - convPosition;
-  const partnerBtn = partnerPos === 0 ? convMicBtn0 : convMicBtn1;
-  partnerBtn.classList.remove("partner-speaking");
+  convMessages.querySelector(".conv-interim")?.remove();
+  document.querySelectorAll(".conv-participant-mic-dot.pulsing")
+    .forEach(d => d.classList.remove("pulsing"));
 }
 
 function convAddSystemMsg(text) {
-  const msg = document.createElement("div");
-  msg.className = "conv-system-msg";
-  msg.textContent = text;
-  convMessages.appendChild(msg);
+  const el = document.createElement("div");
+  el.className = "conv-system-msg";
+  el.textContent = text;
+  convMessages.appendChild(el);
   convMessages.scrollTop = convMessages.scrollHeight;
 }
 
-function convHandleDisconnect(reason) {
-  if (convWs) {
-    convWs.onclose = null;
-    convWs.onerror = null;
-    convWs = null;
+// ── Mic UI ─────────────────────────────────────────────────────────────────
+function convSetMicUI(isOn) {
+  convMicBtn.classList.toggle("active", isOn);
+  convMicBtn.innerHTML = isOn
+    ? '<i data-lucide="mic"></i>'
+    : '<i data-lucide="mic-off"></i>';
+  convMicLabel.textContent = isOn ? "Mic on — tap to mute" : "Tap to speak";
+  lucide.createIcons({ nodes: [convMicBtn] });
+  if (convUserId && convUsers[convUserId]) {
+    convUsers[convUserId].mic_on = isOn;
+    convUpdateChipMic(convUserId, isOn);
   }
-  convStopListening();
-  if (reason) {
-    alert(reason + "\nReturning to setup.");
-  }
-  convReset();
 }
 
-function convReset() {
-  convStopListening();
-  if (convWs) {
-    convWs.close();
-    convWs = null;
-  }
-  convPosition = -1;
-  convUsers = [null, null];
-  convMessages.innerHTML = '<div class="conv-start-hint">Press your mic to start speaking</div>';
-  convRoomCode.textContent = "------";
-  convShowScreen(convSetup);
+// ── WebSocket ──────────────────────────────────────────────────────────────
+async function convConnect(roomId) {
+  convRoomId = roomId;
+  const name = convNameInput.value.trim();
+  const lang = convLangSelect.value;
+
+  const wsUrl = `${convGetWsBase()}/ws/conversation/${roomId}`;
+  convWs = new WebSocket(wsUrl);
+
+  convWs.onopen = () => {
+    _convReconnectAttempts = 0;
+    convWs.send(JSON.stringify({ type: "join", name, language: lang }));
+  };
+
+  convWs.onmessage = e => {
+    convHandleMessage(JSON.parse(e.data));
+  };
+
+  convWs.onclose = event => {
+    if (event.code !== 1000 && convUserId) {
+      if (_convReconnectAttempts < _CONV_MAX_RECONNECTS) {
+        _convReconnectAttempts++;
+        convAddSystemMsg(`Connection lost. Reconnecting…`);
+        setTimeout(() => convConnect(roomId), _convReconnectAttempts * 2000);
+      } else {
+        convHandleDisconnect("Connection lost. Please rejoin.");
+      }
+    } else if (convUserId) {
+      convHandleDisconnect();
+    } else {
+      convCreateBtn.disabled = false;
+      convCreateBtn.querySelector("span").textContent = "Create Room";
+      if (event.code !== 1000) alert("Could not connect to server. Please try again.");
+    }
+  };
+
+  convWs.onerror = err => console.error("[Conv] WS error:", err);
 }
 
+function convHandleMessage(msg) {
+  switch (msg.type) {
+
+    case "joined":
+      convUserId = msg.user_id;
+      convIsHost = msg.is_host;
+      convRoomCode.textContent = msg.room;
+      convUsers = {};
+      msg.users.forEach(u => {
+        convUsers[u.user_id] = {
+          name: u.name, language: u.language,
+          is_host: u.is_host, mic_on: u.mic_on || false,
+        };
+      });
+      convRenderParticipants();
+      convShowScreen(convActive);
+      break;
+
+    case "user_joined":
+      convUsers[msg.user.user_id] = {
+        name: msg.user.name, language: msg.user.language,
+        is_host: msg.user.is_host, mic_on: false,
+      };
+      convRenderParticipants();
+      convAddSystemMsg(`${msg.user.name} joined the room.`);
+      break;
+
+    case "user_left":
+      delete convUsers[msg.user_id];
+      convRenderParticipants();
+      convAddSystemMsg(`${msg.name} left the room.`);
+      break;
+
+    case "host_changed":
+      if (msg.new_host_id === convUserId) {
+        convIsHost = true;
+        if (convUsers[convUserId]) convUsers[convUserId].is_host = true;
+        convRenderParticipants();
+        convAddSystemMsg("You are now the host.");
+      }
+      break;
+
+    case "message":
+      convAddMessage(msg);
+      break;
+
+    case "interim":
+      convShowInterim(msg.from_id, msg.from, msg.text);
+      break;
+
+    case "user_mic_status":
+      if (convUsers[msg.user_id]) convUsers[msg.user_id].mic_on = msg.is_on;
+      convUpdateChipMic(msg.user_id, msg.is_on);
+      break;
+
+    case "error":
+      alert(msg.message || "Could not join room.");
+      convReset();
+      break;
+  }
+}
+
+// ── Mic start / stop ───────────────────────────────────────────────────────
 function convStartListening() {
   if (!SpeechRecognition) {
     alert("Speech recognition not supported — use Chrome or Edge");
     return;
   }
+  const myInfo = convUsers[convUserId];
+  if (!myInfo) return;
 
   convFinalText = "";
   convRecognition = new SpeechRecognition();
-  convRecognition.continuous = true;
+  convRecognition.continuous     = true;
   convRecognition.interimResults = true;
-  convRecognition.lang = LANG_LOCALES[convUsers[convPosition]?.language] || "en-US";
+  convRecognition.lang           = LANG_LOCALES[myInfo.language] || "en-US";
 
   convRecognition.onresult = e => {
     let interim = "";
@@ -837,7 +857,7 @@ function convStartListening() {
         clearTimeout(convXlateTimer);
         convXlateTimer = setTimeout(() => {
           const text = convFinalText.trim();
-          if (text && convWs && convWs.readyState === WebSocket.OPEN) {
+          if (text && convWs?.readyState === WebSocket.OPEN) {
             convWs.send(JSON.stringify({ type: "speech", text, is_final: true }));
             convFinalText = "";
           }
@@ -846,8 +866,7 @@ function convStartListening() {
         interim += e.results[i][0].transcript;
       }
     }
-
-    if (interim && convWs && convWs.readyState === WebSocket.OPEN) {
+    if (interim && convWs?.readyState === WebSocket.OPEN) {
       clearTimeout(convInterimTimer);
       convInterimTimer = setTimeout(() => {
         convWs.send(JSON.stringify({ type: "interim", text: interim }));
@@ -855,49 +874,59 @@ function convStartListening() {
     }
   };
 
-  convRecognition.onend = () => {
-    if (convIsListening) convRecognition.start();
-  };
-
+  convRecognition.onend = () => { if (convIsListening) convRecognition.start(); };
   convRecognition.onerror = e => {
     if (e.error === "not-allowed") {
       alert("Microphone access denied — check browser permissions");
+      convStopListening();
     }
   };
 
   convRecognition.start();
   convIsListening = true;
-
-  const myBtn = convPosition === 0 ? convMicBtn0 : convMicBtn1;
-  myBtn.classList.add("active");
+  convWs?.readyState === WebSocket.OPEN &&
+    convWs.send(JSON.stringify({ type: "mic_status", is_on: true }));
+  convSetMicUI(true);
 }
 
 function convStopListening() {
   convIsListening = false;
-  if (convRecognition) {
-    convRecognition.stop();
-    convRecognition = null;
-  }
-  const myBtn = convPosition === 0 ? convMicBtn0 : convMicBtn1;
-  if (myBtn) myBtn.classList.remove("active");
+  if (convRecognition) { convRecognition.stop(); convRecognition = null; }
+  convWs?.readyState === WebSocket.OPEN &&
+    convWs.send(JSON.stringify({ type: "mic_status", is_on: false }));
+  convSetMicUI(false);
 }
 
-convMicBtn0.addEventListener("click", () => {
-  if (convPosition !== 0) return;
+convMicBtn.addEventListener("click", () => {
   convIsListening ? convStopListening() : convStartListening();
 });
 
-convMicBtn1.addEventListener("click", () => {
-  if (convPosition !== 1) return;
-  convIsListening ? convStopListening() : convStartListening();
-});
+// ── Reset / disconnect ─────────────────────────────────────────────────────
+function convHandleDisconnect(reason) {
+  if (convWs) { convWs.onclose = null; convWs.onerror = null; convWs = null; }
+  convStopListening();
+  if (reason) alert(reason + "\nReturning to setup.");
+  convReset();
+}
 
+function convReset() {
+  convStopListening();
+  if (convWs) { convWs.close(); convWs = null; }
+  convRoomId  = null;
+  convUserId  = null;
+  convIsHost  = false;
+  convUsers   = {};
+  convMessages.innerHTML = '<div class="conv-start-hint">Press your mic to start speaking</div>';
+  convRoomCode.textContent = "------";
+  convShowScreen(convSetup);
+  convCreateBtn.disabled = false;
+  convCreateBtn.querySelector("span").textContent = "Create Room";
+}
+
+// ── Create / Join buttons ──────────────────────────────────────────────────
 convCreateBtn.addEventListener("click", async () => {
   const name = convNameInput.value.trim();
-  if (!name) {
-    convNameInput.focus();
-    return;
-  }
+  if (!name) { convNameInput.focus(); return; }
 
   convCreateBtn.disabled = true;
   convCreateBtn.querySelector("span").textContent = "Connecting…";
@@ -907,7 +936,7 @@ convCreateBtn.addEventListener("click", async () => {
     if (!res.ok) {
       convCreateBtn.disabled = false;
       convCreateBtn.querySelector("span").textContent = "Create Room";
-      alert(`Backend error (${res.status}). Is the server running on port 8000?`);
+      alert(`Backend error (${res.status}). Is the server running?`);
       return;
     }
     const data = await res.json();
@@ -921,30 +950,26 @@ convCreateBtn.addEventListener("click", async () => {
   } catch (e) {
     convCreateBtn.disabled = false;
     convCreateBtn.querySelector("span").textContent = "Create Room";
-    alert(`Failed to create room: ${e.message}\n\nMake sure backend is running:\ncd backend && ./startback.sh`);
+    alert(`Failed to create room: ${e.message}`);
   }
 });
 
 convJoinBtn.addEventListener("click", () => {
   const roomId = convRoomInput.value.trim().toUpperCase();
-  if (!roomId) {
-    convRoomInput.focus();
-    return;
-  }
-  const name = convNameInput.value.trim();
-  if (!name) {
-    convNameInput.focus();
-    return;
-  }
+  if (!roomId) { convRoomInput.focus(); return; }
+  const name   = convNameInput.value.trim();
+  if (!name)   { convNameInput.focus(); return; }
   convConnect(roomId);
 });
 
-convRoomInput.addEventListener("keydown", e => {
-  if (e.key === "Enter") convJoinBtn.click();
-});
+convRoomInput.addEventListener("keydown", e => { if (e.key === "Enter") convJoinBtn.click(); });
+convNameInput.addEventListener("keydown", e => { if (e.key === "Enter") convCreateBtn.click(); });
 
-convNameInput.addEventListener("keydown", e => {
-  if (e.key === "Enter") convCreateBtn.click();
-});
+convLeaveBtn.addEventListener("click", () => convReset());
 
-convCancelBtn.addEventListener("click", () => convReset());
+convCopyCodeBtn.addEventListener("click", () => {
+  navigator.clipboard.writeText(convRoomCode.textContent).then(() => {
+    convCopyCodeBtn.title = "Copied!";
+    setTimeout(() => { convCopyCodeBtn.title = "Copy room code"; }, 1500);
+  });
+});

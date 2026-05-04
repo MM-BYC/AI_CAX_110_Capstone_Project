@@ -316,11 +316,12 @@
 
         <!-- Conversation tab -->
         <div id="convTab" class="tab-content">
+
           <!-- Setup screen -->
           <div id="convSetup" class="conv-screen">
             <div class="conv-setup-card">
               <h2>Live Conversation</h2>
-              <p>Talk to someone in any language — real-time AI translation</p>
+              <p>Talk with anyone in any language — real-time AI translation</p>
 
               <div class="conv-field">
                 <label>Your Name</label>
@@ -368,69 +369,44 @@
             </div>
           </div>
 
-          <!-- Waiting screen -->
-          <div id="convWaiting" class="conv-screen" style="display:none">
-            <div class="conv-waiting-card">
-              <div class="conv-waiting-icon">
-                <i data-lucide="users"></i>
+          <!-- Active conversation screen (multi-user) -->
+          <div id="convActive" class="conv-screen" style="display:none">
+
+            <!-- Room header -->
+            <div class="conv-room-bar">
+              <div class="conv-room-bar-left">
+                <span class="conv-room-label">Room</span>
+                <span class="conv-room-code-inline" id="convRoomCode">------</span>
+                <button class="conv-copy-code-btn" id="convCopyCodeBtn" title="Copy room code">
+                  <i data-lucide="copy"></i>
+                </button>
               </div>
-              <h3>Share this room code</h3>
-              <div class="conv-room-code" id="convRoomCode">------</div>
-              <p class="conv-waiting-hint">Ask your partner to enter this code</p>
-              <div class="conv-waiting-spinner">
-                <div class="spinner"></div>
-              </div>
-              <p class="conv-waiting-status">Waiting for partner to connect…</p>
-              <button class="btn btn-secondary" id="convCancelBtn">
-                <i data-lucide="x"></i>
-                <span>Cancel</span>
+              <button class="btn btn-secondary conv-leave-btn" id="convLeaveBtn">
+                <i data-lucide="log-out"></i>
+                <span>Leave</span>
               </button>
             </div>
-          </div>
 
-          <!-- Active conversation screen -->
-          <div id="convActive" class="conv-screen" style="display:none">
-            <div class="conv-users-bar">
-              <div class="conv-user-card" id="convUser0">
-                <div class="conv-user-avatar" id="convAvatar0">A</div>
-                <div class="conv-user-info">
-                  <span class="conv-user-name" id="convUserName0">—</span>
-                  <span class="conv-user-lang" id="convUserLang0">—</span>
-                </div>
-              </div>
-
-              <div class="conv-arrow">
-                <i data-lucide="arrow-left-right"></i>
-              </div>
-
-              <div class="conv-user-card" id="convUser1">
-                <div class="conv-user-avatar" id="convAvatar1">B</div>
-                <div class="conv-user-info">
-                  <span class="conv-user-name" id="convUserName1">—</span>
-                  <span class="conv-user-lang" id="convUserLang1">—</span>
-                </div>
-              </div>
+            <!-- Participants chips -->
+            <div class="conv-participants-bar" id="convParticipantsBar">
+              <!-- Populated by JS -->
             </div>
 
+            <!-- Messages -->
             <div class="conv-messages" id="convMessages">
               <div class="conv-start-hint">Press your mic to start speaking</div>
             </div>
 
+            <!-- Single mic button -->
             <div class="conv-mic-bar">
               <div class="conv-mic-slot">
-                <button class="conv-mic-btn" id="convMicBtn0" disabled>
-                  <i data-lucide="mic"></i>
+                <button class="conv-mic-btn" id="convMicBtn">
+                  <i data-lucide="mic-off"></i>
                 </button>
-                <span class="conv-mic-label" id="convMicLabel0">—</span>
-              </div>
-
-              <div class="conv-mic-slot">
-                <button class="conv-mic-btn" id="convMicBtn1" disabled>
-                  <i data-lucide="mic"></i>
-                </button>
-                <span class="conv-mic-label" id="convMicLabel1">—</span>
+                <span class="conv-mic-label" id="convMicLabel">Tap to speak</span>
               </div>
             </div>
+
           </div>
         </div>
 
