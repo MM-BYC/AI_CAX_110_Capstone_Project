@@ -1214,7 +1214,8 @@ function rtcCreatePeer(userId, isOffer) {
   rtcLocalTracks().forEach(t => pc.addTrack(t));
 
   pc.ontrack = ({ track, streams }) => {
-    rtcShowRemote(userId, track, streams[0]);
+    if (track.kind === "video") rtcShowRemoteVideo(userId, track);
+    else rtcPlayRemoteAudio(userId, track);
   };
 
   pc.onicecandidate = ({ candidate }) => {
@@ -1276,26 +1277,28 @@ async function rtcHandleIce(fromId, candidate) {
   } catch (e) { console.error("[WebRTC] ICE:", e); }
 }
 
-function rtcShowRemote(userId, track, stream) {
+function rtcShowRemoteVideo(userId, track) {
   let tile = document.getElementById(`conv-remote-${userId}`);
   if (tile) {
     const vid = tile.querySelector("video");
-    if (vid.srcObject && !vid.srcObject.getTracks().includes(track)) {
-      vid.srcObject.addTrack(track);
-    } else if (!vid.srcObject) {
-      vid.srcObject = stream || new MediaStream([track]);
+    if (!vid.srcObject) {
+      vid.srcObject = new MediaStream([track]);
       vid.play().catch(() => {});
+    } else if (!vid.srcObject.getVideoTracks().length) {
+      vid.srcObject.addTrack(track);
     }
     return;
   }
+
   tile = document.createElement("div");
   tile.className = "conv-remote-tile";
   tile.id = `conv-remote-${userId}`;
 
   const vid = document.createElement("video");
-  vid.autoplay = true;
+  vid.autoplay    = true;
   vid.playsInline = true;
-  vid.srcObject = stream || new MediaStream([track]);
+  vid.muted       = true;   // muted = guaranteed autoplay; audio handled separately
+  vid.srcObject   = new MediaStream([track]);
 
   const label = document.createElement("div");
   label.className = "conv-remote-tile-name";
@@ -1307,8 +1310,23 @@ function rtcShowRemote(userId, track, stream) {
   vid.play().catch(() => {});
 }
 
+function rtcPlayRemoteAudio(userId, track) {
+  const id = `conv-audio-${userId}`;
+  let el = document.getElementById(id);
+  if (!el) {
+    el = document.createElement("audio");
+    el.id       = id;
+    el.autoplay = true;
+    document.body.appendChild(el);
+  }
+  el.srcObject = new MediaStream([track]);
+  el.play().catch(() => {});
+}
+
 function rtcRemoveRemote(userId) {
   document.getElementById(`conv-remote-${userId}`)?.remove();
+  const aud = document.getElementById(`conv-audio-${userId}`);
+  if (aud) { aud.srcObject = null; aud.remove(); }
 }
 
 async function webrtcStartAudio() {
@@ -1371,7 +1389,10 @@ function webrtcOnUserLeft(userId) {
 }
 
 function webrtcCloseAll() {
-  Object.values(rtcPeers).forEach(pc => pc.close());
+  Object.keys(rtcPeers).forEach(uid => {
+    rtcPeers[uid].close();
+    rtcRemoveRemote(uid);
+  });
   rtcPeers = {};
   rtcAudioTrack?.stop();
   rtcAudioTrack = null;
