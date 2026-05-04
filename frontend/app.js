@@ -1168,6 +1168,22 @@ convCopyCodeBtn.addEventListener("click", () => {
   });
 });
 
+const convInviteBtn = document.getElementById("convInviteBtn");
+convInviteBtn.addEventListener("click", () => {
+  const code = convRoomCode.textContent.trim();
+  const url  = window.location.origin + window.location.pathname;
+  const text = `You're invited to a live AI Translate conversation!\n\nRoom Code: ${code}\nOpen the app: ${url}\n\nEnter the room code after clicking "Join".`;
+
+  if (navigator.share) {
+    navigator.share({ title: "Join my AI Translate room", text }).catch(() => {});
+  } else {
+    navigator.clipboard.writeText(text).then(() => {
+      convInviteBtn.querySelector("span").textContent = "Copied!";
+      setTimeout(() => { convInviteBtn.querySelector("span").textContent = "Invite"; }, 2000);
+    });
+  }
+});
+
 // ── Keyboard Input Module ──────────────────────────────────────────────────
 const convKeyboardInput = document.getElementById("convKeyboardInput");
 const convKeyboardSend  = document.getElementById("convKeyboardSend");

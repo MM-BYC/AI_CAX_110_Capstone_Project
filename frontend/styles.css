@@ -707,6 +707,24 @@ footer p {
 .conv-copy-code-btn:hover { background: #f3f4f6; color: #374151; }
 .conv-copy-code-btn svg { width: 13px; height: 13px; }
 
+.conv-invite-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 20px;
+  border: 1.5px solid #6366f1;
+  background: none;
+  color: #6366f1;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin-left: 0.25rem;
+}
+.conv-invite-btn:hover { background: #6366f1; color: #fff; }
+.conv-invite-btn svg  { width: 12px; height: 12px; }
+
 .conv-leave-btn {
   padding: 0.35rem 0.75rem;
   font-size: 0.78rem;
