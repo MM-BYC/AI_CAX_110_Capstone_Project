@@ -766,6 +766,10 @@ async function convConnect(roomId) {
   const name = convNameInput.value.trim();
   const lang = convLangSelect.value;
 
+  // Create AudioContext here — inside a user-click handler — so it's always activated.
+  if (!rtcAudioContext) rtcAudioContext = new AudioContext();
+  if (rtcAudioContext.state === "suspended") rtcAudioContext.resume();
+
   const wsUrl = `${convGetWsBase()}/ws/conversation/${roomId}`;
   convWs = new WebSocket(wsUrl);
 
@@ -1197,9 +1201,11 @@ const WEBRTC_ICE = [
 
 const convVideoGrid = document.getElementById("convVideoGrid");
 
-let rtcPeers      = {};   // userId → RTCPeerConnection
-let rtcAudioTrack = null; // local mic audio track (for WebRTC)
-let rtcVideoTrack = null; // local camera video track (for WebRTC)
+let rtcPeers        = {};   // userId → RTCPeerConnection
+let rtcAudioTrack   = null; // local mic audio track (for WebRTC)
+let rtcVideoTrack   = null; // local camera video track (for WebRTC)
+let rtcAudioContext = null; // created on user click so it's always activated
+let rtcAudioSources = {};   // userId → AudioContext source node
 
 function rtcLocalTracks() {
   return [rtcAudioTrack, rtcVideoTrack].filter(Boolean);
@@ -1311,22 +1317,18 @@ function rtcShowRemoteVideo(userId, track) {
 }
 
 function rtcPlayRemoteAudio(userId, track) {
-  const id = `conv-audio-${userId}`;
-  let el = document.getElementById(id);
-  if (!el) {
-    el = document.createElement("audio");
-    el.id       = id;
-    el.autoplay = true;
-    document.body.appendChild(el);
-  }
-  el.srcObject = new MediaStream([track]);
-  el.play().catch(() => {});
+  if (!rtcAudioContext) return;
+  // Disconnect any previous source for this user
+  rtcAudioSources[userId]?.disconnect();
+  const source = rtcAudioContext.createMediaStreamSource(new MediaStream([track]));
+  source.connect(rtcAudioContext.destination);
+  rtcAudioSources[userId] = source;
 }
 
 function rtcRemoveRemote(userId) {
   document.getElementById(`conv-remote-${userId}`)?.remove();
-  const aud = document.getElementById(`conv-audio-${userId}`);
-  if (aud) { aud.srcObject = null; aud.remove(); }
+  rtcAudioSources[userId]?.disconnect();
+  delete rtcAudioSources[userId];
 }
 
 async function webrtcStartAudio() {
@@ -1397,5 +1399,6 @@ function webrtcCloseAll() {
   rtcAudioTrack?.stop();
   rtcAudioTrack = null;
   rtcVideoTrack = null;
+  rtcAudioSources = {};
   convVideoGrid.innerHTML = "";
 }
