@@ -618,6 +618,9 @@ function convIsLocalDev() {
   return window.location.port === "3000" || window.location.protocol === "file:";
 }
 
+let _convReconnectAttempts = 0;
+const _CONV_MAX_RECONNECTS = 3;
+
 async function convConnect(roomId) {
   const name = convNameInput.value.trim();
   const lang = convLangSelect.value;
@@ -632,6 +635,7 @@ async function convConnect(roomId) {
 
   convWs.onopen = () => {
     console.log("[Conv] WebSocket connected, sending join message");
+    _convReconnectAttempts = 0;
     convWs.send(JSON.stringify({ type: "join", name, language: lang }));
   };
 
@@ -643,9 +647,16 @@ async function convConnect(roomId) {
 
   convWs.onclose = (event) => {
     console.log("[Conv] WebSocket closed", event);
-    // Only show error if it was an unexpected close (code != 1000)
     if (event.code !== 1000 && convPosition >= 0) {
-      convHandleDisconnect("Connection closed unexpectedly");
+      if (_convReconnectAttempts < _CONV_MAX_RECONNECTS) {
+        _convReconnectAttempts++;
+        const delay = _convReconnectAttempts * 2000;
+        console.log(`[Conv] Reconnecting in ${delay}ms (attempt ${_convReconnectAttempts})`);
+        convAddSystemMsg(`Connection lost. Reconnecting…`);
+        setTimeout(() => convConnect(roomId), delay);
+      } else {
+        convHandleDisconnect("Connection lost. Please rejoin.");
+      }
     } else if (convPosition >= 0) {
       convHandleDisconnect();
     }
@@ -653,11 +664,7 @@ async function convConnect(roomId) {
 
   convWs.onerror = (err) => {
     console.error("[Conv] WebSocket error:", err);
-    const isProduction = !convIsLocalDev();
-    const errorMsg = isProduction
-      ? `WebSocket not supported on this server.\n\nThe Conversation feature works best on local development:\n\ncd backend && ./startback.sh\ncd frontend && ./startfront.sh\n\nThen open: http://localhost:3000`
-      : `WebSocket connection failed.\n\nMake sure backend is running:\ncd backend && ./startback.sh`;
-    convHandleDisconnect(errorMsg);
+    // onerror is always followed by onclose, so reconnect logic runs there
   };
 }
 
