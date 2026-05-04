@@ -1054,16 +1054,18 @@ footer p {
   align-self: flex-start;
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.35rem 0.8rem;
+  gap: 0.35rem;
+  padding: 0.35rem 0.85rem;
   border-radius: 12px;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.2);
   font-size: 0.78rem;
-  color: #6b7280;
+  color: #b91c1c;
+  animation: typing-bar-heartbeat 1.4s ease-in-out infinite;
 }
 .conv-typing-name {
   font-weight: 600;
+  color: inherit;
 }
 .conv-typing-dots {
   display: inline-flex;
@@ -1076,14 +1078,24 @@ footer p {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #9ca3af;
-  animation: typing-bounce 1.2s ease-in-out infinite;
+  background: #ef4444;
+  animation: typing-dot-heartbeat 1.4s ease-in-out infinite;
 }
-.conv-typing-dots span:nth-child(2) { animation-delay: 0.2s; }
-.conv-typing-dots span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes typing-bounce {
-  0%, 60%, 100% { transform: translateY(0);    opacity: 0.5; }
-  30%           { transform: translateY(-5px); opacity: 1;   }
+.conv-typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.conv-typing-dots span:nth-child(3) { animation-delay: 0.3s;  }
+@keyframes typing-dot-heartbeat {
+  0%, 100% { transform: scale(1);    opacity: 0.45; }
+  14%      { transform: scale(1.6);  opacity: 1;    }
+  28%      { transform: scale(1);    opacity: 0.45; }
+  42%      { transform: scale(1.35); opacity: 0.85; }
+  56%      { transform: scale(1);    opacity: 0.45; }
+}
+@keyframes typing-bar-heartbeat {
+  0%, 100% { border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.06); }
+  14%      { border-color: rgba(239, 68, 68, 0.45); background: rgba(239, 68, 68, 0.13); }
+  28%      { border-color: rgba(239, 68, 68, 0.2);  background: rgba(239, 68, 68, 0.06); }
+  42%      { border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.10); }
+  56%      { border-color: rgba(239, 68, 68, 0.2);  background: rgba(239, 68, 68, 0.06); }
 }
 
 /* System message */
