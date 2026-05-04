@@ -659,6 +659,13 @@ async function convConnect(roomId) {
       }
     } else if (convPosition >= 0) {
       convHandleDisconnect();
+    } else {
+      // WebSocket closed before we ever joined — restore the button
+      convCreateBtn.disabled = false;
+      convCreateBtn.querySelector("span").textContent = "Create Room";
+      if (event.code !== 1000) {
+        alert("Could not connect to server. Please try again.");
+      }
     }
   };
 
@@ -892,19 +899,28 @@ convCreateBtn.addEventListener("click", async () => {
     return;
   }
 
+  convCreateBtn.disabled = true;
+  convCreateBtn.querySelector("span").textContent = "Connecting…";
+
   try {
     const res = await fetch(`${API_BASE}/create_room`);
     if (!res.ok) {
+      convCreateBtn.disabled = false;
+      convCreateBtn.querySelector("span").textContent = "Create Room";
       alert(`Backend error (${res.status}). Is the server running on port 8000?`);
       return;
     }
     const data = await res.json();
     if (!data.room_id) {
+      convCreateBtn.disabled = false;
+      convCreateBtn.querySelector("span").textContent = "Create Room";
       alert("Invalid response from server.");
       return;
     }
     await convConnect(data.room_id);
   } catch (e) {
+    convCreateBtn.disabled = false;
+    convCreateBtn.querySelector("span").textContent = "Create Room";
     alert(`Failed to create room: ${e.message}\n\nMake sure backend is running:\ncd backend && ./startback.sh`);
   }
 });
