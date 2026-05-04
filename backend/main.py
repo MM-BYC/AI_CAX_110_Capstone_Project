@@ -207,6 +207,23 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                     except Exception:
                         pass
 
+            elif msg_type == "typing":
+                my_info = room["info"].get(user_id)
+                if not my_info:
+                    continue
+                for other_id, other_ws in list(room["conns"].items()):
+                    if other_id == user_id or not other_ws:
+                        continue
+                    try:
+                        await other_ws.send_json({
+                            "type": "typing",
+                            "user_id": user_id,
+                            "name": my_info["name"],
+                            "is_typing": bool(data.get("is_typing", False)),
+                        })
+                    except Exception:
+                        pass
+
             elif msg_type == "keyboard":
                 text = data.get("text", "").strip()
                 if not text:

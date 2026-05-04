@@ -786,6 +786,48 @@ function convClearInterim() {
     .forEach(d => d.classList.remove("pulsing"));
 }
 
+// Typing indicators — keyed by user_id so multiple typers stack correctly
+const _typingUsers = {};   // user_id → {name, color, timerId}
+
+function convShowTyping(userId, name) {
+  // Refresh auto-clear timer
+  if (_typingUsers[userId]) clearTimeout(_typingUsers[userId].timerId);
+  _typingUsers[userId] = {
+    name,
+    color: convColorFor(userId),
+    timerId: setTimeout(() => convClearTyping(userId), 4000),
+  };
+  _convRenderTypingBar();
+}
+
+function convClearTyping(userId) {
+  if (!_typingUsers[userId]) return;
+  clearTimeout(_typingUsers[userId].timerId);
+  delete _typingUsers[userId];
+  _convRenderTypingBar();
+}
+
+function _convRenderTypingBar() {
+  let bar = document.getElementById("conv-typing-bar");
+  const entries = Object.values(_typingUsers);
+  if (!entries.length) { bar?.remove(); return; }
+
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "conv-typing-bar";
+    bar.className = "conv-typing-bar";
+    convMessages.appendChild(bar);
+  }
+
+  const names = entries.map(u =>
+    `<span class="conv-typing-name" style="color:${u.color}">${u.name}</span>`
+  ).join(", ");
+  const verb = entries.length === 1 ? "is typing" : "are typing";
+  bar.innerHTML =
+    `${names} <span class="conv-typing-dots"><span></span><span></span><span></span></span> ${verb}…`;
+  convMessages.scrollTop = convMessages.scrollHeight;
+}
+
 function convAddSystemMsg(text) {
   const el = document.createElement("div");
   el.className = "conv-system-msg";
@@ -877,6 +919,7 @@ function convHandleMessage(msg) {
 
     case "user_left":
       webrtcOnUserLeft(msg.user_id);
+      convClearTyping(msg.user_id);
       delete convUsers[msg.user_id];
       convRenderParticipants();
       convAddSystemMsg(`${msg.name} left the room.`);
@@ -902,6 +945,11 @@ function convHandleMessage(msg) {
 
     case "interim":
       convShowInterim(msg.from_id, msg.from, msg.text);
+      break;
+
+    case "typing":
+      if (msg.is_typing) convShowTyping(msg.user_id, msg.name);
+      else               convClearTyping(msg.user_id);
       break;
 
     case "user_mic_status":
@@ -1153,9 +1201,12 @@ function convReset() {
   convUserId  = null;
   convIsHost  = false;
   convUsers   = {};
-  // Reset colour assignments for next session
+  // Reset colour and typing state for next session
   Object.keys(_participantColors).forEach(k => delete _participantColors[k]);
   _paletteIndex = 0;
+  Object.keys(_typingUsers).forEach(k => { clearTimeout(_typingUsers[k].timerId); delete _typingUsers[k]; });
+  clearTimeout(_typingTimer);
+  _isTyping = false;
   convMessages.innerHTML = '<div class="conv-start-hint">Press your mic to start speaking</div>';
   convRoomCode.textContent = "------";
   convShowScreen(convSetup);
@@ -1298,9 +1349,20 @@ convInviteModal.addEventListener("click", e => {
 const convKeyboardInput = document.getElementById("convKeyboardInput");
 const convKeyboardSend  = document.getElementById("convKeyboardSend");
 
+let _typingTimer = null;
+let _isTyping    = false;
+
+function convSendTyping(on) {
+  if (_isTyping === on || convWs?.readyState !== WebSocket.OPEN) return;
+  _isTyping = on;
+  convWs.send(JSON.stringify({ type: "typing", is_typing: on }));
+}
+
 function convSendKeyboard() {
   const text = convKeyboardInput.value.trim();
   if (!text || convWs?.readyState !== WebSocket.OPEN) return;
+  clearTimeout(_typingTimer);
+  convSendTyping(false);
   convWs.send(JSON.stringify({ type: "keyboard", text }));
   convKeyboardInput.value = "";
   convKeyboardSend.disabled = false;
@@ -1312,7 +1374,12 @@ convKeyboardInput.addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     convSendKeyboard();
+    return;
   }
+  // Signal typing start; reset the stop-timer on every keystroke
+  convSendTyping(true);
+  clearTimeout(_typingTimer);
+  _typingTimer = setTimeout(() => convSendTyping(false), 2500);
 });
 
 // ── WebRTC Module ─────────────────────────────────────────────────────────

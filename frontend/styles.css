@@ -1049,6 +1049,43 @@ footer p {
   max-width: 75%;
 }
 
+/* Typing indicator bar */
+.conv-typing-bar {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.8rem;
+  border-radius: 12px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+.conv-typing-name {
+  font-weight: 600;
+}
+.conv-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin: 0 2px;
+}
+.conv-typing-dots span {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #9ca3af;
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+.conv-typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.conv-typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0);    opacity: 0.5; }
+  30%           { transform: translateY(-5px); opacity: 1;   }
+}
+
 /* System message */
 .conv-system-msg {
   text-align: center;
