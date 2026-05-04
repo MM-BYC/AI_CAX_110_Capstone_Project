@@ -1113,4 +1113,103 @@ footer p {
   transform: none;
 }
 
+/* Invite modal */
+.conv-invite-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.conv-invite-card {
+  background: #fff;
+  border-radius: 18px;
+  padding: 1.5rem;
+  width: min(400px, 92vw);
+  box-shadow: 0 24px 64px rgba(0,0,0,0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.conv-invite-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.conv-invite-card-header span {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+}
+.conv-invite-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #9ca3af;
+  padding: 0.25rem;
+  border-radius: 6px;
+  display: flex;
+  transition: background 0.15s, color 0.15s;
+}
+.conv-invite-close:hover { background: #f3f4f6; color: #374151; }
+.conv-invite-close svg   { width: 16px; height: 16px; }
+.conv-invite-msg {
+  width: 100%;
+  height: 86px;
+  resize: none;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.8rem;
+  color: #374151;
+  background: #f9fafb;
+  line-height: 1.5;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.conv-invite-share-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+.conv-invite-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.6rem;
+}
+.conv-invite-platform {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0.4rem 0.2rem;
+  border-radius: 10px;
+  transition: background 0.15s;
+}
+.conv-invite-platform:hover { background: #f3f4f6; }
+.conv-invite-platform-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+}
+.conv-invite-platform-name {
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .conv-keyboard-send svg { width: 18px; height: 18px; }

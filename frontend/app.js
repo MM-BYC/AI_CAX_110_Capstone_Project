@@ -1168,20 +1168,84 @@ convCopyCodeBtn.addEventListener("click", () => {
   });
 });
 
-const convInviteBtn = document.getElementById("convInviteBtn");
-convInviteBtn.addEventListener("click", () => {
+// ── Invite Modal ───────────────────────────────────────────────────────────
+const convInviteBtn   = document.getElementById("convInviteBtn");
+const convInviteModal = document.getElementById("convInviteModal");
+const convInviteMsg   = document.getElementById("convInviteMsg");
+const convInviteClose = document.getElementById("convInviteClose");
+
+const INVITE_PLATFORMS = [
+  { id: "copy",      label: "Copy",      bg: "#6366f1", emoji: "📋" },
+  { id: "sms",       label: "SMS",       bg: "#10b981", emoji: "💬" },
+  { id: "email",     label: "Email",     bg: "#f59e0b", emoji: "✉️"  },
+  { id: "whatsapp",  label: "WhatsApp",  bg: "#25d366", emoji: "📱" },
+  { id: "teams",     label: "Teams",     bg: "#5059c9", emoji: "🏢" },
+  { id: "messenger", label: "Messenger", bg: "#0084ff", emoji: "💙" },
+  { id: "telegram",  label: "Telegram",  bg: "#2ca5e0", emoji: "✈️"  },
+  { id: "slack",     label: "Slack",     bg: "#4a154b", emoji: "💼" },
+  { id: "discord",   label: "Discord",   bg: "#5865f2", emoji: "🎮" },
+];
+
+function inviteText() {
   const code = convRoomCode.textContent.trim();
   const url  = window.location.origin + window.location.pathname;
-  const text = `You're invited to a live AI Translate conversation!\n\nRoom Code: ${code}\nOpen the app: ${url}\n\nEnter the room code after clicking "Join".`;
+  return `You're invited to a live AI Translate conversation!\n\nRoom Code: ${code}\nOpen the app: ${url}\n\nEnter the room code to join.`;
+}
+function inviteShort() {
+  const code = convRoomCode.textContent.trim();
+  const url  = window.location.origin + window.location.pathname;
+  return `Join my AI Translate room! Code: ${code} | ${url}`;
+}
 
-  if (navigator.share) {
-    navigator.share({ title: "Join my AI Translate room", text }).catch(() => {});
-  } else {
-    navigator.clipboard.writeText(text).then(() => {
-      convInviteBtn.querySelector("span").textContent = "Copied!";
-      setTimeout(() => { convInviteBtn.querySelector("span").textContent = "Invite"; }, 2000);
-    });
-  }
+function inviteCopyAndLabel(platformId, label) {
+  navigator.clipboard.writeText(inviteText()).then(() => {
+    const el = document.querySelector(`[data-platform="${platformId}"] .conv-invite-platform-name`);
+    if (!el) return;
+    const orig = el.textContent;
+    el.textContent = label;
+    setTimeout(() => { el.textContent = orig; }, 2200);
+  });
+}
+
+function inviteShare(platformId) {
+  const enc  = encodeURIComponent(inviteText());
+  const encs = encodeURIComponent(inviteShort());
+  const url  = encodeURIComponent(window.location.origin + window.location.pathname);
+  const subj = encodeURIComponent("Join my AI Translate room");
+  ({
+    copy:      () => inviteCopyAndLabel("copy", "Copied!"),
+    sms:       () => window.open(`sms:?&body=${enc}`),
+    email:     () => window.open(`mailto:?subject=${subj}&body=${enc}`),
+    whatsapp:  () => window.open(`https://api.whatsapp.com/send?text=${enc}`),
+    teams:     () => window.open(`https://teams.microsoft.com/l/chat/0/0?users=&message=${encs}`),
+    messenger: () => inviteCopyAndLabel("messenger", "Copied!"),
+    telegram:  () => window.open(`https://t.me/share/url?url=${url}&text=${encs}`),
+    slack:     () => inviteCopyAndLabel("slack",   "Copied — paste in Slack"),
+    discord:   () => inviteCopyAndLabel("discord", "Copied — paste in Discord"),
+  })[platformId]?.();
+}
+
+(function buildInviteGrid() {
+  const grid = document.getElementById("convInvitePlatforms");
+  INVITE_PLATFORMS.forEach(p => {
+    const btn = document.createElement("button");
+    btn.className = "conv-invite-platform";
+    btn.dataset.platform = p.id;
+    btn.innerHTML = `<div class="conv-invite-platform-icon" style="background:${p.bg}">${p.emoji}</div>
+      <span class="conv-invite-platform-name">${p.label}</span>`;
+    btn.addEventListener("click", () => inviteShare(p.id));
+    grid.appendChild(btn);
+  });
+})();
+
+convInviteBtn.addEventListener("click", () => {
+  convInviteMsg.value = inviteText();
+  convInviteModal.style.display = "flex";
+  lucide.createIcons({ nodes: [convInviteClose] });
+});
+convInviteClose.addEventListener("click", () => { convInviteModal.style.display = "none"; });
+convInviteModal.addEventListener("click", e => {
+  if (e.target === convInviteModal) convInviteModal.style.display = "none";
 });
 
 // ── Keyboard Input Module ──────────────────────────────────────────────────
