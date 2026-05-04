@@ -2,10 +2,12 @@
 
 An agentic AI translation system powered by **Groq AI** and **OpenAI Whisper**, with real-time conversational translation for paired devices.
 
----
-## Project link
 
-https://ai-cax-110-capstone-project.onrender.com
+
+🔗 **Live App:** [https://ai-cax-110-capstone-project.onrender.com](https://ai-cax-110-capstone-project.onrender.com)
+
+---
+### 
 
 
 
