@@ -1227,7 +1227,11 @@ function convStopListening() {
 }
 
 convMicBtn.addEventListener("click", () => {
-  _unlockTts(); // activate speechSynthesis from this user-gesture context
+  // Do NOT call _unlockTts() here: on Safari, speechSynthesis.speak() and
+  // SpeechRecognition.start() both compete for the audio session within the
+  // same event-loop tick, causing a "not-allowed" mic error.
+  // TTS is already unlocked via the Create/Join button clicks (which fire
+  // before any audio is involved), so no primer is needed here.
   convIsListening ? convStopListening() : convStartListening();
 });
 
