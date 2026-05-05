@@ -677,7 +677,10 @@ function _buildCard(uid, user) {
   const ph = document.createElement("div");
   ph.className   = "conv-card-placeholder";
   ph.id          = `conv-card-ph-${uid}`;
-  ph.textContent = user.name[0].toUpperCase();
+  const _nameParts = user.name.trim().split(/\s+/);
+  ph.textContent = _nameParts.length >= 2
+    ? (_nameParts[0][0] + _nameParts[_nameParts.length - 1][0]).toUpperCase()
+    : _nameParts[0][0].toUpperCase();
   ph.style.background = color;
 
   // Video element (hidden until camera opens)
