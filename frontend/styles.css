@@ -766,6 +766,8 @@ footer p {
 
 .conv-carousel-track {
   display: grid;
+  grid-auto-flow: row;       /* fill left → right, then next row */
+  grid-auto-rows: 100px;
   gap: 8px;
   /* grid-template-columns set dynamically by JS */
 }
