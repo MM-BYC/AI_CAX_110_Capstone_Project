@@ -391,22 +391,24 @@
               </button>
             </div>
 
-            <!-- Participants chips -->
-            <div class="conv-participants-bar" id="convParticipantsBar">
-              <!-- Populated by JS -->
+            <!-- Participant carousel: name + camera square, 3 rows max, paginated -->
+            <div class="conv-carousel-wrapper">
+              <button id="convCarouselLeft" class="conv-carousel-arrow" title="Previous">
+                <i data-lucide="chevron-left"></i>
+              </button>
+              <div id="convCarouselViewport" class="conv-carousel-viewport">
+                <div id="convCarouselTrack" class="conv-carousel-track">
+                  <!-- participant cards injected by JS -->
+                </div>
+              </div>
+              <button id="convCarouselRight" class="conv-carousel-arrow" title="Next">
+                <i data-lucide="chevron-right"></i>
+              </button>
             </div>
-
-            <!-- Remote video grid (populated by WebRTC) -->
-            <div class="conv-video-grid" id="convVideoGrid"></div>
 
             <!-- Messages -->
             <div class="conv-messages" id="convMessages">
               <div class="conv-start-hint">Press your mic to start speaking</div>
-            </div>
-
-            <!-- Camera preview (shown when camera is on) -->
-            <div class="conv-cam-preview" id="convCamPreview" style="display:none">
-              <video id="convCamVideo" autoplay muted playsinline></video>
             </div>
 
             <!-- Mic + Camera buttons -->

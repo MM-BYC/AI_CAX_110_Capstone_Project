@@ -731,88 +731,147 @@ footer p {
 }
 
 /* ── Participants chips bar ── */
-.conv-participants-bar {
-  display: flex;
-  gap: 0.5rem;
-  padding: 0.1rem 0 0.75rem;
-  overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #e5e7eb transparent;
-}
-
-.conv-participant-chip {
+/* ── Participant carousel ────────────────────────────────────────────────── */
+.conv-carousel-wrapper {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.65rem;
-  background: #f9fafb;
-  border: 1.5px solid #e5e7eb;
-  border-left: 3px solid transparent;
-  border-radius: 999px;
+  gap: 4px;
+  padding: 0.5rem 0 0.6rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.conv-carousel-arrow {
   flex-shrink: 0;
-  transition: border-color 0.15s, background 0.15s;
-  cursor: default;
-}
-
-.conv-participant-chip.me {
-  background: rgba(99,102,241,0.06);
-  border-color: rgba(99,102,241,0.3);
-}
-
-.conv-participant-chip.speaking {
-  border-color: rgba(239,68,68,0.5);
-  background: rgba(239,68,68,0.06);
-}
-
-.conv-participant-avatar-sm {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: #6366f1; /* overridden inline per participant */
-  color: white;
-  font-weight: 700;
-  font-size: 0.62rem;
+  border: 1.5px solid #e5e7eb;
+  background: #fff;
+  color: #6366f1;
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  padding: 0;
+}
+.conv-carousel-arrow:hover   { background: #f3f4f6; border-color: #6366f1; }
+.conv-carousel-arrow[style*="hidden"] { opacity: 0; pointer-events: none; }
+
+.conv-carousel-viewport {
+  flex: 1;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.conv-carousel-track {
+  display: grid;
+  gap: 8px;
+  /* grid-template-columns set dynamically by JS */
+}
+
+/* ── Participant card ─────────────────────────────────────────────────────── */
+.conv-participant-card {
+  width: 100px;
   flex-shrink: 0;
+  cursor: default;
 }
 
-.conv-participant-chip-info {
+/* Square video box */
+.conv-card-box {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #111827;
+  border: 2px solid #6366f1; /* overridden inline per participant */
+  transition: border-color 0.2s;
+}
+.conv-participant-card.speaking .conv-card-box {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239,68,68,0.2);
+}
+
+/* Initials placeholder (shown when cam off) */
+.conv-card-placeholder {
+  position: absolute;
+  inset: 0;
   display: flex;
-  flex-direction: column;
-  line-height: 1.2;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.02em;
 }
 
-.conv-participant-chip-name {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #111827;
+/* Video element inside box */
+.conv-card-vid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
 }
 
-.conv-participant-chip-lang {
-  font-size: 0.63rem;
-  color: #9ca3af;
-}
-
-.conv-host-badge {
-  font-size: 0.55rem;
+/* Host badge — top-right corner of box */
+.conv-card-host-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 0.5rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #d97706;
-  background: rgba(217,119,6,0.1);
-  border: 1px solid rgba(217,119,6,0.3);
-  padding: 0.1rem 0.35rem;
-  border-radius: 999px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(217,119,6,0.5);
+  padding: 1px 4px;
+  border-radius: 4px;
+  z-index: 2;
 }
 
-/* Mic status dot on chip */
+/* Name bar overlaid at bottom of box */
+.conv-card-name-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 5px;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(2px);
+  z-index: 2;
+}
+.conv-card-name-txt {
+  flex: 1;
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conv-card-lang-badge {
+  font-size: 0.48rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+  border-radius: 3px;
+  padding: 1px 3px;
+  flex-shrink: 0;
+}
+
+/* Mic dot — inside name bar */
 .conv-participant-mic-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: #e5e7eb;
+  background: rgba(255,255,255,0.3);
   flex-shrink: 0;
   transition: background 0.2s;
 }
@@ -821,86 +880,24 @@ footer p {
   animation: mic-pulse-dot 1.2s ease-in-out infinite;
 }
 .conv-participant-mic-dot.pulsing {
-  background: #d97706;
+  background: #f59e0b;
   animation: mic-pulse-dot 0.8s ease-in-out infinite;
 }
 @keyframes mic-pulse-dot {
   0%,100% { transform: scale(1);   opacity: 1; }
-  50%      { transform: scale(1.5); opacity: 0.7; }
+  50%      { transform: scale(1.6); opacity: 0.7; }
 }
 
-/* Camera status dot on chip */
+/* Camera dot — right side of name bar */
 .conv-participant-cam-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 3px;   /* square-ish to visually differ from the round mic dot */
-  background: #e5e7eb;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.3);
   flex-shrink: 0;
   transition: background 0.2s;
 }
-.conv-participant-cam-dot.on {
-  background: #10b981;
-  animation: mic-pulse-dot 1.2s ease-in-out infinite;
-}
-
-/* Remote video grid */
-.conv-video-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.5rem 0;
-}
-.conv-video-grid:empty { display: none; }
-
-.conv-remote-tile {
-  position: relative;
-  width: 130px;
-  height: 98px;
-  border-radius: 10px;
-  overflow: hidden;
-  background: #111827;
-  flex-shrink: 0;
-  border: 2px solid #6366f1; /* overridden inline per participant */
-}
-.conv-remote-tile video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.conv-remote-tile-name {
-  position: absolute;
-  bottom: 4px;
-  left: 0;
-  right: 0;
-  text-align: center;
-  font-size: 0.62rem;
-  font-weight: 700;
-  color: #fff;
-  background: rgba(0,0,0,0.55);
-  padding: 1px 5px;
-  border-radius: 3px;
-  max-width: calc(100% - 12px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Camera preview panel */
-.conv-cam-preview {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0.5rem 0;
-  border-top: 1px solid #e5e7eb;
-}
-.conv-cam-preview video {
-  width: 140px;
-  height: 105px;
-  border-radius: 10px;
-  object-fit: cover;
-  background: #111827;
-  border: 2px solid rgba(99,102,241,0.4);
-  transform: scaleX(-1);  /* mirror for natural selfie orientation */
-}
+.conv-participant-cam-dot.on { background: #10b981; }
 
 /* Messages */
 .conv-messages {
@@ -1019,19 +1016,20 @@ footer p {
 /* Live caption overlay on remote video tile */
 .conv-remote-caption {
   position: absolute;
-  bottom: 26px;
+  bottom: 22px; /* sits just above the 20px name bar */
   left: 0;
   right: 0;
   text-align: center;
-  font-size: 0.68rem;
+  font-size: 0.6rem;
   color: #fff;
-  background: rgba(0,0,0,0.6);
-  padding: 3px 6px;
-  line-height: 1.4;
+  background: rgba(0,0,0,0.65);
+  padding: 2px 4px;
+  line-height: 1.35;
   white-space: normal;
   word-break: break-word;
   min-height: 0;
   transition: opacity 0.3s;
+  z-index: 3;
 }
 .conv-remote-caption:empty { display: none; }
 .conv-remote-caption.final { opacity: 1; }

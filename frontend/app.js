@@ -622,14 +622,13 @@ const convRoomInput      = document.getElementById("convRoomInput");
 const convRoomCode       = document.getElementById("convRoomCode");
 const convCopyCodeBtn    = document.getElementById("convCopyCodeBtn");
 const convLeaveBtn       = document.getElementById("convLeaveBtn");
-const convParticipantsBar = document.getElementById("convParticipantsBar");
+// convParticipantsBar removed — replaced by carousel
 const convMessages       = document.getElementById("convMessages");
 const convMicBtn         = document.getElementById("convMicBtn");
 const convMicLabel       = document.getElementById("convMicLabel");
 const convCamBtn         = document.getElementById("convCamBtn");
 const convCamLabel       = document.getElementById("convCamLabel");
-const convCamPreview     = document.getElementById("convCamPreview");
-const convCamVideo       = document.getElementById("convCamVideo");
+// convCamPreview / convCamVideo removed — local camera shown in own carousel card
 
 function convShowScreen(screen) {
   convSetup.style.display  = "none";
@@ -645,72 +644,148 @@ function convGetWsBase() {
   return `${proto}//${host}`;
 }
 
-// ── Participant chip rendering ─────────────────────────────────────────────
+// ── Participant carousel ───────────────────────────────────────────────────
+// Each participant gets a square card (name overlay + camera video inside).
+// Cards fill a 3-row grid; left/right arrows paginate when count exceeds one page.
+
+const _CARD_SLOT = 108;   // card width (100px) + gap (8px)
+const _CARD_ROWS = 3;
+
+let _carouselPage  = 0;
+const _carouselCards = [];   // ordered DOM elements; order = join order
+
+function _carouselCols() {
+  const vp = document.getElementById("convCarouselViewport");
+  return vp ? Math.max(2, Math.floor(vp.clientWidth / _CARD_SLOT)) : 3;
+}
+
+function _buildCard(uid, user) {
+  const isMe  = uid === convUserId;
+  const color = convColorFor(uid);
+
+  const card = document.createElement("div");
+  card.className = "conv-participant-card" + (isMe ? " me" : "");
+  card.id        = `conv-card-${uid}`;
+  card.dataset.uid = uid;
+
+  // ── Square video box ──────────────────────────────────────────
+  const box = document.createElement("div");
+  box.className = "conv-card-box";
+  box.style.borderColor = color;
+
+  // Initials placeholder (shown when camera is off)
+  const ph = document.createElement("div");
+  ph.className   = "conv-card-placeholder";
+  ph.id          = `conv-card-ph-${uid}`;
+  ph.textContent = user.name[0].toUpperCase();
+  ph.style.background = color;
+
+  // Video element (hidden until camera opens)
+  const vid = document.createElement("video");
+  vid.autoplay    = true;
+  vid.playsInline = true;
+  vid.muted       = true;
+  vid.id          = `conv-card-vid-${uid}`;
+  vid.className   = "conv-card-vid";
+  if (isMe) vid.style.transform = "scaleX(-1)"; // mirror selfie
+
+  // Live caption overlay (interim/translated text for remote peers)
+  const cap = document.createElement("div");
+  cap.className = "conv-remote-caption";
+  cap.id        = `conv-caption-${uid}`;
+
+  // Name bar overlaid at bottom of box
+  const nameBar = document.createElement("div");
+  nameBar.className = "conv-card-name-bar";
+
+  const micDot = document.createElement("div");
+  micDot.className = "conv-participant-mic-dot" + (user.mic_on ? " on" : "");
+  micDot.id = `conv-mic-dot-${uid}`;
+
+  const nameTxt = document.createElement("span");
+  nameTxt.className   = "conv-card-name-txt";
+  nameTxt.textContent = user.name + (isMe ? " (You)" : "");
+
+  const langBadge = document.createElement("span");
+  langBadge.className   = "conv-lang-badge conv-card-lang-badge";
+  langBadge.textContent = user.language.toUpperCase();
+  langBadge.style.background = color;
+
+  const camDot = document.createElement("div");
+  camDot.className = "conv-participant-cam-dot" + (user.camera_on ? " on" : "");
+  camDot.id = `conv-cam-dot-${uid}`;
+
+  nameBar.appendChild(micDot);
+  nameBar.appendChild(nameTxt);
+  nameBar.appendChild(langBadge);
+  nameBar.appendChild(camDot);
+
+  if (user.is_host) {
+    const hostBadge = document.createElement("span");
+    hostBadge.className   = "conv-host-badge conv-card-host-badge";
+    hostBadge.textContent = "Host";
+    box.appendChild(hostBadge);
+  }
+
+  box.appendChild(ph);
+  box.appendChild(vid);
+  box.appendChild(cap);
+  box.appendChild(nameBar);
+  card.appendChild(box);
+  return card;
+}
+
+function _carouselRenderPage() {
+  const track = document.getElementById("convCarouselTrack");
+  if (!track) return;
+
+  const cols      = _carouselCols();
+  const pageSize  = cols * _CARD_ROWS;
+  const total     = _carouselCards.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  _carouselPage   = Math.min(_carouselPage, totalPages - 1);
+
+  const start = _carouselPage * pageSize;
+  const end   = start + pageSize;
+
+  // Detach all, re-append only the current page's cards
+  // (video elements keep playing when detached in modern browsers)
+  while (track.firstChild) track.removeChild(track.firstChild);
+  _carouselCards.slice(start, end).forEach(c => track.appendChild(c));
+  track.style.gridTemplateColumns = `repeat(${cols}, 100px)`;
+
+  const btnL = document.getElementById("convCarouselLeft");
+  const btnR = document.getElementById("convCarouselRight");
+  if (btnL) btnL.style.visibility = _carouselPage > 0            ? "visible" : "hidden";
+  if (btnR) btnR.style.visibility = _carouselPage < totalPages-1 ? "visible" : "hidden";
+
+  lucide.createIcons({ nodes: [
+    document.getElementById("convCarouselLeft"),
+    document.getElementById("convCarouselRight"),
+  ].filter(Boolean) });
+}
+
 function convRenderParticipants() {
-  convParticipantsBar.innerHTML = "";
+  // Add cards for new participants (preserves existing DOM nodes with live video)
   Object.entries(convUsers).forEach(([uid, user]) => {
-    const isMe = uid === convUserId;
-    const color = convColorFor(uid);
-
-    const chip = document.createElement("div");
-    chip.className = "conv-participant-chip" + (isMe ? " me" : "");
-    chip.id = `conv-chip-${uid}`;
-    chip.style.borderLeftColor = color;
-
-    const avatar = document.createElement("div");
-    avatar.className = "conv-participant-avatar-sm";
-    avatar.textContent = user.name[0].toUpperCase();
-    avatar.style.background = color;
-
-    const info = document.createElement("div");
-    info.className = "conv-participant-chip-info";
-
-    const nameEl = document.createElement("div");
-    nameEl.className = "conv-participant-chip-name";
-    nameEl.textContent = user.name + (isMe ? " (You)" : "");
-
-    // Language badge (e.g. "ES", "FR")
-    const langBadge = document.createElement("span");
-    langBadge.className = "conv-lang-badge";
-    langBadge.textContent = user.language.toUpperCase();
-    langBadge.style.background = color;
-    nameEl.appendChild(langBadge);
-
-    const langEl = document.createElement("div");
-    langEl.className = "conv-participant-chip-lang";
-    langEl.textContent = LANG_NAMES[user.language] || user.language;
-
-    info.appendChild(nameEl);
-    info.appendChild(langEl);
-    chip.appendChild(avatar);
-    chip.appendChild(info);
-
-    if (user.is_host) {
-      const badge = document.createElement("span");
-      badge.className = "conv-host-badge";
-      badge.textContent = "Host";
-      chip.appendChild(badge);
+    if (!_carouselCards.find(c => c.dataset.uid === uid)) {
+      _carouselCards.push(_buildCard(uid, user));
     }
-
-    // Mic status dot (round, red when on)
-    const micEl = document.createElement("div");
-    micEl.className = "conv-participant-mic-dot" + (user.mic_on ? " on" : "");
-    micEl.id = `conv-mic-dot-${uid}`;
-    chip.appendChild(micEl);
-
-    // Camera status dot (square-ish, green when on)
-    const camEl = document.createElement("div");
-    camEl.className = "conv-participant-cam-dot" + (user.camera_on ? " on" : "");
-    camEl.id = `conv-cam-dot-${uid}`;
-    chip.appendChild(camEl);
-
-    convParticipantsBar.appendChild(chip);
   });
+
+  // Remove cards for departed participants
+  for (let i = _carouselCards.length - 1; i >= 0; i--) {
+    if (!convUsers[_carouselCards[i].dataset.uid]) {
+      _carouselCards.splice(i, 1);
+    }
+  }
+
+  _carouselRenderPage();
 }
 
 function convUpdateChipMic(userId, isOn) {
-  const chip = document.getElementById(`conv-chip-${userId}`);
-  if (chip) chip.classList.toggle("speaking", isOn);
+  const card = document.getElementById(`conv-card-${userId}`);
+  if (card) card.classList.toggle("speaking", isOn);
   const dot = document.getElementById(`conv-mic-dot-${userId}`);
   if (dot) dot.className = "conv-participant-mic-dot" + (isOn ? " on" : "");
 }
@@ -719,6 +794,20 @@ function convUpdateChipCam(userId, isOn) {
   const dot = document.getElementById(`conv-cam-dot-${userId}`);
   if (dot) dot.className = "conv-participant-cam-dot" + (isOn ? " on" : "");
 }
+
+// Re-paginate when the window resizes (column count may change)
+window.addEventListener("resize", () => _carouselRenderPage());
+
+// Arrow click handlers
+document.getElementById("convCarouselLeft")?.addEventListener("click", () => {
+  if (_carouselPage > 0) { _carouselPage--; _carouselRenderPage(); }
+});
+document.getElementById("convCarouselRight")?.addEventListener("click", () => {
+  const cols      = _carouselCols();
+  const pageSize  = cols * _CARD_ROWS;
+  const totalPages = Math.ceil(_carouselCards.length / pageSize);
+  if (_carouselPage < totalPages - 1) { _carouselPage++; _carouselRenderPage(); }
+});
 
 // ── Message rendering ──────────────────────────────────────────────────────
 function convAddMessage(msg) {
@@ -1145,8 +1234,11 @@ async function convStartCamera() {
   }
 
   convCamStream = stream;
-  convCamVideo.srcObject = stream;
-  convCamPreview.style.display = "flex";
+  // Show local stream inside the participant's own carousel card
+  const _myVid = document.getElementById(`conv-card-vid-${convUserId}`);
+  const _myPh  = document.getElementById(`conv-card-ph-${convUserId}`);
+  if (_myVid) { _myVid.srcObject = stream; _myVid.style.display = "block"; }
+  if (_myPh)  _myPh.style.display = "none";
   convCamOn = true;
   convSetCamUI(true);
   convWs?.readyState === WebSocket.OPEN &&
@@ -1159,8 +1251,11 @@ function convStopCamera() {
     convCamStream.getTracks().forEach(t => t.stop());
     convCamStream = null;
   }
-  convCamVideo.srcObject = null;
-  convCamPreview.style.display = "none";
+  // Clear local stream from carousel card
+  const _myVid = document.getElementById(`conv-card-vid-${convUserId}`);
+  const _myPh  = document.getElementById(`conv-card-ph-${convUserId}`);
+  if (_myVid) { _myVid.srcObject = null; _myVid.style.display = ""; }
+  if (_myPh)  _myPh.style.display = "";
   convCamOn = false;
   convSetCamUI(false);
   convWs?.readyState === WebSocket.OPEN &&
@@ -1202,7 +1297,11 @@ function convReset() {
   convUserId  = null;
   convIsHost  = false;
   convUsers   = {};
-  // Reset colour and typing state for next session
+  // Reset carousel, colour and typing state for next session
+  _carouselCards.length = 0;
+  _carouselPage = 0;
+  const _track = document.getElementById("convCarouselTrack");
+  if (_track) _track.innerHTML = "";
   Object.keys(_participantColors).forEach(k => delete _participantColors[k]);
   _paletteIndex = 0;
   Object.keys(_typingUsers).forEach(k => { clearTimeout(_typingUsers[k].timerId); delete _typingUsers[k]; });
@@ -1419,7 +1518,7 @@ const WEBRTC_ICE = [
   { urls: "stun:stun1.l.google.com:19302" },
 ];
 
-const convVideoGrid = document.getElementById("convVideoGrid");
+// convVideoGrid removed — remote video shown inside carousel cards
 
 let rtcPeers        = {};   // userId → RTCPeerConnection
 let rtcAudioTrack   = null; // local mic audio track (for WebRTC)
@@ -1532,45 +1631,17 @@ async function rtcHandleIce(fromId, candidate) {
 }
 
 function rtcShowRemoteVideo(userId, track) {
-  let tile = document.getElementById(`conv-remote-${userId}`);
-  if (tile) {
-    const vid = tile.querySelector("video");
-    if (!vid.srcObject) {
-      vid.srcObject = new MediaStream([track]);
-      vid.play().catch(() => {});
-    } else if (!vid.srcObject.getVideoTracks().length) {
-      vid.srcObject.addTrack(track);
-    }
-    return;
+  // Remote video goes directly into the participant's carousel card video box
+  const vid = document.getElementById(`conv-card-vid-${userId}`);
+  const ph  = document.getElementById(`conv-card-ph-${userId}`);
+  if (!vid) return;
+  if (!vid.srcObject) {
+    vid.srcObject = new MediaStream([track]);
+  } else if (!vid.srcObject.getVideoTracks().length) {
+    vid.srcObject.addTrack(track);
   }
-
-  const color = convColorFor(userId);
-
-  tile = document.createElement("div");
-  tile.className = "conv-remote-tile";
-  tile.id = `conv-remote-${userId}`;
-  tile.style.borderColor = color;
-
-  const vid = document.createElement("video");
-  vid.autoplay    = true;
-  vid.playsInline = true;
-  vid.muted       = true;   // muted = guaranteed autoplay; audio handled separately
-  vid.srcObject   = new MediaStream([track]);
-
-  const label = document.createElement("div");
-  label.className = "conv-remote-tile-name";
-  label.textContent = convUsers[userId]?.name || "Participant";
-  label.style.background = color;
-
-  // Live caption overlay
-  const caption = document.createElement("div");
-  caption.className = "conv-remote-caption";
-  caption.id = `conv-caption-${userId}`;
-
-  tile.appendChild(vid);
-  tile.appendChild(caption);
-  tile.appendChild(label);
-  convVideoGrid.appendChild(tile);
+  vid.style.display = "block";
+  if (ph) ph.style.display = "none";
   vid.play().catch(() => {});
 }
 
@@ -1597,7 +1668,10 @@ function rtcPlayRemoteAudio(userId, track) {
 }
 
 function rtcRemoveRemote(userId) {
-  document.getElementById(`conv-remote-${userId}`)?.remove();
+  const vid = document.getElementById(`conv-card-vid-${userId}`);
+  const ph  = document.getElementById(`conv-card-ph-${userId}`);
+  if (vid) { vid.srcObject = null; vid.style.display = ""; }
+  if (ph)  ph.style.display = "";
   rtcAudioSources[userId]?.disconnect();
   delete rtcAudioSources[userId];
 }
@@ -1680,5 +1754,4 @@ function webrtcCloseAll() {
   rtcAudioTrack = null;
   rtcVideoTrack = null;
   rtcAudioSources = {};
-  convVideoGrid.innerHTML = "";
 }
