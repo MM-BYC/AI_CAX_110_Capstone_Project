@@ -1,8 +1,22 @@
 """Quality Review Agent — checks translation accuracy and flags hallucinations."""
 import os
+import logging
 from groq import Groq
 
-_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+logger = logging.getLogger(__name__)
+
+_client = None
+
+
+def _get_client():
+    global _client
+    if _client is None:
+        api_key = os.environ.get("GROQ_API_KEY")
+        if not api_key:
+            raise RuntimeError("GROQ_API_KEY environment variable is not set")
+        _client = Groq(api_key=api_key)
+    return _client
+
 
 LANG_NAMES = {
     "en": "English", "es": "Spanish", "fr": "French", "de": "German",
@@ -28,7 +42,7 @@ def run(original: str, translation: str, source: str, target: str) -> dict:
         f"FAIL: <brief critique of what is wrong>"
     )
 
-    response = _client.chat.completions.create(
+    response = _get_client().chat.completions.create(
         model=os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
         messages=[{"role": "user", "content": prompt}],
     )

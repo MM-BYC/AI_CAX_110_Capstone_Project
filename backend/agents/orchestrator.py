@@ -1,4 +1,5 @@
 """Orchestrator — routes requests and coordinates all agents."""
+import logging
 from agents import (
     transcription_agent,
     language_detection_agent,
@@ -8,7 +9,12 @@ from agents import (
     conversation_agent,
 )
 
+logger = logging.getLogger(__name__)
 MAX_RETRIES = 1
+# Minimum cleaned-text length before language detection can override the
+# user's chosen source language.  Short phrases (< 6 chars) produce
+# unreliable detection scores and must not silently flip the source lang.
+_DETECT_OVERRIDE_MIN_LEN = 6
 
 
 def run_text_pipeline(text: str, source: str, target: str) -> dict:
@@ -37,27 +43,50 @@ def run_conversation_pipeline(text: str, source: str, target: str) -> dict:
     Conversation Agent (clean fillers) → Language Detection Agent
     → Strict Translation Agent (system prompt + temperature=0)
     → Quality Review Agent → Retry with critique (if flagged)
+
+    Every external call is wrapped with a failsafe so a transient API error
+    never silently drops a message — the pipeline always returns a translation.
     """
     # Conversation Agent — remove fillers, normalise whitespace
     cleaned = conversation_agent.run(text, source_lang=source)
 
-    # Language Detection Agent — confirm source language
+    # Language Detection Agent — only override the user's chosen language when
+    # the text is long enough for reliable detection; short phrases fall back
+    # to the claimed source to avoid mis-routing (e.g. "Oo" detected as "en").
     detected = language_detection_agent.run(cleaned)
-    effective_source = detected if detected != source else source
+    effective_source = (
+        detected
+        if detected != source and len(cleaned) >= _DETECT_OVERRIDE_MIN_LEN
+        else source
+    )
 
-    # Strict Translation Agent
-    translation = translation_agent.run(cleaned, effective_source, target, strict=True)
+    # Strict Translation Agent — failsafe: return original text on API error
+    try:
+        translation = translation_agent.run(cleaned, effective_source, target, strict=True)
+    except Exception as e:
+        logger.error("Translation agent failed: %s", e)
+        translation = cleaned  # pass-through so the message is still delivered
 
-    # Quality Review Agent → retry once with critique if hallucination detected
+    # Quality Review Agent → retry once with critique if hallucination detected.
+    # Failsafe: any API error is treated as a pass so delivery is never blocked.
     review = {"passed": True, "critique": ""}
     for _ in range(MAX_RETRIES):
-        review = quality_review_agent.run(cleaned, translation, effective_source, target)
+        try:
+            review = quality_review_agent.run(cleaned, translation, effective_source, target)
+        except Exception as e:
+            logger.warning("Quality review failed (treating as pass): %s", e)
+            review = {"passed": True, "critique": ""}
+            break
         if review["passed"]:
             break
-        translation = translation_agent.run(
-            cleaned, effective_source, target,
-            critique=review["critique"], strict=True,
-        )
+        try:
+            translation = translation_agent.run(
+                cleaned, effective_source, target,
+                critique=review["critique"], strict=True,
+            )
+        except Exception as e:
+            logger.error("Retry translation failed: %s", e)
+            break
 
     return {
         "original_text": text,

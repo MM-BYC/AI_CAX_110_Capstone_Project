@@ -634,30 +634,42 @@ if (window.speechSynthesis) {
 // has been "activated" by at least one call inside a user gesture.
 function _unlockTts() {
   if (!window.speechSynthesis || _ttsUnlocked) return;
-  _ttsUnlocked = true;
-  const primer = new SpeechSynthesisUtterance(" ");
-  primer.volume = 0;
-  primer.rate   = 16;
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(primer);
+  // Fire a barely-audible primer utterance inside this user-gesture call so
+  // Chrome registers the page as speech-synthesis-activated.  Subsequent
+  // calls from WebSocket handlers are then allowed by the browser.
+  try {
+    const primer = new SpeechSynthesisUtterance(" ");
+    primer.volume = 0.01; // non-zero: some Chrome builds require audible output
+    primer.rate   = 16;   // completes in milliseconds
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(primer);
+    _ttsUnlocked = true;
+  } catch (e) {
+    console.warn("[TTS] unlock failed:", e);
+  }
 }
 
 function convSpeak(text, langCode) {
   if (!_ttsEnabled || !window.speechSynthesis || !text.trim()) return;
-  // Chrome can get stuck in paused state after tab switches — always resume first
-  if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+  const ss = window.speechSynthesis;
+  // Always resume — Chrome can silently enter a stuck state that is NOT
+  // reflected by ss.paused (happens after tab-switch or long idle periods).
+  try { ss.resume(); } catch (_) {}
+  // Cancel any queued-but-not-yet-spoken utterances so the listener always
+  // hears the *latest* translation rather than a stale backlog.
+  if (ss.pending) ss.cancel();
   const locale = LANG_LOCALES[langCode] || langCode;
   const utt    = new SpeechSynthesisUtterance(text.trim());
   utt.lang     = locale;
   utt.rate     = 1.0;
   utt.pitch    = 1.0;
-  const voices = _ttsVoices.length ? _ttsVoices : window.speechSynthesis.getVoices();
+  const voices = _ttsVoices.length ? _ttsVoices : ss.getVoices();
   const prefix = langCode.split("-")[0];
   utt.voice    = voices.find(v => v.lang === locale)
               || voices.find(v => v.lang.startsWith(langCode))
               || voices.find(v => v.lang.startsWith(prefix))
               || null;
-  try { window.speechSynthesis.speak(utt); }
+  try { ss.speak(utt); }
   catch (e) { console.warn("[TTS] speak failed:", e); }
 }
 
