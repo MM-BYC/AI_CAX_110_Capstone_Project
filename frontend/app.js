@@ -586,11 +586,12 @@ let convRoomId       = null;
 let convUserId       = null;   // this session's user_id assigned by server
 let convIsHost       = false;
 let convUsers        = {};     // user_id → {name, language, is_host, mic_on, camera_on}
-let convIsListening  = false;
-let convRecognition  = null;
-let convXlateTimer   = null;
-let convFinalText    = "";
-let convInterimTimer = null;
+let convIsListening         = false;
+let convRecognition         = null;
+let convXlateTimer          = null;
+let convFinalText           = "";
+let convInterimTimer        = null;
+let _recognitionRestartCount = 0;
 let convCamStream    = null;
 let convCamOn        = false;
 let _convReconnectAttempts = 0;
@@ -1152,12 +1153,14 @@ async function convStartListening() {
   if (!myInfo) return;
 
   convFinalText = "";
+  _recognitionRestartCount = 0;
   convRecognition = new SpeechRecognition();
   convRecognition.continuous     = true;
   convRecognition.interimResults = true;
   convRecognition.lang           = LANG_LOCALES[myInfo.language] || "en-US";
 
   convRecognition.onresult = e => {
+    _recognitionRestartCount = 0; // successful audio — reset the drop counter
     let interim = "";
     for (let i = e.resultIndex; i < e.results.length; i++) {
       if (e.results[i].isFinal) {
@@ -1182,18 +1185,29 @@ async function convStartListening() {
     }
   };
 
-  convRecognition.onend = () => { if (convIsListening) convRecognition.start(); };
+  convRecognition.onend = () => {
+    if (!convIsListening) return;
+    // Guard against a tight spin-loop (e.g. iOS backgrounding the recognizer,
+    // a persistent audio-capture failure, or network drops). If the recognizer
+    // fires onend 5 times in a row without any successful onresult in between,
+    // stop and surface a clear message rather than spinning silently forever.
+    if (_recognitionRestartCount >= 5) {
+      convStopListening();
+      alert("Microphone dropped repeatedly — tap the mic button to try again.");
+      return;
+    }
+    _recognitionRestartCount++;
+    convRecognition.start();
+  };
 
   convRecognition.onerror = e => {
-    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+    if (e.error === "not-allowed") {
       convStopListening();
       const safariNote = _isSafari
         ? "Safari limitation detected:\n" +
           "  Safari allows only ONE tab to use the mic at a time.\n" +
           "  If another tab in this Safari window is using the mic,\n" +
           "  that tab blocks all others.\n\n" +
-          "  ► To test multi-participant locally, use Chrome or Firefox\n" +
-          "    where multiple tabs can each use the mic simultaneously.\n" +
           "  ► In production (different devices / phones), this is not an issue.\n\n"
         : "";
       alert(
@@ -1206,7 +1220,22 @@ async function convStartListening() {
         "  Click the lock icon in the address bar\n" +
         "  → Site Settings → Microphone → Allow → reload the page."
       );
+    } else if (e.error === "service-not-allowed") {
+      // The browser's speech-recognition service rejected the request.
+      // On Safari this means Apple's STT servers are unreachable or the site
+      // is not allowed to use the service — not a mic-permission problem.
+      convStopListening();
+      alert(
+        "Speech recognition service unavailable.\n\n" +
+        (_isSafari
+          ? "Safari routes speech recognition through Apple's servers.\n" +
+            "Check your internet connection and try again.\n\n" +
+            "If the problem persists, try Chrome or Firefox instead."
+          : "Check your internet connection and try again.")
+      );
     }
+    // All other errors (aborted, network, no-speech, audio-capture) are
+    // transient. onend fires after onerror and will restart automatically.
   };
 
   convRecognition.start();
