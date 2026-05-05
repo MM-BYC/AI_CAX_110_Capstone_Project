@@ -232,6 +232,14 @@
               <button class="btn btn-secondary" id="convLeaveBtn">Leave Room</button>
             </div>
 
+            <!-- Video grid: local tile always present, remote tiles added dynamically -->
+            <div id="convVideoGrid" class="conv-video-grid">
+              <div class="conv-video-tile" id="convLocalTile">
+                <video id="convLocalVideo" autoplay muted playsinline></video>
+                <span class="conv-video-label">You</span>
+              </div>
+            </div>
+
             <div class="conv-body">
               <!-- Sidebar: participant list -->
               <div class="conv-sidebar">
@@ -239,19 +247,33 @@
                 <ul id="convParticipants" class="conv-participant-list"></ul>
               </div>
 
-              <!-- Main area: mic + translation feed -->
+              <!-- Main area: mic + camera controls + translation feed -->
               <div class="conv-main">
                 <div class="conv-mic-area">
-                  <button class="conv-mic-btn" id="convMicBtn" title="Click to speak / click to send">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                      stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                      <line x1="12" y1="19" x2="12" y2="23"/>
-                      <line x1="8"  y1="23" x2="16" y2="23"/>
-                    </svg>
-                  </button>
-                  <span class="conv-mic-status" id="convMicStatus">Click to speak</span>
+                  <div class="conv-controls-row">
+                    <div class="conv-control-col">
+                      <button class="conv-mic-btn" id="convMicBtn" title="Click to speak / click to send">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                          stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                          <line x1="12" y1="19" x2="12" y2="23"/>
+                          <line x1="8"  y1="23" x2="16" y2="23"/>
+                        </svg>
+                      </button>
+                      <span class="conv-mic-status" id="convMicStatus">Click to speak</span>
+                    </div>
+                    <div class="conv-control-col">
+                      <button class="conv-cam-btn" id="convCamBtn" title="Toggle camera">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                          stroke-linecap="round" stroke-linejoin="round">
+                          <polygon points="23 7 16 12 23 17 23 7"/>
+                          <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                        </svg>
+                      </button>
+                      <span class="conv-cam-status" id="convCamStatus">Camera on</span>
+                    </div>
+                  </div>
                 </div>
 
                 <div class="conv-feed-area">

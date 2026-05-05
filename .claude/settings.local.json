@@ -10,7 +10,8 @@
       "Bash(ls /Users/mm/AI_CAX_110_Capstone_Project/.venv/bin/python*)",
       "Bash(python3 -c \"import sys; print\\(sys.executable\\)\")",
       "Read(//opt/pkg/env/active/**)",
-      "Bash(/opt/pkg/env/active/bin/python3 --version)"
+      "Bash(/opt/pkg/env/active/bin/python3 --version)",
+      "Bash(git log *)"
     ]
   }
 }

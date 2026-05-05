@@ -14,7 +14,10 @@
 // that knows about the others.
 // ──────────────────────────────────────────────────────────────────────────────
 
-const _CONV_WS_URL = "ws://127.0.0.1:8000/ws/room";
+// Derive WebSocket URL from the page's own origin so any device on the same
+// network (hotspot, LAN) reaches the right host without hard-coding 127.0.0.1.
+const _wsProto = window.location.protocol === "https:" ? "wss" : "ws";
+const _CONV_WS_URL = `${_wsProto}://${window.location.hostname}:8000/ws/room`;
 
 const _LANG_BCP47 = {
   en: "en-US", es: "es-ES", fr: "fr-FR", de: "de-DE",
@@ -80,6 +83,19 @@ class MicController {
 
   async start() {
     if (this.active) return;
+    // Safari on iOS blocks getUserMedia on plain HTTP (non-localhost) origins.
+    // Detect this early and surface a clear message instead of iOS's cryptic
+    // "Speech recognition service unavailable" dialog.
+    if (!navigator.mediaDevices?.getUserMedia) {
+      const needsHttps = window.location.protocol !== "https:" &&
+                         window.location.hostname !== "localhost" &&
+                         window.location.hostname !== "127.0.0.1";
+      throw new Error(
+        needsHttps
+          ? "Microphone requires HTTPS on iPhone/iPad. Run make-certs.sh then restart both servers with SSL."
+          : "Microphone access is not available in this browser."
+      );
+    }
     this._stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     this._chunks = [];
     const opts = { mimeType: MicController._bestMimeType() };
@@ -184,6 +200,178 @@ class AudioTTS {
   }
 }
 
+// ── VideoCallManager ──────────────────────────────────────────────────────────
+// Manages one RTCPeerConnection per remote participant (full-mesh, video only).
+// Audio translation is handled entirely by the existing WebSocket pipeline —
+// this class never touches audio tracks.
+//
+// Black-screen guarantee:
+//   Local video tracks are added to each PeerConnection BEFORE createOffer()
+//   is called (WebRTC spec requires this ordering for video to flow).
+//   Remote video is attached via the ontrack event, never beforehand.
+//
+// Polite/impolite negotiation (RFC 8829 §4.1.1):
+//   The peer whose UUID sorts higher is "impolite" and always initiates.
+//   This ensures exactly one side sends the offer per pair, eliminating glare.
+class VideoCallManager {
+  constructor(sendFn, localId) {
+    this._send = sendFn;
+    this._localId = localId;
+    this._localStream = null;    // video-only stream from getUserMedia
+    this._peers = {};            // remoteId → { pc, tile, video }
+    this._gridEl = document.getElementById("convVideoGrid");
+    this._localVideoEl = document.getElementById("convLocalVideo");
+    this._cameraEnabled = true;
+  }
+
+  // Start local camera. Called once when entering the room.
+  async start() {
+    try {
+      this._localStream = await navigator.mediaDevices.getUserMedia(
+        { video: true, audio: false }
+      );
+      this._localVideoEl.srcObject = this._localStream;
+      this._cameraEnabled = true;
+    } catch (_) {
+      // Camera denied — video simply won't be sent. Audio pipeline unaffected.
+      this._localStream = null;
+      this._cameraEnabled = false;
+    }
+  }
+
+  // Toggle camera on/off without closing peer connections.
+  // Returns the new enabled state.
+  toggleCamera() {
+    if (!this._localStream) return false;
+    const track = this._localStream.getVideoTracks()[0];
+    if (!track) return false;
+    this._cameraEnabled = !track.enabled;
+    track.enabled = this._cameraEnabled;
+    return this._cameraEnabled;
+  }
+
+  // Create a peer connection to a remote participant and send an offer if
+  // we are the impolite peer (higher UUID). Called for every participant
+  // already in the room (from `joined`) and for each new joiner.
+  async connectToParticipant(remoteId, remoteName) {
+    if (this._peers[remoteId]) return;
+    const pc = this._createPeerConnection(remoteId, remoteName);
+    if (this._localId > remoteId) {
+      // We are impolite: initiate. Tracks are already added inside
+      // _createPeerConnection so the SDP will contain our video.
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      this._send({ type: "webrtc_offer", to_id: remoteId, sdp: pc.localDescription });
+    }
+    // Polite peer just waits; the offer will arrive as a webrtc_offer message.
+  }
+
+  // Route incoming WebRTC signaling messages from the server relay.
+  async onSignal(msg) {
+    const remoteId = msg.from_id;
+    switch (msg.type) {
+      case "webrtc_offer": {
+        if (!this._peers[remoteId]) this._createPeerConnection(remoteId, "");
+        const { pc } = this._peers[remoteId];
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        this._send({ type: "webrtc_answer", to_id: remoteId, sdp: pc.localDescription });
+        break;
+      }
+      case "webrtc_answer": {
+        const peer = this._peers[remoteId];
+        if (peer) await peer.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        break;
+      }
+      case "webrtc_ice": {
+        const peer = this._peers[remoteId];
+        if (peer && msg.candidate) {
+          try { await peer.pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); }
+          catch (_) {}
+        }
+        break;
+      }
+    }
+  }
+
+  // Close and remove a specific peer's connection and video tile.
+  disconnectParticipant(remoteId) {
+    const peer = this._peers[remoteId];
+    if (!peer) return;
+    peer.pc.close();
+    peer.tile.remove();
+    delete this._peers[remoteId];
+  }
+
+  // Stop everything: close all peers, stop local camera.
+  stopAll() {
+    Object.keys(this._peers).forEach((id) => this.disconnectParticipant(id));
+    if (this._localStream) {
+      this._localStream.getTracks().forEach((t) => t.stop());
+      this._localStream = null;
+    }
+    this._localVideoEl.srcObject = null;
+  }
+
+  _createPeerConnection(remoteId, remoteName) {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+
+    // ★ Critical: add local tracks BEFORE createOffer() so they appear in SDP.
+    if (this._localStream) {
+      this._localStream.getTracks().forEach((t) =>
+        pc.addTrack(t, this._localStream)
+      );
+    }
+
+    // Build the remote video tile.
+    const tile = document.createElement("div");
+    tile.className = "conv-video-tile";
+    tile.dataset.pid = remoteId;
+
+    const video = document.createElement("video");
+    video.autoplay = true;
+    video.playsInline = true;
+
+    const label = document.createElement("span");
+    label.className = "conv-video-label";
+    label.textContent = remoteName || "Participant";
+
+    tile.appendChild(video);
+    tile.appendChild(label);
+    this._gridEl.appendChild(tile);
+
+    this._peers[remoteId] = { pc, tile, video };
+
+    // ★ Attach remote stream via ontrack — never before it fires.
+    pc.ontrack = (e) => { video.srcObject = e.streams[0]; };
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        this._send({
+          type: "webrtc_ice",
+          to_id: remoteId,
+          candidate: e.candidate.toJSON(),
+        });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "failed") this.disconnectParticipant(remoteId);
+    };
+
+    return pc;
+  }
+
+  // Update the label on a remote tile (e.g. after we learn their name).
+  updateLabel(remoteId, name) {
+    const peer = this._peers[remoteId];
+    if (peer) peer.tile.querySelector(".conv-video-label").textContent = name;
+  }
+}
+
 // ── ConversationTab ───────────────────────────────────────────────────────────
 // Orchestrator. Owns all state and wires the modules together.
 // One instance per app session (lazy-initialized on first tab activation).
@@ -205,6 +393,12 @@ class ConversationTab {
     // sessionStorage is per browser-tab, so two tabs = two different IDs.
     this._participantId = this._getOrCreateSessionId();
     this._roomCode = null;
+    this._participants = {}; // id → {id, name, lang, is_host}
+
+    this._video = new VideoCallManager(
+      (msg) => this._ws.send(msg),
+      this._participantId,
+    );
 
     // DOM refs
     this._nameInput = $("convName");
@@ -213,6 +407,8 @@ class ConversationTab {
     this._codeDisplay = $("convCodeDisplay");
     this._micBtn = $("convMicBtn");
     this._micStatus = $("convMicStatus");
+    this._camBtn = $("convCamBtn");
+    this._camStatus = $("convCamStatus");
     this._errEl = $("convSetupError");
 
     // Wire buttons
@@ -220,6 +416,7 @@ class ConversationTab {
     $("convJoinBtn").addEventListener("click", () => this._joinRoom());
     $("convLeaveBtn").addEventListener("click", () => this._leaveRoom());
     this._micBtn.addEventListener("click", () => this._toggleMic());
+    this._camBtn.addEventListener("click", () => this._toggleCamera());
   }
 
   // ── Session identity ──────────────────────────────────────────────────────
@@ -263,9 +460,11 @@ class ConversationTab {
 
   _leaveRoom() {
     this._mic.stop();
+    this._video.stopAll();
     this._ws.send({ type: "leave_room" });
     this._ws.close();
     this._roomCode = null;
+    this._participants = {};
     this._feed.clear();
     this._pList.setAll([]);
     this._showSetupPanel();
@@ -294,10 +493,17 @@ class ConversationTab {
         await this._mic.start();
         this._micBtn.classList.add("conv-mic--active");
         this._micStatus.textContent = "Recording… click to send";
-      } catch (_) {
-        this._setError("Mic access denied. Check browser permissions.");
+      } catch (e) {
+        this._setError(e.message || "Mic access denied. Check browser permissions.");
       }
     }
+  }
+
+  // ── Camera toggle ─────────────────────────────────────────────────────────
+  _toggleCamera() {
+    const on = this._video.toggleCamera();
+    this._camBtn.classList.toggle("conv-cam--off", !on);
+    this._camStatus.textContent = on ? "Camera on" : "Camera off";
   }
 
   // ── Audio delivery ────────────────────────────────────────────────────────
@@ -315,12 +521,25 @@ class ConversationTab {
   _onMessage(msg) {
     switch (msg.type) {
       case "room_created":
-      case "joined":
+      case "joined": {
         this._roomCode = msg.code;
         this._codeDisplay.textContent = msg.code;
+        this._participants = {};
+        msg.participants.forEach((p) => { this._participants[p.id] = p; });
         this._pList.setAll(msg.participants);
         this._showRoomPanel();
+
+        // Start camera then connect to every participant already in the room.
+        this._video.start().then(() => {
+          const others = msg.participants.filter(
+            (p) => p.id !== this._participantId
+          );
+          return Promise.all(
+            others.map((p) => this._video.connectToParticipant(p.id, p.name))
+          );
+        }).catch(() => {});
         break;
+      }
 
       case "join_error":
         this._setError(msg.message);
@@ -328,17 +547,32 @@ class ConversationTab {
         break;
 
       case "participant_joined":
+        this._participants[msg.id] = msg;
         this._pList.add(msg);
+        this._video.connectToParticipant(msg.id, msg.name).catch(() => {});
         break;
 
       case "participant_left":
+        delete this._participants[msg.id];
         this._pList.remove(msg.id);
+        this._video.disconnectParticipant(msg.id);
         break;
 
       case "speaker_translation":
         this._feed.push(msg.speaker_name, msg.original, msg.translation);
         this._tts.speak(msg.translation, msg.target_lang);
         break;
+
+      case "webrtc_offer":
+      case "webrtc_answer":
+      case "webrtc_ice": {
+        // Fill in label if we know this peer's name.
+        const name = this._participants[msg.from_id]?.name;
+        this._video.onSignal(msg).then(() => {
+          if (name) this._video.updateLabel(msg.from_id, name);
+        }).catch(() => {});
+        break;
+      }
 
       case "error":
         this._setError(msg.message);

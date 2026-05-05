@@ -193,6 +193,16 @@ async def room_websocket(ws: WebSocket):
                         )
                         await orchestrator.process(audio_bytes)
 
+            # ── WebRTC signaling relay ───────────────────────────────────────
+            # Server is a pure relay: it stamps from_id and forwards to target.
+            elif msg_type in ("webrtc_offer", "webrtc_answer", "webrtc_ice"):
+                to_id = msg.get("to_id")
+                if current_room_code and current_participant_id and to_id:
+                    await room_manager.send_to(current_room_code, to_id, {
+                        **msg,
+                        "from_id": current_participant_id,
+                    })
+
             # ── Leave room ───────────────────────────────────────────────────
             elif msg_type == "leave_room":
                 if current_room_code and current_participant_id:

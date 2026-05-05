@@ -1,4 +1,7 @@
-const API_BASE = "http://127.0.0.1:8000";
+// Use the same host the page was loaded from so the app works from any device
+// (localhost, LAN IP via hotspot, etc.) without hard-coding 127.0.0.1.
+const _proto = window.location.protocol === "https:" ? "https" : "http";
+const API_BASE = `${_proto}://${window.location.hostname}:8000`;
 
 document.getElementById("copyright").textContent = `© ${new Date().getFullYear()} AI-Translate. All rights reserved.`;
 

@@ -690,6 +690,51 @@ textarea::placeholder {
   gap: 1rem;
 }
 
+/* Video grid */
+.conv-video-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  background: rgba(10, 12, 24, 0.72);
+  border-radius: 12px;
+  padding: 0.75rem;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.conv-video-tile {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0a0c18;
+  flex: 1 1 180px;
+  max-width: 280px;
+  aspect-ratio: 16 / 9;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.conv-video-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.conv-video-label {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  background: rgba(0, 0, 0, 0.65);
+  padding: 2px 7px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
 /* Mic area */
 .conv-mic-area {
   background: rgba(10, 12, 24, 0.72);
@@ -702,6 +747,55 @@ textarea::placeholder {
   flex-direction: column;
   align-items: center;
   gap: 0.75rem;
+}
+
+.conv-controls-row {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.conv-control-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Camera button — mirrors mic button styles */
+.conv-cam-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid rgba(99, 102, 241, 0.45);
+  background: rgba(10, 12, 24, 0.8);
+  color: #4ade80;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.conv-cam-btn:hover {
+  border-color: #6366f1;
+  color: #e2e8f0;
+}
+
+.conv-cam-btn.conv-cam--off {
+  color: #64748b;
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+.conv-cam-btn svg {
+  width: 26px;
+  height: 26px;
+}
+
+.conv-cam-status {
+  font-size: 0.82rem;
+  color: #64748b;
 }
 
 .conv-mic-btn {
