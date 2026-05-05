@@ -1,13 +1,19 @@
 import os
+import json
+import base64
 import asyncio
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile
+from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from lingua import Language, LanguageDetectorBuilder
+
 from agent import translation_agent
+from room_manager import room_manager, Participant
+from speaker_orchestrator import SpeakerOrchestrator
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -25,6 +31,7 @@ _executor = ThreadPoolExecutor(max_workers=4)
 async def lifespan(app):
     yield  # detector already loaded above
     _executor.shutdown(wait=False)
+
 
 app = FastAPI(title="Language Translation Agent", version="1.0.0", lifespan=lifespan)
 
@@ -70,3 +77,146 @@ async def translate_audio(source: str, target: str, file: UploadFile):
         os.remove(filepath)
 
     return result
+
+
+@app.websocket("/ws/room")
+async def room_websocket(ws: WebSocket):
+    """
+    Real-time conversation room over WebSocket.
+
+    Message types (client → server, JSON):
+      create_room  {participant_id, name, lang}
+      join_room    {code, participant_id, name, lang}
+      audio_chunk  {data: base64}   ← full recording sent when mic is muted
+      leave_room   {}
+
+    Message types (server → client, JSON):
+      room_created       {code, participants}
+      joined             {code, participants, is_reconnect}
+      join_error         {message}
+      participant_joined {id, name, lang, is_host}
+      participant_left   {id, name}
+      speaker_translation {speaker_id, speaker_name, original, translation, target_lang}
+      error              {message}
+    """
+    await ws.accept()
+
+    current_room_code: str | None = None
+    current_participant_id: str | None = None
+
+    try:
+        while True:
+            data = await ws.receive_text()
+            msg = json.loads(data)
+            msg_type = msg.get("type")
+
+            # ── Create room ──────────────────────────────────────────────────
+            if msg_type == "create_room":
+                participant_id = msg["participant_id"]
+                name = msg["name"]
+                lang = msg["lang"]
+
+                code = room_manager.create_room()
+                participant = Participant(
+                    participant_id=participant_id,
+                    name=name,
+                    lang=lang,
+                    ws=ws,
+                    is_host=True,
+                )
+                room_manager.join_room(code, participant)
+                current_room_code = code
+                current_participant_id = participant_id
+
+                await ws.send_text(json.dumps({
+                    "type": "room_created",
+                    "code": code,
+                    "participants": room_manager.get_room(code).to_participant_list(),
+                }))
+
+            # ── Join room ────────────────────────────────────────────────────
+            elif msg_type == "join_room":
+                code = msg["code"]
+                participant_id = msg["participant_id"]
+                name = msg["name"]
+                lang = msg["lang"]
+
+                participant = Participant(
+                    participant_id=participant_id,
+                    name=name,
+                    lang=lang,
+                    ws=ws,
+                    is_host=False,
+                )
+                success, error, is_reconnect = room_manager.join_room(code, participant)
+
+                if not success:
+                    await ws.send_text(json.dumps({
+                        "type": "join_error",
+                        "message": error,
+                    }))
+                    continue
+
+                current_room_code = code
+                current_participant_id = participant_id
+                room = room_manager.get_room(code)
+
+                await ws.send_text(json.dumps({
+                    "type": "joined",
+                    "code": code,
+                    "participants": room.to_participant_list(),
+                    "is_reconnect": is_reconnect,
+                }))
+
+                if not is_reconnect:
+                    await room_manager.broadcast(code, {
+                        "type": "participant_joined",
+                        "id": participant_id,
+                        "name": name,
+                        "lang": lang,
+                        "is_host": False,
+                    }, exclude_id=participant_id)
+
+            # ── Audio chunk ──────────────────────────────────────────────────
+            elif msg_type == "audio_chunk":
+                if current_room_code and current_participant_id:
+                    room = room_manager.get_room(current_room_code)
+                    if room and current_participant_id in room.participants:
+                        p = room.participants[current_participant_id]
+                        audio_bytes = base64.b64decode(msg["data"])
+                        orchestrator = SpeakerOrchestrator(
+                            speaker_id=current_participant_id,
+                            speaker_name=p.name,
+                            speaker_lang=p.lang,
+                            room_code=current_room_code,
+                            room_manager=room_manager,
+                        )
+                        await orchestrator.process(audio_bytes)
+
+            # ── Leave room ───────────────────────────────────────────────────
+            elif msg_type == "leave_room":
+                if current_room_code and current_participant_id:
+                    p_name = room_manager.leave_room(
+                        current_room_code, current_participant_id
+                    )
+                    await room_manager.broadcast(current_room_code, {
+                        "type": "participant_left",
+                        "id": current_participant_id,
+                        "name": p_name,
+                    })
+                    current_room_code = None
+                    current_participant_id = None
+
+    except WebSocketDisconnect:
+        if current_room_code and current_participant_id:
+            p_name = room_manager.leave_room(current_room_code, current_participant_id)
+            await room_manager.broadcast(current_room_code, {
+                "type": "participant_left",
+                "id": current_participant_id,
+                "name": p_name,
+            })
+    except Exception as e:
+        try:
+            await ws.send_text(json.dumps({"type": "error", "message": str(e)}))
+        except Exception:
+            pass

@@ -26,8 +26,10 @@ const audioCopyBtn      = document.getElementById("audioCopyBtn");
 // Tab elements
 const tabText  = document.getElementById("tabText");
 const tabAudio = document.getElementById("tabAudio");
+const tabConv  = document.getElementById("tabConv");
 const textTab  = document.getElementById("textTab");
 const audioTab = document.getElementById("audioTab");
+const convTab  = document.getElementById("convTab");
 
 const spinner = document.getElementById("spinner");
 
@@ -73,18 +75,20 @@ dropZone.addEventListener("drop", e => {
 });
 
 // ── Tab switching ───────────────────────────────────────────────────────────
-tabText.addEventListener("click", () => {
-  tabText.classList.add("active");
-  tabAudio.classList.remove("active");
-  textTab.style.display = "block";
-  audioTab.style.display = "none";
-});
+function _activateTab(activeBtn, activePanel) {
+  [tabText, tabAudio, tabConv].forEach((b) => b.classList.remove("active"));
+  [textTab, audioTab, convTab].forEach((p) => { p.style.display = "none"; });
+  activeBtn.classList.add("active");
+  activePanel.style.display = "block";
+}
 
-tabAudio.addEventListener("click", () => {
-  tabAudio.classList.add("active");
-  tabText.classList.remove("active");
-  audioTab.style.display = "block";
-  textTab.style.display = "none";
+tabText.addEventListener("click", () => _activateTab(tabText, textTab));
+
+tabAudio.addEventListener("click", () => _activateTab(tabAudio, audioTab));
+
+tabConv.addEventListener("click", () => {
+  _activateTab(tabConv, convTab);
+  initConversationTab(); // lazy-init once (defined in conversation.js)
 });
 
 // ── Language detection helper (Text tab only) ──────────────────────────────

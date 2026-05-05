@@ -6,7 +6,11 @@
       "Bash(mdfind \"kMDItemDisplayName == ''Image 3-16-26 at 3.46 PM.png''\")",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(ls /Users/mm/AI_CAX_110_Capstone_Project/.venv/bin/python*)",
+      "Bash(python3 -c \"import sys; print\\(sys.executable\\)\")",
+      "Read(//opt/pkg/env/active/**)",
+      "Bash(/opt/pkg/env/active/bin/python3 --version)"
     ]
   }
 }

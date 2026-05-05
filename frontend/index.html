@@ -21,6 +21,7 @@
           <button class="tab-btn active" id="tabText"><span
               style="font-size:2rem;vertical-align:middle;">&#9999;&#65039;</span> Text</button>
           <button class="tab-btn" id="tabAudio"><span style="font-size:2rem;vertical-align:middle;">&#128266;</span> Audio</button>
+          <button class="tab-btn" id="tabConv"><span style="font-size:2rem;vertical-align:middle;">&#128483;</span> Conversation</button>
         </div>
 
         <!-- Text tab content -->
@@ -175,6 +176,94 @@
           </div>
         </div>
 
+        <!-- Conversation tab content -->
+        <div id="convTab" class="tab-content" style="display:none">
+
+          <!-- Setup panel: shown before joining a room -->
+          <div id="convSetup" class="conv-setup">
+            <div class="conv-setup-fields">
+              <div class="setup-field">
+                <label for="convName">Your Name</label>
+                <input type="text" id="convName" placeholder="Enter your name" autocomplete="off" />
+              </div>
+              <div class="setup-field">
+                <label for="convLang">Your Language</label>
+                <select id="convLang">
+                  <option value="en">English</option>
+                  <option value="es">Spanish</option>
+                  <option value="fr">French</option>
+                  <option value="de">German</option>
+                  <option value="it">Italian</option>
+                  <option value="pt">Portuguese</option>
+                  <option value="zh">Chinese</option>
+                  <option value="ja">Japanese</option>
+                  <option value="ko">Korean</option>
+                  <option value="ar">Arabic</option>
+                  <option value="ru">Russian</option>
+                  <option value="hi">Hindi</option>
+                  <option value="nl">Dutch</option>
+                  <option value="pl">Polish</option>
+                  <option value="tr">Turkish</option>
+                  <option value="tl">Tagalog</option>
+                </select>
+              </div>
+            </div>
+            <div class="conv-setup-actions">
+              <button class="btn btn-primary" id="convCreateBtn">Create Room</button>
+              <span class="setup-divider">— or join an existing room —</span>
+              <div class="conv-join-row">
+                <input type="text" id="convRoomCode" placeholder="6-digit code" maxlength="6"
+                  inputmode="numeric" pattern="\d{6}" autocomplete="off" />
+                <button class="btn btn-secondary" id="convJoinBtn">Join</button>
+              </div>
+            </div>
+            <p id="convSetupError" class="conv-error" style="display:none"></p>
+          </div>
+
+          <!-- Room panel: shown after joining -->
+          <div id="convRoom" style="display:none">
+
+            <!-- Header: ROOM CODE: + Leave button -->
+            <div class="conv-room-header">
+              <div class="conv-room-code">
+                <span class="room-label">ROOM CODE:</span>
+                <span class="room-code-value" id="convCodeDisplay"></span>
+              </div>
+              <button class="btn btn-secondary" id="convLeaveBtn">Leave Room</button>
+            </div>
+
+            <div class="conv-body">
+              <!-- Sidebar: participant list -->
+              <div class="conv-sidebar">
+                <h3 class="conv-section-title">Participants</h3>
+                <ul id="convParticipants" class="conv-participant-list"></ul>
+              </div>
+
+              <!-- Main area: mic + translation feed -->
+              <div class="conv-main">
+                <div class="conv-mic-area">
+                  <button class="conv-mic-btn" id="convMicBtn" title="Click to speak / click to send">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                      <line x1="12" y1="19" x2="12" y2="23"/>
+                      <line x1="8"  y1="23" x2="16" y2="23"/>
+                    </svg>
+                  </button>
+                  <span class="conv-mic-status" id="convMicStatus">Click to speak</span>
+                </div>
+
+                <div class="conv-feed-area">
+                  <h3 class="conv-section-title">Translations</h3>
+                  <div id="convFeed" class="conv-feed"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
         <!-- Spinner overlay -->
         <div id="spinner" class="spinner-overlay" style="display:none">
           <div class="spinner"></div>
@@ -187,6 +276,7 @@
       </footer>
     </div>
 
+    <script src="conversation.js"></script>
     <script src="app.js"></script>
   </body>
 
