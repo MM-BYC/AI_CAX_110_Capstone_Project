@@ -1214,7 +1214,10 @@ async function convStartListening() {
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "mic_status", is_on: true }));
   convSetMicUI(true);
-  webrtcStartAudio();
+  // Safari: SpeechRecognition already holds the mic; a simultaneous getUserMedia
+  // call for WebRTC audio would race for the same audio session and cause a
+  // not-allowed error that erroneously shows the "mic blocked" dialog.
+  if (!_isSafari) webrtcStartAudio();
 }
 
 function convStopListening() {
@@ -1223,7 +1226,7 @@ function convStopListening() {
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "mic_status", is_on: false }));
   convSetMicUI(false);
-  webrtcStopAudio();
+  if (!_isSafari) webrtcStopAudio();
 }
 
 convMicBtn.addEventListener("click", () => {
