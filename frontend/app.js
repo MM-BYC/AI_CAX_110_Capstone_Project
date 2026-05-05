@@ -1431,15 +1431,45 @@ function rtcLocalTracks() {
   return [rtcAudioTrack, rtcVideoTrack].filter(Boolean);
 }
 
-function rtcCreatePeer(userId, isOffer) {
+// Perfect Negotiation (W3C standard)
+// ─────────────────────────────────────────────────────────────────────────────
+// When both peers add tracks simultaneously both fire onnegotiationneeded and
+// send offers at the same moment ("glare"). Without handling this one side's
+// setRemoteDescription throws InvalidStateError (have-local-offer), the track
+// is silently dropped, and one direction of audio/video never connects.
+//
+// Fix: designate host as "impolite" (its offer wins) and joiner as "polite"
+// (it rolls back its own pending offer and accepts the remote one).
+// The browser re-fires onnegotiationneeded after rollback so the polite peer's
+// own tracks get negotiated in the next round-trip.
+
+function rtcCreatePeer(userId) {
   if (rtcPeers[userId]) return rtcPeers[userId];
 
   const pc = new RTCPeerConnection({ iceServers: WEBRTC_ICE });
   rtcPeers[userId] = pc;
+  pc._makingOffer = false;
 
   rtcLocalTracks().forEach(t => pc.addTrack(t));
 
-  pc.ontrack = ({ track, streams }) => {
+  // onnegotiationneeded fires automatically when tracks are added/removed —
+  // no need to call rtcNegotiate manually anywhere.
+  pc.onnegotiationneeded = async () => {
+    if (pc.signalingState !== "stable") return;
+    try {
+      pc._makingOffer = true;
+      const offer = await pc.createOffer();
+      if (pc.signalingState !== "stable") return; // re-check after async gap
+      await pc.setLocalDescription(offer);
+      convWs?.readyState === WebSocket.OPEN && convWs.send(JSON.stringify({
+        type: "webrtc_offer", target_id: userId,
+        sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+      }));
+    } catch (e) { console.error("[WebRTC] negotiate:", e); }
+    finally { pc._makingOffer = false; }
+  };
+
+  pc.ontrack = ({ track }) => {
     if (track.kind === "video") rtcShowRemoteVideo(userId, track);
     else rtcPlayRemoteAudio(userId, track);
   };
@@ -1461,25 +1491,23 @@ function rtcCreatePeer(userId, isOffer) {
     }
   };
 
-  if (isOffer) rtcNegotiate(userId, pc);
   return pc;
-}
-
-async function rtcNegotiate(userId, pc) {
-  try {
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    convWs?.readyState === WebSocket.OPEN && convWs.send(JSON.stringify({
-      type: "webrtc_offer", target_id: userId,
-      sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
-    }));
-  } catch (e) { console.error("[WebRTC] negotiate:", e); }
 }
 
 async function rtcHandleOffer(fromId, sdp) {
   let pc = rtcPeers[fromId];
-  if (!pc) pc = rtcCreatePeer(fromId, false);
+  if (!pc) pc = rtcCreatePeer(fromId);
+
+  // Polite = joiner (!convIsHost); impolite = host.
+  // Collision: we already sent an offer that hasn't been answered yet.
+  const polite    = !convIsHost;
+  const collision = pc._makingOffer || pc.signalingState !== "stable";
+
+  if (!polite && collision) return; // impolite peer drops the colliding offer
+
   try {
+    // Polite peer: setRemoteDescription auto-rolls back the pending local offer
+    // (implicit rollback — Chrome 80+, Firefox 75+, Safari 14.1+).
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
@@ -1579,16 +1607,13 @@ async function webrtcStartAudio() {
   try {
     const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     rtcAudioTrack = s.getAudioTracks()[0];
-    // Add to existing peers
     for (const [uid, pc] of Object.entries(rtcPeers)) {
       if (!pc.getSenders().some(s => s.track?.kind === "audio")) {
-        pc.addTrack(rtcAudioTrack);
-        rtcNegotiate(uid, pc);
+        pc.addTrack(rtcAudioTrack); // triggers onnegotiationneeded
       }
     }
-    // Open connections to peers not yet connected
     Object.keys(convUsers).filter(uid => uid !== convUserId && !rtcPeers[uid])
-      .forEach(uid => rtcCreatePeer(uid, true));
+      .forEach(uid => rtcCreatePeer(uid)); // onnegotiationneeded fires when track added
   } catch (e) {
     console.error("[WebRTC] audio start:", e);
     if (e.name === "NotAllowedError" && _isSafari) {
@@ -1608,9 +1633,9 @@ function webrtcStopAudio() {
   if (!rtcAudioTrack) return;
   rtcAudioTrack.stop();
   rtcAudioTrack = null;
-  for (const [uid, pc] of Object.entries(rtcPeers)) {
+  for (const pc of Object.values(rtcPeers)) {
     pc.getSenders().filter(s => s.track?.kind === "audio").forEach(s => pc.removeTrack(s));
-    rtcNegotiate(uid, pc);
+    // removeTrack triggers onnegotiationneeded automatically
   }
 }
 
@@ -1620,23 +1645,23 @@ function webrtcStartVideo(stream) {
   rtcVideoTrack = vt;
   for (const [uid, pc] of Object.entries(rtcPeers)) {
     const sender = pc.getSenders().find(s => s.track?.kind === "video");
-    if (sender) { sender.replaceTrack(vt); }
-    else { pc.addTrack(vt); rtcNegotiate(uid, pc); }
+    if (sender) { sender.replaceTrack(vt); } // replaceTrack: no renegotiation needed
+    else { pc.addTrack(vt); }                // addTrack triggers onnegotiationneeded
   }
   Object.keys(convUsers).filter(uid => uid !== convUserId && !rtcPeers[uid])
-    .forEach(uid => rtcCreatePeer(uid, true));
+    .forEach(uid => rtcCreatePeer(uid));
 }
 
 function webrtcStopVideo() {
   rtcVideoTrack = null;
-  for (const [uid, pc] of Object.entries(rtcPeers)) {
+  for (const pc of Object.values(rtcPeers)) {
     pc.getSenders().filter(s => s.track?.kind === "video").forEach(s => pc.removeTrack(s));
-    rtcNegotiate(uid, pc);
+    // removeTrack triggers onnegotiationneeded automatically
   }
 }
 
 function webrtcOnUserJoined(userId) {
-  if (rtcAudioTrack || rtcVideoTrack) rtcCreatePeer(userId, true);
+  if (rtcAudioTrack || rtcVideoTrack) rtcCreatePeer(userId);
 }
 
 function webrtcOnUserLeft(userId) {
