@@ -201,6 +201,7 @@ backend/agents/
 ```
 
 **Strict translation mode** (`strict=True`):
+
 - Adds a system-level prompt: *"NEVER add, remove, or change any information. Output ONLY the translated text."*
 - Sets `temperature=0` for deterministic output
 - Used for all conversation messages to eliminate hallucination
@@ -342,15 +343,18 @@ A sample audio file is included for testing:
 Test the real-time conversation feature using two different devices or two **Chrome/Firefox** tabs (see browser note below).
 
 **Participant A:**
+
 1. Go to the **Conversation** tab
 2. Enter a name, select a language, click **Create Room**
 3. Share the 6-character room code (or use the Invite button)
 
 **Participant B:**
+
 1. Go to the **Conversation** tab
 2. Enter a name, select a language, enter the room code, click **Join**
 
 **After joining:**
+
 - Unmute mic to speak — speech is transcribed, cleaned, translated, quality-reviewed, and delivered to every other participant in their language
 - Open camera to broadcast live video to all participants
 - Type in the keyboard bar to send text messages without speaking
@@ -376,7 +380,11 @@ Test the real-time conversation feature using two different devices or two **Chr
 | **ConversationAgent** | Strips English filler words (um, uh, like, you know…) and normalises whitespace before translation |
 | **TranslationAgent strict mode** | System-level prompt + `temperature=0` for deterministic, faithful translations |
 | **WebRTC video + audio** | Peer-to-peer live video and audio between all participants; mesh topology with Google STUN; muted `<video>` for guaranteed autoplay |
+| **WebRTC Perfect Negotiation** | W3C Perfect Negotiation pattern implemented — eliminates one-way audio/video caused by simultaneous offer collisions |
 | **Web Audio API** | Remote audio routed through `AudioContext → createMediaStreamSource` to bypass browser autoplay restrictions |
+| **TTS voice output** | Real-time translated voice plays through the browser's speech synthesis engine; each participant hears incoming translations spoken aloud in the target language |
+| **TTS unlock** | `speechSynthesis` primed from the Create/Join button gesture so subsequent WebSocket-driven utterances are never blocked by the browser's autoplay policy |
+| **Participant carousel** | Replaced floating video grid with a paginated card carousel; cards fill left-to-right in row-major order and show first + last name initials in the placeholder |
 | **Participant colour coding** | 8-colour palette assigned persistently per participant; applied to chip avatar, chip border, bubble name, bubble border, and video tile border |
 | **"Show original" toggle** | Button on every translated bubble to flip between translated and source text |
 | **Language code badge** | Short code (e.g. `ES`, `ZH`) displayed beside participant name in the chip bar |
@@ -384,7 +392,8 @@ Test the real-time conversation feature using two different devices or two **Chr
 | **Keyboard input** | Text input row in conversation tab routes through the full anti-hallucination pipeline |
 | **Invite / Share modal** | Share room link via 9 platforms: Copy, SMS, Email, WhatsApp, Teams, Messenger, Telegram, Slack, Discord |
 | **Room Code label** | "Room" renamed to "Room Code" for clarity |
-| **Safari mic error** | Detected and shown as a clear explanation with guidance to use Chrome for local multi-tab testing |
+| **Safari mic fix** | `getUserMedia` for WebRTC audio is skipped on Safari so it no longer races with `SpeechRecognition` for the audio session — eliminates the spurious "mic blocked" error when only one tab is open |
+| **Mic reliability** | `onend` restart loop now stops after 5 consecutive drops with no speech (prevents silent spin on iOS background interruptions); `service-not-allowed` errors show a distinct "speech recognition service unavailable" message instead of the mic-permissions alert |
 | **AI model** | Upgraded from `llama-3.1-8b-instant` to `llama-3.3-70b-versatile` for better multilingual accuracy |
 | **Model config** | Configurable via `GROQ_MODEL` environment variable in `.env` |
 
