@@ -619,8 +619,9 @@ function convColorFor(userId) {
 // (ConversationAgent → strict TranslationAgent temp=0 → QualityReviewAgent)
 // so TTS is just reading verified text — zero hallucination from synthesis.
 
-let _ttsEnabled = true;
-let _ttsVoices  = [];
+let _ttsEnabled  = true;
+let _ttsVoices   = [];
+let _ttsUnlocked = false;
 
 if (window.speechSynthesis) {
   const _loadVoices = () => { _ttsVoices = window.speechSynthesis.getVoices(); };
@@ -628,18 +629,36 @@ if (window.speechSynthesis) {
   window.speechSynthesis.onvoiceschanged = _loadVoices;
 }
 
+// Must be called synchronously from a click/tap handler (user-gesture context).
+// Chrome blocks speechSynthesis.speak() from async/WS callbacks until the API
+// has been "activated" by at least one call inside a user gesture.
+function _unlockTts() {
+  if (!window.speechSynthesis || _ttsUnlocked) return;
+  _ttsUnlocked = true;
+  const primer = new SpeechSynthesisUtterance(" ");
+  primer.volume = 0;
+  primer.rate   = 16;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(primer);
+}
+
 function convSpeak(text, langCode) {
   if (!_ttsEnabled || !window.speechSynthesis || !text.trim()) return;
-  const locale  = LANG_LOCALES[langCode] || langCode;
-  const utt     = new SpeechSynthesisUtterance(text.trim());
-  utt.lang      = locale;
-  utt.rate      = 1.0;
-  utt.pitch     = 1.0;
-  const voices  = _ttsVoices.length ? _ttsVoices : window.speechSynthesis.getVoices();
-  const voice   = voices.find(v => v.lang === locale) ||
-                  voices.find(v => v.lang.startsWith(langCode));
-  if (voice) utt.voice = voice;
-  window.speechSynthesis.speak(utt);
+  // Chrome can get stuck in paused state after tab switches — always resume first
+  if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+  const locale = LANG_LOCALES[langCode] || langCode;
+  const utt    = new SpeechSynthesisUtterance(text.trim());
+  utt.lang     = locale;
+  utt.rate     = 1.0;
+  utt.pitch    = 1.0;
+  const voices = _ttsVoices.length ? _ttsVoices : window.speechSynthesis.getVoices();
+  const prefix = langCode.split("-")[0];
+  utt.voice    = voices.find(v => v.lang === locale)
+              || voices.find(v => v.lang.startsWith(langCode))
+              || voices.find(v => v.lang.startsWith(prefix))
+              || null;
+  try { window.speechSynthesis.speak(utt); }
+  catch (e) { console.warn("[TTS] speak failed:", e); }
 }
 
 function convSpeakCancel() {
@@ -1196,6 +1215,7 @@ function convStopListening() {
 }
 
 convMicBtn.addEventListener("click", () => {
+  _unlockTts(); // activate speechSynthesis from this user-gesture context
   convIsListening ? convStopListening() : convStartListening();
 });
 
@@ -1209,6 +1229,7 @@ function convSetTtsUI(enabled) {
 }
 
 convTtsBtn?.addEventListener("click", () => {
+  _unlockTts(); // also unlock from TTS toggle (user gesture)
   _ttsEnabled = !_ttsEnabled;
   if (!_ttsEnabled) convSpeakCancel();
   convSetTtsUI(_ttsEnabled);
@@ -1350,6 +1371,7 @@ function convReset() {
   convStopListening();
   convStopCamera();
   convSpeakCancel();
+  _ttsUnlocked = false;
   if (convWs) { convWs.close(); convWs = null; }
   convRoomId  = null;
   convUserId  = null;
@@ -1376,6 +1398,7 @@ function convReset() {
 
 // ── Create / Join buttons ──────────────────────────────────────────────────
 convCreateBtn.addEventListener("click", async () => {
+  _unlockTts(); // synchronous — before first await, still in user-gesture context
   const name = convNameInput.value.trim();
   if (!name) { convNameInput.focus(); return; }
 
@@ -1406,6 +1429,7 @@ convCreateBtn.addEventListener("click", async () => {
 });
 
 convJoinBtn.addEventListener("click", () => {
+  _unlockTts(); // synchronous — user-gesture context
   const roomId = convRoomInput.value.trim().toUpperCase();
   if (!roomId) { convRoomInput.focus(); return; }
   const name   = convNameInput.value.trim();
