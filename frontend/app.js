@@ -612,6 +612,40 @@ function convColorFor(userId) {
   return _participantColors[userId];
 }
 
+// ── Translated-speech TTS ─────────────────────────────────────────────────
+// When a participant unmutes and speaks, every listener hears the translation
+// read aloud in their own language via the Web Speech API (speechSynthesis).
+// The text has already passed through the full anti-hallucination pipeline
+// (ConversationAgent → strict TranslationAgent temp=0 → QualityReviewAgent)
+// so TTS is just reading verified text — zero hallucination from synthesis.
+
+let _ttsEnabled = true;
+let _ttsVoices  = [];
+
+if (window.speechSynthesis) {
+  const _loadVoices = () => { _ttsVoices = window.speechSynthesis.getVoices(); };
+  _loadVoices();
+  window.speechSynthesis.onvoiceschanged = _loadVoices;
+}
+
+function convSpeak(text, langCode) {
+  if (!_ttsEnabled || !window.speechSynthesis || !text.trim()) return;
+  const locale  = LANG_LOCALES[langCode] || langCode;
+  const utt     = new SpeechSynthesisUtterance(text.trim());
+  utt.lang      = locale;
+  utt.rate      = 1.0;
+  utt.pitch     = 1.0;
+  const voices  = _ttsVoices.length ? _ttsVoices : window.speechSynthesis.getVoices();
+  const voice   = voices.find(v => v.lang === locale) ||
+                  voices.find(v => v.lang.startsWith(langCode));
+  if (voice) utt.voice = voice;
+  window.speechSynthesis.speak(utt);
+}
+
+function convSpeakCancel() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+}
+
 const convSetup          = document.getElementById("convSetup");
 const convActive         = document.getElementById("convActive");
 const convNameInput      = document.getElementById("convName");
@@ -628,6 +662,8 @@ const convMicBtn         = document.getElementById("convMicBtn");
 const convMicLabel       = document.getElementById("convMicLabel");
 const convCamBtn         = document.getElementById("convCamBtn");
 const convCamLabel       = document.getElementById("convCamLabel");
+const convTtsBtn         = document.getElementById("convTtsBtn");
+const convTtsLabel       = document.getElementById("convTtsLabel");
 // convCamPreview / convCamVideo removed — local camera shown in own carousel card
 
 function convShowScreen(screen) {
@@ -1033,7 +1069,10 @@ function convHandleMessage(msg) {
 
     case "message":
       convAddMessage(msg);
-      if (!msg.is_self) convUpdateCaption(msg.from_id, msg.translation, true);
+      if (!msg.is_self) {
+        convUpdateCaption(msg.from_id, msg.translation, true);
+        convSpeak(msg.translation, convUsers[convUserId]?.language || "en");
+      }
       break;
 
     case "interim":
@@ -1158,6 +1197,21 @@ function convStopListening() {
 
 convMicBtn.addEventListener("click", () => {
   convIsListening ? convStopListening() : convStartListening();
+});
+
+// ── TTS toggle ─────────────────────────────────────────────────────────────
+function convSetTtsUI(enabled) {
+  if (!convTtsBtn || !convTtsLabel) return;
+  convTtsBtn.classList.toggle("tts-off", !enabled);
+  convTtsBtn.querySelector("i")?.setAttribute("data-lucide", enabled ? "volume-2" : "volume-x");
+  convTtsLabel.textContent = enabled ? "Voice on" : "Voice off";
+  lucide.createIcons({ nodes: [convTtsBtn] });
+}
+
+convTtsBtn?.addEventListener("click", () => {
+  _ttsEnabled = !_ttsEnabled;
+  if (!_ttsEnabled) convSpeakCancel();
+  convSetTtsUI(_ttsEnabled);
 });
 
 // ── Camera start / stop ────────────────────────────────────────────────────
@@ -1295,6 +1349,7 @@ function convReset() {
   webrtcCloseAll();
   convStopListening();
   convStopCamera();
+  convSpeakCancel();
   if (convWs) { convWs.close(); convWs = null; }
   convRoomId  = null;
   convUserId  = null;
@@ -1660,14 +1715,13 @@ function convUpdateCaption(userId, text, isFinal) {
 }
 
 function rtcPlayRemoteAudio(userId, track) {
-  // Lazy-create AudioContext on first remote audio arrival — by this point the
-  // user has clicked Join/Create and the page is activated, so resume() works.
-  if (!rtcAudioContext) rtcAudioContext = new AudioContext();
-  if (rtcAudioContext.state === "suspended") rtcAudioContext.resume();
+  // Raw WebRTC audio is intentionally suppressed.
+  // Each listener hears a TTS voice in their own language instead, driven by
+  // the translated text that arrives via the anti-hallucination pipeline.
+  // We accept the track so the peer connection stays healthy, but never route
+  // it to a speaker.
   rtcAudioSources[userId]?.disconnect();
-  const source = rtcAudioContext.createMediaStreamSource(new MediaStream([track]));
-  source.connect(rtcAudioContext.destination);
-  rtcAudioSources[userId] = source;
+  delete rtcAudioSources[userId];
 }
 
 function rtcRemoveRemote(userId) {
