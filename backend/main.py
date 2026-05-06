@@ -13,10 +13,33 @@ from dotenv import load_dotenv
 
 try:
     from google.cloud import speech as _google_speech
+    from google.oauth2 import service_account as _gsa
     _GOOGLE_STT_AVAILABLE = True
 except ImportError:
     _google_speech = None
+    _gsa = None
     _GOOGLE_STT_AVAILABLE = False
+
+
+def _make_speech_client():
+    """Return a SpeechClient using whichever credentials are available.
+
+    Priority:
+      1. GOOGLE_CREDENTIALS_JSON env var — full service-account JSON stored as
+         a single string (used on Render and other cloud hosts with no gcloud).
+      2. Application Default Credentials — gcloud CLI on local dev machines,
+         or the GCP metadata server when running inside GCP.
+    """
+    raw = os.getenv("GOOGLE_CREDENTIALS_JSON", "").strip()
+    if raw:
+        info = json.loads(raw)
+        creds = _gsa.Credentials.from_service_account_info(
+            info,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        )
+        return _google_speech.SpeechClient(credentials=creds)
+    # ADC path (local dev with gcloud auth application-default login)
+    return _google_speech.SpeechClient()
 
 # ISO 639-1 → BCP-47 language tags for Google STT
 _GOOGLE_LANG = {
@@ -478,7 +501,7 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
 
     # Validate Google credentials early — fail fast with a clear close reason.
     try:
-        _google_speech.SpeechClient()
+        _make_speech_client()
     except Exception as e:
         logger.error("Google STT credentials error: %s", e)
         await websocket.close(code=1011, reason="Google STT credentials not configured")
@@ -487,7 +510,7 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
     lang_code = _GOOGLE_LANG.get(language, "en-US")
 
     def run_stt():
-        client = _google_speech.SpeechClient()
+        client = _make_speech_client()
         stt_cfg = _google_speech.RecognitionConfig(
             encoding=_google_speech.RecognitionConfig.AudioEncoding.LINEAR16,
             sample_rate_hertz=sample_rate,
