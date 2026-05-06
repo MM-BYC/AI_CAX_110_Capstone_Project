@@ -1,10 +1,11 @@
-"""Transcription Agent — converts audio to text with word-level timestamps."""
+"""Transcription Agent — converts audio to text using NVIDIA Parakeet TDT 1.1B."""
 import os
-from groq import Groq
+import requests
 
-_client = None
+_API_URL = "https://integrate.api.nvidia.com/v1/audio/transcriptions"
+_MODEL   = "nvidia/parakeet-tdt-1.1b"
 
-# Whisper hallucinates these phrases on silence/very short audio.
+# Parakeet TDT hallucinates these on silence or very short audio.
 _HALLUCINATIONS = {
     "", ".", " ", "you", "you.", "uh.", "hmm.", "um.",
     "thank you.", "thank you", "thanks.", "thanks",
@@ -14,45 +15,33 @@ _HALLUCINATIONS = {
 }
 
 
-def _get_client():
-    global _client
-    if _client is None:
-        api_key = os.environ.get("GROQ_API_KEY")
-        if not api_key:
-            raise RuntimeError("GROQ_API_KEY environment variable is not set")
-        _client = Groq(api_key=api_key)
-    return _client
-
-
 def run(audio_file: str, language: str = None) -> dict:
     """
-    Transcribe audio using whisper-large-v3.
-    Pass language (ISO-639-1 code, e.g. "tl") to prevent hallucinations on
-    non-English audio; omit or pass None for auto-detection.
+    Transcribe audio using NVIDIA Parakeet TDT 1.1B via NVIDIA NIM.
+    Parakeet TDT is English-optimised; the language param is accepted for
+    interface compatibility but is not forwarded to the model.
+    Returns {"text": str, "words": []}.
     """
-    client = _get_client()
-    kwargs = dict(
-        model="whisper-large-v3",
-        response_format="verbose_json",
-        timestamp_granularities=["word"],
-    )
-    if language and language != "auto":
-        kwargs["language"] = language
+    api_key = os.environ.get("NVIDIA_API_KEY")
+    if not api_key:
+        raise RuntimeError("NVIDIA_API_KEY environment variable is not set")
+
+    ext  = os.path.splitext(audio_file)[1].lstrip(".") or "mp4"
+    mime = f"audio/{ext}"
 
     with open(audio_file, "rb") as f:
-        kwargs["file"] = f
-        transcription = client.audio.transcriptions.create(**kwargs)
+        resp = requests.post(
+            _API_URL,
+            headers={"Authorization": f"Bearer {api_key}"},
+            files={"file": (os.path.basename(audio_file), f, mime)},
+            data={"model": _MODEL},
+            timeout=30,
+        )
 
-    text = transcription.text.strip()
+    resp.raise_for_status()
+    text = resp.json().get("text", "").strip()
+
     if text.lower() in _HALLUCINATIONS or len(text) < 3:
         text = ""
 
-    words = []
-    raw_words = getattr(transcription, "words", None) or []
-    for w in raw_words:
-        if isinstance(w, dict):
-            words.append({"word": w["word"], "start": w["start"], "end": w["end"]})
-        else:
-            words.append({"word": w.word, "start": w.start, "end": w.end})
-
-    return {"text": text, "words": words}
+    return {"text": text, "words": []}
