@@ -11,12 +11,12 @@ from dotenv import load_dotenv
 # Load environment variables BEFORE importing agents (they need GROQ_API_KEY)
 load_dotenv(override=False)
 
-from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from agents.orchestrator import run_text_pipeline, run_audio_pipeline, run_keyboard_pipeline, run_conversation_pipeline
-from agents import language_detection_agent
+from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi.responses import FileResponse  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+from agents.orchestrator import run_text_pipeline, run_audio_pipeline, run_conversation_pipeline  # noqa: E402
+from agents import language_detection_agent  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

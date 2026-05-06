@@ -39,7 +39,7 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
-          python -c "import fastapi, uvicorn, langdetect, groq, dotenv"
+          python -c "import fastapi, uvicorn, lingua, groq, dotenv"
 
   frontend:
     name: Frontend — HTML/JS validation
