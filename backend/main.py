@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from agents.orchestrator import run_text_pipeline, run_audio_pipeline, run_conversation_pipeline  # noqa: E402
-from agents import language_detection_agent  # noqa: E402
+from agents import language_detection_agent, transcription_agent  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -380,6 +380,24 @@ async def translate_audio(source: str, target: str, file: UploadFile):
         os.remove(filepath)
 
     return result
+
+
+@app.post("/transcribe_audio")
+async def transcribe_audio_only(source: str, file: UploadFile):
+    """Transcribe-only endpoint for the iOS hot-mic pipeline.
+    Returns {"text": "..."} — no translation. The caller sends the text
+    to the conversation WebSocket as a speech message so the per-participant
+    translation pipeline runs normally."""
+    filepath = f"temp_conv_{file.filename}"
+    with open(filepath, "wb") as f:
+        f.write(await file.read())
+    try:
+        lang = None if source in ("auto", "") else source
+        result = await asyncio.to_thread(transcription_agent.run, filepath, lang)
+    finally:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+    return {"text": result["text"]}
 
 
 # Serve the frontend as static files

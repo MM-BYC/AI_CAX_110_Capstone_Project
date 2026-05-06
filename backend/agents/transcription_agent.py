@@ -4,6 +4,15 @@ from groq import Groq
 
 _client = None
 
+# Whisper hallucinates these phrases on silence/very short audio.
+_HALLUCINATIONS = {
+    "", ".", " ", "you", "you.", "uh.", "hmm.", "um.",
+    "thank you.", "thank you", "thanks.", "thanks",
+    "bye.", "bye", "goodbye.", "goodbye",
+    "the.", "the", "okay.", "okay", "ok.", "ok",
+    "yes.", "yes", "no.", "no", "right.", "right",
+}
+
 
 def _get_client():
     global _client
@@ -15,23 +24,35 @@ def _get_client():
     return _client
 
 
-def run(audio_file: str) -> dict:
+def run(audio_file: str, language: str = None) -> dict:
+    """
+    Transcribe audio using whisper-large-v3.
+    Pass language (ISO-639-1 code, e.g. "tl") to prevent hallucinations on
+    non-English audio; omit or pass None for auto-detection.
+    """
     client = _get_client()
+    kwargs = dict(
+        model="whisper-large-v3",
+        response_format="verbose_json",
+        timestamp_granularities=["word"],
+    )
+    if language and language != "auto":
+        kwargs["language"] = language
+
     with open(audio_file, "rb") as f:
-        transcription = client.audio.transcriptions.create(
-            file=f,
-            model="whisper-large-v3-turbo",
-            response_format="verbose_json",
-            timestamp_granularities=["word"],
-        )
+        kwargs["file"] = f
+        transcription = client.audio.transcriptions.create(**kwargs)
+
+    text = transcription.text.strip()
+    if text.lower() in _HALLUCINATIONS or len(text) < 3:
+        text = ""
 
     words = []
     raw_words = getattr(transcription, "words", None) or []
     for w in raw_words:
-        # Groq SDK returns words as dicts, not objects
         if isinstance(w, dict):
             words.append({"word": w["word"], "start": w["start"], "end": w["end"]})
         else:
             words.append({"word": w.word, "start": w.start, "end": w.end})
 
-    return {"text": transcription.text.strip(), "words": words}
+    return {"text": text, "words": words}

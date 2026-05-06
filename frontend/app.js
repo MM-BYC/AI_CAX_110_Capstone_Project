@@ -1271,15 +1271,33 @@ function convStopListening() {
   if (!_isSafari) webrtcStopAudio();
 }
 
-// ── iOS push-to-talk via MediaRecorder + Whisper ───────────────────────────
-// webkitSpeechRecognition on iOS Safari requires Siri & Dictation to be
-// enabled in iOS Settings → Privacy → Speech Recognition, and still fails
-// with service-not-allowed in many configurations. MediaRecorder + the
-// backend Whisper endpoint is the only reliable path on iPhone/iPad.
+// ── iOS hot mic via MediaRecorder + Whisper ──────────────────────────────
+// webkitSpeechRecognition on iOS fires service-not-allowed regardless of
+// HTTPS because it requires Siri & Dictation to be enabled in iOS system
+// settings. MediaRecorder + Whisper large-v3 is the only reliable path.
+// Mic stays hot (streaming every 3.5 s) until the user taps to mute.
 let _iosMicStream   = null;
 let _iosMicRecorder = null;
-let _iosMicChunks   = [];
 let _iosMicActive   = false;
+
+async function _sendIosChunk(blob, mime, lang) {
+  if (!blob.size || convWs?.readyState !== WebSocket.OPEN) return;
+  const ext = mime.includes("mp4") ? "m4a" : mime.includes("ogg") ? "ogg" : "webm";
+  const fd = new FormData();
+  fd.append("file", blob, `chunk.${ext}`);
+  try {
+    const r = await fetch(`${API_BASE}/transcribe_audio?source=${lang}`, {
+      method: "POST", body: fd,
+    });
+    if (!r.ok) return;
+    const { text } = await r.json();
+    if (text && convWs?.readyState === WebSocket.OPEN) {
+      convWs.send(JSON.stringify({ type: "speech", text, is_final: true }));
+    }
+  } catch (err) {
+    console.error("[iOS mic]", err);
+  }
+}
 
 async function convStartIosMic() {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -1289,66 +1307,46 @@ async function convStartIosMic() {
   try {
     _iosMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch {
-    alert(
-      "Microphone access denied.\n\n" +
-      "Go to Settings → Safari → Microphone and allow access, then reload."
-    );
+    alert("Microphone access denied.\n\nGo to Settings → Safari → Microphone and allow access, then reload.");
     return;
   }
-  _iosMicChunks = [];
   const mimeType = ["audio/mp4", "audio/webm", "audio/ogg"].find(
     t => MediaRecorder.isTypeSupported(t)
   ) || "";
   _iosMicRecorder = new MediaRecorder(_iosMicStream, mimeType ? { mimeType } : {});
-  _iosMicRecorder.ondataavailable = e => { if (e.data.size > 0) _iosMicChunks.push(e.data); };
-  _iosMicRecorder.onstop = async () => {
-    const mimeUsed = _iosMicRecorder.mimeType;
-    const blob     = new Blob(_iosMicChunks, { type: mimeUsed });
+  const recMime = _iosMicRecorder.mimeType; // capture after construction
+
+  _iosMicRecorder.ondataavailable = (e) => {
+    if (e.data.size < 500) return; // skip empty/corrupt chunks
+    const myInfo = convUsers[convUserId];
+    if (!myInfo) return;
+    _sendIosChunk(new Blob([e.data], { type: recMime }), recMime, myInfo.language);
+  };
+
+  _iosMicRecorder.onstop = () => {
     _iosMicStream?.getTracks().forEach(t => t.stop());
-    _iosMicStream   = null;
-    _iosMicChunks   = [];
-    _iosMicActive   = false;
+    _iosMicStream  = null;
+    _iosMicActive  = false;
     convSetMicUI(false);
     convWs?.readyState === WebSocket.OPEN &&
       convWs.send(JSON.stringify({ type: "mic_status", is_on: false }));
-
-    if (!blob.size) return;
-    const ext = mimeUsed.includes("mp4") ? "m4a"
-              : mimeUsed.includes("ogg") ? "ogg" : "webm";
-    const fd = new FormData();
-    fd.append("file", blob, `rec.${ext}`);
-    const myInfo = convUsers[convUserId];
-    if (!myInfo) return;
-    try {
-      const r = await fetch(
-        `${API_BASE}/translate_audio?source=auto&target=${myInfo.language}`,
-        { method: "POST", body: fd }
-      );
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const result = await r.json();
-      const text = (result.original_text || "").trim();
-      if (text && convWs?.readyState === WebSocket.OPEN) {
-        convWs.send(JSON.stringify({ type: "speech", text, is_final: true }));
-      }
-    } catch (err) {
-      console.error("[iOS mic]", err);
-    }
   };
-  _iosMicRecorder.start();
+
+  _iosMicRecorder.start(3500); // ondataavailable fires every 3.5 seconds
   _iosMicActive = true;
   convSetMicUI(true);
-  convMicLabel.textContent = "Recording… tap to send";
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "mic_status", is_on: true }));
 }
 
 function convStopIosMic() {
   if (_iosMicRecorder && _iosMicActive) _iosMicRecorder.stop();
+  // onstop handles stream teardown + UI reset
 }
 
 convMicBtn.addEventListener("click", () => {
   if (_isIOS) {
-    // Push-to-talk: first tap records, second tap stops + sends to Whisper.
+    // Hot mic: tap to go live, tap again to mute. Whisper processes every 3.5 s.
     _iosMicActive ? convStopIosMic() : convStartIosMic();
   } else {
     // Desktop / non-iOS: continuous webkitSpeechRecognition.
