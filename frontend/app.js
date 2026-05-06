@@ -1276,20 +1276,21 @@ function convStopListening() {
   if (!_isSafari) webrtcStopAudio();
 }
 
-// ── iOS mic — MediaRecorder → Groq Whisper ────────────────────────────────
-// iOS Safari does not support continuous webkitSpeechRecognition (fires
-// service-not-allowed unless Siri & Dictation is enabled in Settings).
-// Instead: MediaRecorder captures audio, tap-to-send sends it to the
-// /transcribe_audio endpoint (Groq Whisper), transcript enters the normal
-// per-participant translation pipeline. No extra credentials needed.
-let _iosMicStream    = null;
-let _iosRecorder     = null;
-let _iosChunks       = [];
-let _iosMicActive    = false;
-let _iosProcessing   = false;
+// ── iOS mic — MediaRecorder → Groq Whisper (live chunked streaming) ───────
+// MediaRecorder fires ondataavailable every IOS_CHUNK_MS ms while unmuted.
+// Each chunk is queued and sent to Groq Whisper serially; transcripts enter
+// the normal per-participant translation pipeline. No extra credentials needed.
+const IOS_CHUNK_MS  = 3000;   // Whisper call interval (ms)
+const IOS_MIN_BYTES = 1024;   // skip silent/near-empty chunks
+
+let _iosMicStream   = null;
+let _iosRecorder    = null;
+let _iosMimeType    = "";
+let _iosMicActive   = false;
+let _iosProcessing  = false;
+let _iosChunkQueue  = [];     // blobs waiting to be transcribed
 
 async function convStartIosMic() {
-  if (_iosProcessing) return; // block while Whisper is running
   try {
     _iosMicStream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
@@ -1299,18 +1300,23 @@ async function convStartIosMic() {
     return;
   }
 
-  _iosChunks = [];
-  const mime = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg"]
+  _iosChunkQueue = [];
+  _iosMimeType = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg"]
     .find(t => MediaRecorder.isTypeSupported(t)) || "";
-  _iosRecorder = new MediaRecorder(_iosMicStream, mime ? { mimeType: mime } : {});
+  _iosRecorder = new MediaRecorder(_iosMicStream, _iosMimeType ? { mimeType: _iosMimeType } : {});
 
-  _iosRecorder.ondataavailable = e => { if (e.data.size > 0) _iosChunks.push(e.data); };
-  _iosRecorder.onstop = () => _iosTranscribeAndSend();
+  _iosRecorder.ondataavailable = e => {
+    if (e.data.size >= IOS_MIN_BYTES) {
+      _iosChunkQueue.push(e.data);
+      _iosDrainQueue();
+    }
+  };
+  _iosRecorder.onstop = () => _iosDrainQueue(); // flush any final chunk
 
-  _iosRecorder.start();
+  _iosRecorder.start(IOS_CHUNK_MS);
   _iosMicActive = true;
   convSetMicUI(true);
-  convMicLabel.textContent = "Recording… tap to send";
+  convMicLabel.textContent = "Listening…";
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "mic_status", is_on: true }));
 }
@@ -1318,48 +1324,43 @@ async function convStartIosMic() {
 function convStopIosMic() {
   if (!_iosMicActive) return;
   _iosMicActive = false;
-  if (_iosRecorder?.state !== "inactive") _iosRecorder.stop(); // triggers onstop
+  if (_iosRecorder?.state !== "inactive") _iosRecorder.stop();
   _iosMicStream?.getTracks().forEach(t => t.stop());
   _iosMicStream = null;
+  convSetMicUI(false);
+  convMicLabel.textContent = "Tap to speak";
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "mic_status", is_on: false }));
 }
 
-async function _iosTranscribeAndSend() {
-  const chunks = _iosChunks.splice(0);
-  if (!chunks.length) { convSetMicUI(false); convMicLabel.textContent = "Tap to speak"; return; }
-
+async function _iosDrainQueue() {
+  if (_iosProcessing || !_iosChunkQueue.length) return;
   _iosProcessing = true;
-  convMicBtn.disabled = true;
-  convMicLabel.textContent = "Processing…";
+  while (_iosChunkQueue.length) {
+    const chunk = _iosChunkQueue.shift();
+    await _iosTranscribeChunk(new Blob([chunk], { type: _iosMimeType || "audio/mp4" }));
+  }
+  _iosProcessing = false;
+}
 
+async function _iosTranscribeChunk(blob) {
   try {
-    const mimeType = _iosRecorder?.mimeType || "audio/mp4";
-    const ext      = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
-    const blob     = new Blob(chunks, { type: mimeType });
-    const lang     = convUsers[convUserId]?.language || "en";
-
+    const ext  = (_iosMimeType || "audio/mp4").includes("mp4") ? "mp4"
+               : (_iosMimeType || "").includes("ogg") ? "ogg" : "webm";
+    const lang = convUsers[convUserId]?.language || "en";
     const form = new FormData();
     form.append("file", blob, `speech.${ext}`);
-
     const base = API_BASE || "";
     const resp = await fetch(`${base}/transcribe_audio?source=${lang}`, {
       method: "POST", body: form,
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const { text } = await resp.json();
-
     if (text?.trim() && convWs?.readyState === WebSocket.OPEN) {
       convWs.send(JSON.stringify({ type: "speech", text: text.trim(), is_final: true }));
     }
   } catch (err) {
     console.error("[iOS mic] transcription failed:", err);
-  } finally {
-    _iosProcessing = false;
-    _iosRecorder   = null;
-    convMicBtn.disabled = false;
-    convSetMicUI(false);
-    convMicLabel.textContent = "Tap to speak";
   }
 }
 
@@ -1522,7 +1523,6 @@ function convReset() {
   webrtcCloseAll();
   convStopListening();
   convStopIosMic();
-  _iosUsingSpeechFallback = false;
   convStopCamera();
   convSpeakCancel();
   _ttsUnlocked = false;
