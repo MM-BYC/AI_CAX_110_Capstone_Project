@@ -620,20 +620,22 @@ async def deepgram_stream(
         await websocket.close(code=1011, reason="DEEPGRAM_API_KEY not configured on server")
         return
 
-    import websockets as _wsl  # local import avoids name clash with FastAPI WebSocket
+    # Use the legacy websockets client explicitly — its parameter is always
+    # extra_headers regardless of the top-level websockets version installed.
+    from websockets.legacy.client import connect as _dg_connect  # noqa: E402
 
-    # Pass API key as a query param — avoids websockets library header-name
-    # incompatibilities between v12 (additional_headers) and v13 (extra_headers).
     dg_url = (
         "wss://api.deepgram.com/v1/listen"
-        f"?token={api_key}"
-        f"&encoding=linear16&sample_rate={sample_rate}&channels=1"
+        f"?encoding=linear16&sample_rate={sample_rate}&channels=1"
         f"&model=nova-2-general&language={language}"
         "&interim_results=true&endpointing=300&smart_format=true"
     )
 
     try:
-        async with _wsl.connect(dg_url) as dg_ws:
+        async with _dg_connect(
+            dg_url,
+            extra_headers={"Authorization": f"Token {api_key}"},
+        ) as dg_ws:
 
             async def relay_audio():
                 """Forward raw PCM frames from client to Deepgram."""
