@@ -1280,7 +1280,7 @@ function convStopListening() {
 // Safari ignores the timeslice param in MediaRecorder.start(); we use
 // requestData() on a setInterval instead so ondataavailable fires reliably
 // every IOS_CHUNK_MS ms while unmuted.
-const IOS_CHUNK_MS  = 3000;   // requestData interval (ms)
+const IOS_CHUNK_MS  = 1500;   // requestData interval (ms)
 const IOS_MIN_BYTES = 1024;   // skip silent/near-empty chunks
 
 let _iosMicStream   = null;
