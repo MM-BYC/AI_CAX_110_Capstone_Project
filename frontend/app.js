@@ -1271,33 +1271,18 @@ function convStopListening() {
   if (!_isSafari) webrtcStopAudio();
 }
 
-// ── iOS hot mic via MediaRecorder + Whisper ──────────────────────────────
-// webkitSpeechRecognition on iOS fires service-not-allowed regardless of
-// HTTPS because it requires Siri & Dictation to be enabled in iOS system
-// settings. MediaRecorder + Whisper large-v3 is the only reliable path.
-// Mic stays hot (streaming every 3.5 s) until the user taps to mute.
+// ── iOS hot mic — Google Cloud STT streaming via AudioContext PCM ─────────
+// webkitSpeechRecognition on iOS fires service-not-allowed regardless of HTTPS
+// (requires Siri & Dictation in iOS Settings — not controllable from JS).
+// Fix: capture raw LINEAR16 PCM via AudioContext/ScriptProcessorNode and
+// stream binary frames to /ws/stt/{room}/{user} which pipes them through
+// Google Cloud STT streaming_recognize. Transcripts arrive as speech messages
+// and pass through the normal per-participant translation pipeline.
 let _iosMicStream   = null;
-let _iosMicRecorder = null;
+let _iosAudioCtx    = null;
+let _iosProcessor   = null;
+let _iosSttWs       = null;
 let _iosMicActive   = false;
-
-async function _sendIosChunk(blob, mime, lang) {
-  if (!blob.size || convWs?.readyState !== WebSocket.OPEN) return;
-  const ext = mime.includes("mp4") ? "m4a" : mime.includes("ogg") ? "ogg" : "webm";
-  const fd = new FormData();
-  fd.append("file", blob, `chunk.${ext}`);
-  try {
-    const r = await fetch(`${API_BASE}/transcribe_audio?source=${lang}`, {
-      method: "POST", body: fd,
-    });
-    if (!r.ok) return;
-    const { text } = await r.json();
-    if (text && convWs?.readyState === WebSocket.OPEN) {
-      convWs.send(JSON.stringify({ type: "speech", text, is_final: true }));
-    }
-  } catch (err) {
-    console.error("[iOS mic]", err);
-  }
-}
 
 async function convStartIosMic() {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -1305,34 +1290,54 @@ async function convStartIosMic() {
     return;
   }
   try {
-    _iosMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    _iosMicStream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+    });
   } catch {
-    alert("Microphone access denied.\n\nGo to Settings → Safari → Microphone and allow access, then reload.");
+    alert("Microphone access denied.\n\nGo to Settings → Safari → Microphone → allow, then reload.");
     return;
   }
-  const mimeType = ["audio/mp4", "audio/webm", "audio/ogg"].find(
-    t => MediaRecorder.isTypeSupported(t)
-  ) || "";
-  _iosMicRecorder = new MediaRecorder(_iosMicStream, mimeType ? { mimeType } : {});
-  const recMime = _iosMicRecorder.mimeType; // capture after construction
 
-  _iosMicRecorder.ondataavailable = (e) => {
-    if (e.data.size < 500) return; // skip empty/corrupt chunks
+  // AudioContext must be created inside a user-gesture handler (this click).
+  _iosAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const source  = _iosAudioCtx.createMediaStreamSource(_iosMicStream);
+  // ScriptProcessorNode is deprecated but still the only option with broad
+  // iOS Safari support; AudioWorklet needs a separate JS file and has
+  // historically had issues on iOS 15 and earlier.
+  _iosProcessor = _iosAudioCtx.createScriptProcessor(4096, 1, 1);
+
+  // Open the Google STT streaming WebSocket.
+  const wsBase  = convGetWsBase();
+  _iosSttWs = new WebSocket(`${wsBase}/ws/stt/${convRoomId}/${convUserId}`);
+
+  _iosSttWs.onopen = () => {
     const myInfo = convUsers[convUserId];
-    if (!myInfo) return;
-    _sendIosChunk(new Blob([e.data], { type: recMime }), recMime, myInfo.language);
+    // First frame is JSON config; all subsequent frames are binary PCM.
+    _iosSttWs.send(JSON.stringify({
+      sample_rate: Math.round(_iosAudioCtx.sampleRate),
+      language: myInfo?.language || "en",
+    }));
   };
 
-  _iosMicRecorder.onstop = () => {
-    _iosMicStream?.getTracks().forEach(t => t.stop());
-    _iosMicStream  = null;
-    _iosMicActive  = false;
-    convSetMicUI(false);
-    convWs?.readyState === WebSocket.OPEN &&
-      convWs.send(JSON.stringify({ type: "mic_status", is_on: false }));
+  _iosSttWs.onerror = () => convStopIosMic();
+  _iosSttWs.onclose = () => { if (_iosMicActive) convStopIosMic(); };
+
+  // Convert Float32 PCM → Int16 and stream to server every ~93 ms (4096 frames).
+  _iosProcessor.onaudioprocess = (e) => {
+    if (_iosSttWs?.readyState !== WebSocket.OPEN) return;
+    const f32 = e.inputBuffer.getChannelData(0);
+    const i16 = new Int16Array(f32.length);
+    for (let i = 0; i < f32.length; i++) {
+      const s = Math.max(-1, Math.min(1, f32[i]));
+      i16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    _iosSttWs.send(i16.buffer);
   };
 
-  _iosMicRecorder.start(3500); // ondataavailable fires every 3.5 seconds
+  // ScriptProcessor must be connected to destination to fire (WebAudio quirk).
+  source.connect(_iosProcessor);
+  _iosProcessor.connect(_iosAudioCtx.destination);
+
   _iosMicActive = true;
   convSetMicUI(true);
   convWs?.readyState === WebSocket.OPEN &&
@@ -1340,13 +1345,23 @@ async function convStartIosMic() {
 }
 
 function convStopIosMic() {
-  if (_iosMicRecorder && _iosMicActive) _iosMicRecorder.stop();
-  // onstop handles stream teardown + UI reset
+  _iosMicActive = false;
+  _iosProcessor?.disconnect();
+  _iosAudioCtx?.close().catch(() => {});
+  _iosMicStream?.getTracks().forEach(t => t.stop());
+  _iosSttWs?.close();
+  _iosAudioCtx  = null;
+  _iosProcessor = null;
+  _iosMicStream = null;
+  _iosSttWs     = null;
+  convSetMicUI(false);
+  convWs?.readyState === WebSocket.OPEN &&
+    convWs.send(JSON.stringify({ type: "mic_status", is_on: false }));
 }
 
 convMicBtn.addEventListener("click", () => {
   if (_isIOS) {
-    // Hot mic: tap to go live, tap again to mute. Whisper processes every 3.5 s.
+    // Hot mic via Google Cloud STT: unmute = live, mute = stop.
     _iosMicActive ? convStopIosMic() : convStartIosMic();
   } else {
     // Desktop / non-iOS: continuous webkitSpeechRecognition.

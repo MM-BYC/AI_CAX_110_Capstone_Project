@@ -1,6 +1,6 @@
 # AI Translate — Capstone Project
 
-An agentic AI translation system powered by **Groq AI** and **OpenAI Whisper**, with real-time multi-user conversational translation, live WebRTC video/audio streaming, and anti-hallucination guardrails.
+An agentic AI translation system powered by **Groq AI**, **OpenAI Whisper large-v3**, and **Google Cloud Speech-to-Text**, with real-time multi-user conversational translation, live WebRTC video/audio streaming, and anti-hallucination guardrails.
 
 🔗 **Live App:** [https://ai-cax-110-capstone-project.onrender.com](https://ai-cax-110-capstone-project.onrender.com)
 
@@ -254,7 +254,7 @@ brew install ffmpeg
 ```bash
 cd backend
 cp .env.example .env
-# Edit .env and add your GROQ_API_KEY
+# Edit .env — add GROQ_API_KEY (required) and GOOGLE_APPLICATION_CREDENTIALS (for iOS mic)
 ./startback.sh
 ```
 
@@ -267,6 +267,105 @@ cd frontend
 ./startfront.sh
 # Open http://localhost:3000
 ```
+
+---
+
+## Google Cloud Speech-to-Text Setup
+
+The iOS conversation mic uses **Google Cloud STT streaming** for true real-time transcription instead of the browser's `webkitSpeechRecognition` (which requires Siri & Dictation to be enabled in iOS Settings and fails in many configurations).
+
+The desktop host (macOS/Chrome) is unaffected — it continues to use the browser's built-in speech recognition.
+
+### Why Google Cloud STT?
+
+| | Browser Speech API | Google Cloud STT |
+| --- | --- | --- |
+| iOS Safari | Fails with `service-not-allowed` | ✅ Works |
+| Tagalog accuracy | Poor | ✅ Excellent (`fil-PH` model) |
+| Latency | ~200 ms (when it works) | ~200 ms streaming |
+| Architecture | Apple's servers (opaque) | Google RNN-T streaming |
+
+Google STT uses the same underlying RNN-T architecture as Google Translate's real-time microphone mode, streaming audio frame-by-frame rather than waiting for complete utterances.
+
+### Step 1 — Create a Google Cloud Project
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com)
+2. Click **Select a project → New Project**
+3. Name it (e.g. `ai-translate`) and click **Create**
+
+### Step 2 — Enable the Speech-to-Text API
+
+1. In the Google Cloud Console, go to **APIs & Services → Library**
+2. Search for **Cloud Speech-to-Text API**
+3. Click **Enable**
+
+### Step 3 — Create a Service Account
+
+1. Go to **IAM & Admin → Service Accounts**
+2. Click **Create Service Account**
+3. Name: `ai-translate-stt` → **Create and Continue**
+4. Role: **Cloud Speech-to-Text → Cloud Speech Client** → **Done**
+
+### Step 4 — Download the JSON Key
+
+1. Click your new service account → **Keys** tab
+2. **Add Key → Create new key → JSON** → **Create**
+3. A `.json` file is downloaded — keep this secret, never commit it
+
+### Step 5 — Configure the Backend
+
+**Local development:**
+
+```bash
+# In backend/.env — add this line:
+GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/your-key.json
+```
+
+**Render deployment:**
+
+1. Render Dashboard → your service → **Environment** tab
+2. Add a new secret file:
+   - Key: `GOOGLE_APPLICATION_CREDENTIALS`
+   - Value: paste the full contents of the JSON key file
+   - Or: upload the JSON file and set the path as an environment variable
+
+```bash
+# Alternative: paste JSON contents directly
+GOOGLE_CREDENTIALS_JSON={"type":"service_account","project_id":"..."}
+```
+
+> **Note:** Render supports secret files natively. Upload the JSON key under **Secret Files** and reference its mount path in `GOOGLE_APPLICATION_CREDENTIALS`.
+
+### Step 6 — Verify
+
+Start the backend and open the browser console. When an iPhone unmutes the mic, you should see the `/ws/stt/{room}/{user}` WebSocket connect. Transcripts appear in the conversation room within ~300 ms of speech.
+
+### Supported Languages (Google STT BCP-47 codes)
+
+| App code | Google STT | Language |
+| --- | --- | --- |
+| `tl` | `fil-PH` | Tagalog / Filipino |
+| `en` | `en-US` | English |
+| `es` | `es-ES` | Spanish |
+| `fr` | `fr-FR` | French |
+| `de` | `de-DE` | German |
+| `it` | `it-IT` | Italian |
+| `pt` | `pt-BR` | Portuguese |
+| `zh` | `zh-CN` | Chinese (Simplified) |
+| `ja` | `ja-JP` | Japanese |
+| `ko` | `ko-KR` | Korean |
+| `ar` | `ar-SA` | Arabic |
+| `ru` | `ru-RU` | Russian |
+| `hi` | `hi-IN` | Hindi |
+| `nl` | `nl-NL` | Dutch |
+| `pl` | `pl-PL` | Polish |
+| `tr` | `tr-TR` | Turkish |
+
+### Known Limitations
+
+- Google STT streaming sessions have a **5-minute hard limit** per session. The backend restarts automatically every 4.5 minutes — there is a brief (~1 s) gap at the boundary where audio is not transcribed.
+- `GOOGLE_APPLICATION_CREDENTIALS` is **optional** — if not set, the `/ws/stt` endpoint closes with code 1011 and the mic button shows no error (the desktop path is unaffected).
+- Pricing: Google Cloud STT charges **$0.016 per 15 seconds** of audio beyond the free tier (60 minutes/month). A 30-minute conversation costs approximately $1.92.
 
 ---
 

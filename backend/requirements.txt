@@ -7,3 +7,4 @@ python-dotenv>=1.2.2
 requests>=2.31.0
 aiortc
 aioice
+google-cloud-speech>=2.0.0

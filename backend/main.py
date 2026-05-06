@@ -1,12 +1,30 @@
 import os
 import json
 import asyncio
+import queue as _queue
 import random
 import string
 import logging
+import threading
+import time
 from pathlib import Path
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+
+try:
+    from google.cloud import speech as _google_speech
+    _GOOGLE_STT_AVAILABLE = True
+except ImportError:
+    _google_speech = None
+    _GOOGLE_STT_AVAILABLE = False
+
+# ISO 639-1 → BCP-47 language tags for Google STT
+_GOOGLE_LANG = {
+    "en": "en-US", "es": "es-ES", "fr": "fr-FR", "de": "de-DE",
+    "it": "it-IT", "pt": "pt-BR", "zh": "zh-CN", "ja": "ja-JP",
+    "ko": "ko-KR", "ar": "ar-SA", "ru": "ru-RU", "hi": "hi-IN",
+    "nl": "nl-NL", "pl": "pl-PL", "tr": "tr-TR", "tl": "fil-PH",
+}
 
 # Load environment variables BEFORE importing agents (they need GROQ_API_KEY)
 load_dotenv(override=False)
@@ -380,6 +398,156 @@ async def translate_audio(source: str, target: str, file: UploadFile):
         os.remove(filepath)
 
     return result
+
+
+async def inject_speech(room_id: str, user_id: str, text: str):
+    """Inject a Google-STT transcript into a conversation room.
+    Echoes the original to the speaker and runs the per-participant
+    translation pipeline for every other participant."""
+    room = _rooms.get(room_id)
+    if not room:
+        return
+    my_info = room["info"].get(user_id)
+    if not my_info:
+        return
+
+    speaker_ws = room["conns"].get(user_id)
+    if speaker_ws:
+        try:
+            await speaker_ws.send_json({
+                "type": "message", "from_id": user_id,
+                "from": my_info["name"], "original": text,
+                "translation": text, "is_self": True,
+            })
+        except Exception:
+            pass
+
+    for other_id, other_ws in list(room["conns"].items()):
+        if other_id == user_id or not other_ws:
+            continue
+        other_info = room["info"].get(other_id)
+        if not other_info:
+            continue
+        try:
+            if other_info["language"] == my_info["language"]:
+                translated = text
+            else:
+                result = await asyncio.to_thread(
+                    run_conversation_pipeline,
+                    text, my_info["language"], other_info["language"],
+                )
+                translated = result.get("translation", text)
+            await other_ws.send_json({
+                "type": "message", "from_id": user_id,
+                "from": my_info["name"], "original": text,
+                "translation": translated, "is_self": False,
+            })
+        except Exception as e:
+            logger.error("Translation error for %s: %s", other_id, e)
+
+
+@app.websocket("/ws/stt/{room_id}/{user_id}")
+async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
+    """Google Cloud STT streaming endpoint used by iOS clients.
+
+    Binary frames arriving from the browser contain raw LINEAR16 PCM audio
+    at the device's native sample rate.  A daemon thread feeds those frames
+    into a Google Cloud streaming_recognize session and calls inject_speech()
+    for every final transcript.  Sessions restart automatically every 4.5 min
+    (before Google's hard 5-min limit).
+    """
+    if not _GOOGLE_STT_AVAILABLE:
+        await websocket.close(code=1011, reason="google-cloud-speech not installed")
+        return
+
+    await websocket.accept()
+    loop = asyncio.get_running_loop()
+    audio_q: _queue.Queue = _queue.Queue(maxsize=200)
+    stop_evt = threading.Event()
+
+    # First message must be JSON: { "sample_rate": 44100, "language": "tl" }
+    try:
+        raw = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
+        cfg = json.loads(raw)
+        sample_rate = int(cfg.get("sample_rate", 16000))
+        language = cfg.get("language", "en")
+    except Exception as e:
+        logger.error("STT config error: %s", e)
+        await websocket.close()
+        return
+
+    # Validate Google credentials early — fail fast with a clear close reason.
+    try:
+        _google_speech.SpeechClient()
+    except Exception as e:
+        logger.error("Google STT credentials error: %s", e)
+        await websocket.close(code=1011, reason="Google STT credentials not configured")
+        return
+
+    lang_code = _GOOGLE_LANG.get(language, "en-US")
+
+    def run_stt():
+        client = _google_speech.SpeechClient()
+        stt_cfg = _google_speech.RecognitionConfig(
+            encoding=_google_speech.RecognitionConfig.AudioEncoding.LINEAR16,
+            sample_rate_hertz=sample_rate,
+            language_code=lang_code,
+            enable_automatic_punctuation=True,
+            model="latest_long",
+        )
+        streaming_cfg = _google_speech.StreamingRecognitionConfig(
+            config=stt_cfg, interim_results=False,
+        )
+        SESSION_SECS = 270  # restart before Google's 5-min hard limit
+
+        while not stop_evt.is_set():
+            def _gen():
+                yield _google_speech.StreamingRecognizeRequest(streaming_config=streaming_cfg)
+                deadline = time.monotonic() + SESSION_SECS
+                while not stop_evt.is_set():
+                    left = deadline - time.monotonic()
+                    if left <= 0:
+                        return
+                    try:
+                        chunk = audio_q.get(timeout=min(0.1, left))
+                        if chunk is None:
+                            return
+                        yield _google_speech.StreamingRecognizeRequest(audio_content=chunk)
+                    except _queue.Empty:
+                        continue
+
+            try:
+                for resp in client.streaming_recognize(_gen()):
+                    for result in resp.results:
+                        if not result.is_final:
+                            continue
+                        transcript = result.alternatives[0].transcript.strip()
+                        if len(transcript) < 2:
+                            continue
+                        asyncio.run_coroutine_threadsafe(
+                            inject_speech(room_id, user_id, transcript), loop
+                        )
+            except Exception as e:
+                if stop_evt.is_set():
+                    return
+                logger.warning("STT session reset (%s), restarting", type(e).__name__)
+
+    threading.Thread(target=run_stt, daemon=True).start()
+
+    try:
+        while True:
+            data = await websocket.receive_bytes()
+            try:
+                audio_q.put_nowait(data)
+            except _queue.Full:
+                pass  # drop frame — client sent faster than STT can consume
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.error("STT WS error: %s", e)
+    finally:
+        stop_evt.set()
+        audio_q.put(None)
 
 
 @app.post("/transcribe_audio")
