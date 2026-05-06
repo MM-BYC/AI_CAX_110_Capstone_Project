@@ -1,11 +1,10 @@
-"""Transcription Agent — converts audio to text using NVIDIA Canary-1B."""
+"""Transcription Agent — converts audio to text using Groq Whisper."""
 import os
-import requests
+from groq import Groq
 
-_API_URL = "https://integrate.api.nvidia.com/v1/audio/transcriptions"
-_MODEL   = "nvidia/canary-1b"
+_client = None
 
-# Canary-1B hallucinates these on silence or very short audio.
+# Whisper hallucinates these phrases on silence/very short audio.
 _HALLUCINATIONS = {
     "", ".", " ", "you", "you.", "uh.", "hmm.", "um.",
     "thank you.", "thank you", "thanks.", "thanks",
@@ -15,37 +14,46 @@ _HALLUCINATIONS = {
 }
 
 
+def _get_client():
+    global _client
+    if _client is None:
+        api_key = os.environ.get("GROQ_API_KEY")
+        if not api_key:
+            raise RuntimeError("GROQ_API_KEY environment variable is not set")
+        _client = Groq(api_key=api_key)
+    return _client
+
+
 def run(audio_file: str, language: str = None) -> dict:
     """
-    Transcribe audio using NVIDIA Canary-1B via NVIDIA NIM.
-    Canary-1B supports English, German, French, and Spanish.
-    Pass language (ISO-639-1 code) to improve accuracy; omit for auto-detect.
-    Returns {"text": str, "words": []}.
+    Transcribe audio using Groq Whisper (whisper-large-v3).
+    Pass language (ISO-639-1 code, e.g. "es") to prevent hallucinations on
+    non-English audio; omit or pass None for auto-detection.
+    Returns {"text": str, "words": [...]}.
     """
-    api_key = os.environ.get("NVIDIA_API_KEY")
-    if not api_key:
-        raise RuntimeError("NVIDIA_API_KEY environment variable is not set")
-
-    ext  = os.path.splitext(audio_file)[1].lstrip(".") or "mp4"
-    mime = f"audio/{ext}"
-
-    data = {"model": _MODEL}
+    client = _get_client()
+    kwargs = dict(
+        model="whisper-large-v3",
+        response_format="verbose_json",
+        timestamp_granularities=["word"],
+    )
     if language and language != "auto":
-        data["language"] = language
+        kwargs["language"] = language
 
     with open(audio_file, "rb") as f:
-        resp = requests.post(
-            _API_URL,
-            headers={"Authorization": f"Bearer {api_key}"},
-            files={"file": (os.path.basename(audio_file), f, mime)},
-            data=data,
-            timeout=30,
-        )
+        kwargs["file"] = f
+        transcription = client.audio.transcriptions.create(**kwargs)
 
-    resp.raise_for_status()
-    text = resp.json().get("text", "").strip()
-
+    text = transcription.text.strip()
     if text.lower() in _HALLUCINATIONS or len(text) < 3:
         text = ""
 
-    return {"text": text, "words": []}
+    words = []
+    raw_words = getattr(transcription, "words", None) or []
+    for w in raw_words:
+        if isinstance(w, dict):
+            words.append({"word": w["word"], "start": w["start"], "end": w["end"]})
+        else:
+            words.append({"word": w.word, "start": w.start, "end": w.end})
+
+    return {"text": text, "words": words}
