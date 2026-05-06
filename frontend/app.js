@@ -1355,12 +1355,15 @@ async function _convStartIosMicInner() {
 
   // WS opened — yield one event-loop turn so any immediate server-close
   // (e.g. missing API key) can fire onclose before we commit to active state
-  _iosDgWs.onclose = _iosDgWs.onerror = () => { _iosDgWs = null; };
+  let _dgCloseReason = "";
+  _iosDgWs.onclose = (e) => { _dgCloseReason = e.reason || ""; _iosDgWs = null; };
+  _iosDgWs.onerror = ()  => { _iosDgWs = null; };
   await new Promise(r => setTimeout(r, 50));
 
   if (!_iosDgWs || _iosDgWs.readyState !== WebSocket.OPEN) {
-    console.error("[iOS mic] Deepgram WS closed immediately after open");
-    alert("Transcription service closed the connection.\n\nMake sure DEEPGRAM_API_KEY is set on Render.");
+    console.error("[iOS mic] Deepgram WS closed immediately after open:", _dgCloseReason);
+    alert("Mic connection failed — server closed immediately.\n\n" +
+          (_dgCloseReason ? `Reason: ${_dgCloseReason}` : "Check Render logs for details."));
     _iosMicStream?.getTracks().forEach(t => t.stop()); _iosMicStream = null;
     _iosAudioCtx?.close(); _iosAudioCtx = null;
     _iosStarting = false;
