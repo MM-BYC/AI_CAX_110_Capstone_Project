@@ -1,11 +1,11 @@
-"""Transcription Agent — converts audio to text using NVIDIA Parakeet TDT 1.1B."""
+"""Transcription Agent — converts audio to text using NVIDIA Canary-1B."""
 import os
 import requests
 
 _API_URL = "https://integrate.api.nvidia.com/v1/audio/transcriptions"
-_MODEL   = "nvidia/parakeet-tdt-1.1b"
+_MODEL   = "nvidia/canary-1b"
 
-# Parakeet TDT hallucinates these on silence or very short audio.
+# Canary-1B hallucinates these on silence or very short audio.
 _HALLUCINATIONS = {
     "", ".", " ", "you", "you.", "uh.", "hmm.", "um.",
     "thank you.", "thank you", "thanks.", "thanks",
@@ -17,9 +17,9 @@ _HALLUCINATIONS = {
 
 def run(audio_file: str, language: str = None) -> dict:
     """
-    Transcribe audio using NVIDIA Parakeet TDT 1.1B via NVIDIA NIM.
-    Parakeet TDT is English-optimised; the language param is accepted for
-    interface compatibility but is not forwarded to the model.
+    Transcribe audio using NVIDIA Canary-1B via NVIDIA NIM.
+    Canary-1B supports English, German, French, and Spanish.
+    Pass language (ISO-639-1 code) to improve accuracy; omit for auto-detect.
     Returns {"text": str, "words": []}.
     """
     api_key = os.environ.get("NVIDIA_API_KEY")
@@ -29,12 +29,16 @@ def run(audio_file: str, language: str = None) -> dict:
     ext  = os.path.splitext(audio_file)[1].lstrip(".") or "mp4"
     mime = f"audio/{ext}"
 
+    data = {"model": _MODEL}
+    if language and language != "auto":
+        data["language"] = language
+
     with open(audio_file, "rb") as f:
         resp = requests.post(
             _API_URL,
             headers={"Authorization": f"Bearer {api_key}"},
             files={"file": (os.path.basename(audio_file), f, mime)},
-            data={"model": _MODEL},
+            data=data,
             timeout=30,
         )
 
