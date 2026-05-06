@@ -613,12 +613,12 @@ async def deepgram_stream(
     Final transcripts are injected into the per-participant translation pipeline
     via inject_speech(), identical to the Google STT path.
     """
+    await websocket.accept()
+
     api_key = os.environ.get("DEEPGRAM_API_KEY", "").strip()
     if not api_key:
-        await websocket.close(code=1011, reason="DEEPGRAM_API_KEY not configured")
+        await websocket.close(code=1011, reason="DEEPGRAM_API_KEY not configured on server")
         return
-
-    await websocket.accept()
 
     import websockets as _wsl  # local import avoids name clash with FastAPI WebSocket
 

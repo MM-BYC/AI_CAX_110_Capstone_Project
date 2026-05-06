@@ -1314,26 +1314,40 @@ async function convStartIosMic() {
   );
   _iosDgWs.binaryType = "arraybuffer";
 
-  try {
-    await new Promise((resolve, reject) => {
-      _iosDgWs.onopen  = resolve;
-      _iosDgWs.onerror = () => reject(new Error("WebSocket error"));
-      _iosDgWs.onclose = () => reject(new Error("WebSocket closed"));
-    });
-  } catch (err) {
-    console.error("[iOS mic] Deepgram WS failed to open:", err);
-    alert("Could not connect to transcription service — check your DEEPGRAM_API_KEY on Render.");
-    _iosMicStream?.getTracks().forEach(t => t.stop());
-    _iosMicStream = null;
+  // Wait for WS to open (or fail)
+  const opened = await new Promise(resolve => {
+    _iosDgWs.onopen  = () => resolve(true);
+    _iosDgWs.onerror = () => resolve(false);
+    _iosDgWs.onclose = () => resolve(false);
+  });
+
+  if (!opened) {
+    console.error("[iOS mic] Deepgram WS failed to open");
+    alert("Could not connect to transcription service.\n\nMake sure DEEPGRAM_API_KEY is set on Render.");
+    _iosMicStream?.getTracks().forEach(t => t.stop()); _iosMicStream = null;
+    _iosAudioCtx?.close(); _iosAudioCtx = null;
+    _iosDgWs = null;
+    _iosStarting = false;
+    return;
+  }
+
+  // WS opened — yield one event-loop turn so any immediate server-close
+  // (e.g. missing API key) can fire onclose before we commit to active state
+  _iosDgWs.onclose = _iosDgWs.onerror = () => { _iosDgWs = null; };
+  await new Promise(r => setTimeout(r, 50));
+
+  if (!_iosDgWs || _iosDgWs.readyState !== WebSocket.OPEN) {
+    console.error("[iOS mic] Deepgram WS closed immediately after open");
+    alert("Transcription service closed the connection.\n\nMake sure DEEPGRAM_API_KEY is set on Render.");
+    _iosMicStream?.getTracks().forEach(t => t.stop()); _iosMicStream = null;
     _iosAudioCtx?.close(); _iosAudioCtx = null;
     _iosStarting = false;
     return;
   }
 
-  // Permanent close/error handler now that connection is established
+  // Connection is stable — set permanent handlers and start audio pipeline
   _iosDgWs.onclose = _iosDgWs.onerror = () => { if (_iosMicActive) convStopIosMic(); };
 
-  // Float32 mic → Int16 PCM → Deepgram
   const source = _iosAudioCtx.createMediaStreamSource(_iosMicStream);
   _iosProcessor = _iosAudioCtx.createScriptProcessor(4096, 1, 1);
   _iosProcessor.onaudioprocess = e => {
