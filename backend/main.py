@@ -25,20 +25,28 @@ def _make_speech_client():
     """Return a SpeechClient using whichever credentials are available.
 
     Priority:
-      1. GOOGLE_CREDENTIALS_JSON env var — full service-account JSON stored as
-         a single string (used on Render and other cloud hosts with no gcloud).
-      2. Application Default Credentials — gcloud CLI on local dev machines,
-         or the GCP metadata server when running inside GCP.
+      1. GOOGLE_CREDENTIALS_JSON env var — JSON string set in Render (or any
+         host without gcloud). Accepts both 'service_account' and
+         'authorized_user' types so the ADC file from
+         `gcloud auth application-default login` can be pasted directly.
+      2. Application Default Credentials — gcloud CLI on local dev machines.
     """
     raw = os.getenv("GOOGLE_CREDENTIALS_JSON", "").strip()
     if raw:
         info = json.loads(raw)
-        creds = _gsa.Credentials.from_service_account_info(
-            info,
-            scopes=["https://www.googleapis.com/auth/cloud-platform"],
-        )
+        cred_type = info.get("type", "")
+        if cred_type == "service_account":
+            creds = _gsa.Credentials.from_service_account_info(
+                info,
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
+        elif cred_type == "authorized_user":
+            from google.oauth2.credentials import Credentials as _UserCreds
+            creds = _UserCreds.from_authorized_user_info(info)
+        else:
+            raise ValueError(f"Unsupported credential type: {cred_type!r}")
         return _google_speech.SpeechClient(credentials=creds)
-    # ADC path (local dev with gcloud auth application-default login)
+    # ADC path — local dev with `gcloud auth application-default login`
     return _google_speech.SpeechClient()
 
 # ISO 639-1 → BCP-47 language tags for Google STT
