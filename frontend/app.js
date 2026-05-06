@@ -7,6 +7,8 @@ const API_BASE = (window.location.port === "3000" || window.location.protocol ==
 
 // Safari only allows one tab at a time to hold the microphone.
 const _isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+// iOS Safari does not support webkitSpeechRecognition reliably — use MediaRecorder instead.
+const _isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
 
 document.getElementById("copyright").textContent = `© ${new Date().getFullYear()} AI-Translate. All rights reserved.`;
 
@@ -1269,13 +1271,89 @@ function convStopListening() {
   if (!_isSafari) webrtcStopAudio();
 }
 
+// ── iOS push-to-talk via MediaRecorder + Whisper ───────────────────────────
+// webkitSpeechRecognition on iOS Safari requires Siri & Dictation to be
+// enabled in iOS Settings → Privacy → Speech Recognition, and still fails
+// with service-not-allowed in many configurations. MediaRecorder + the
+// backend Whisper endpoint is the only reliable path on iPhone/iPad.
+let _iosMicStream   = null;
+let _iosMicRecorder = null;
+let _iosMicChunks   = [];
+let _iosMicActive   = false;
+
+async function convStartIosMic() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    alert("Microphone not available. Open this page in Safari over HTTPS.");
+    return;
+  }
+  try {
+    _iosMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    alert(
+      "Microphone access denied.\n\n" +
+      "Go to Settings → Safari → Microphone and allow access, then reload."
+    );
+    return;
+  }
+  _iosMicChunks = [];
+  const mimeType = ["audio/mp4", "audio/webm", "audio/ogg"].find(
+    t => MediaRecorder.isTypeSupported(t)
+  ) || "";
+  _iosMicRecorder = new MediaRecorder(_iosMicStream, mimeType ? { mimeType } : {});
+  _iosMicRecorder.ondataavailable = e => { if (e.data.size > 0) _iosMicChunks.push(e.data); };
+  _iosMicRecorder.onstop = async () => {
+    const mimeUsed = _iosMicRecorder.mimeType;
+    const blob     = new Blob(_iosMicChunks, { type: mimeUsed });
+    _iosMicStream?.getTracks().forEach(t => t.stop());
+    _iosMicStream   = null;
+    _iosMicChunks   = [];
+    _iosMicActive   = false;
+    convSetMicUI(false);
+    convWs?.readyState === WebSocket.OPEN &&
+      convWs.send(JSON.stringify({ type: "mic_status", is_on: false }));
+
+    if (!blob.size) return;
+    const ext = mimeUsed.includes("mp4") ? "m4a"
+              : mimeUsed.includes("ogg") ? "ogg" : "webm";
+    const fd = new FormData();
+    fd.append("file", blob, `rec.${ext}`);
+    const myInfo = convUsers[convUserId];
+    if (!myInfo) return;
+    try {
+      const r = await fetch(
+        `${API_BASE}/translate_audio?source=auto&target=${myInfo.language}`,
+        { method: "POST", body: fd }
+      );
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const result = await r.json();
+      const text = (result.original_text || "").trim();
+      if (text && convWs?.readyState === WebSocket.OPEN) {
+        convWs.send(JSON.stringify({ type: "speech", text, is_final: true }));
+      }
+    } catch (err) {
+      console.error("[iOS mic]", err);
+    }
+  };
+  _iosMicRecorder.start();
+  _iosMicActive = true;
+  convSetMicUI(true);
+  convMicLabel.textContent = "Recording… tap to send";
+  convWs?.readyState === WebSocket.OPEN &&
+    convWs.send(JSON.stringify({ type: "mic_status", is_on: true }));
+}
+
+function convStopIosMic() {
+  if (_iosMicRecorder && _iosMicActive) _iosMicRecorder.stop();
+}
+
 convMicBtn.addEventListener("click", () => {
-  // Do NOT call _unlockTts() here: on Safari, speechSynthesis.speak() and
-  // SpeechRecognition.start() both compete for the audio session within the
-  // same event-loop tick, causing a "not-allowed" mic error.
-  // TTS is already unlocked via the Create/Join button clicks (which fire
-  // before any audio is involved), so no primer is needed here.
-  convIsListening ? convStopListening() : convStartListening();
+  if (_isIOS) {
+    // Push-to-talk: first tap records, second tap stops + sends to Whisper.
+    _iosMicActive ? convStopIosMic() : convStartIosMic();
+  } else {
+    // Desktop / non-iOS: continuous webkitSpeechRecognition.
+    convIsListening ? convStopListening() : convStartListening();
+  }
 });
 
 // ── TTS toggle ─────────────────────────────────────────────────────────────
