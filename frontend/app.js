@@ -482,13 +482,19 @@ function startListening() {
     if (e.error === "not-allowed" || e.error === "service-not-allowed") {
       stopListening();
       liveStatus.textContent = "Microphone blocked — see instructions below";
+      const isHttpOnMobile = _isSafari && window.location.protocol !== "https:";
       alert(
-        "Microphone access was denied.\n\n" +
-        "To fix:\n" +
-        "1. Click the lock (or ⓘ) icon in the address bar.\n" +
-        "2. Set Microphone to Allow.\n" +
-        "3. Reload the page and try again.\n\n" +
-        "If on macOS, also check System Settings → Privacy & Security → Microphone."
+        isHttpOnMobile
+          ? "Safari requires HTTPS to use the microphone.\n\n" +
+            "Fix: run  ./make-certs.sh  on the MacBook, restart\n" +
+            "both servers, then open  https://<MacBook-IP>:3000\n" +
+            "on iPhone and trust the certificate."
+          : "Microphone access was denied.\n\n" +
+            "To fix:\n" +
+            "1. Click the lock (or ⓘ) icon in the address bar.\n" +
+            "2. Set Microphone to Allow.\n" +
+            "3. Reload the page and try again.\n\n" +
+            "If on macOS, also check System Settings → Privacy & Security → Microphone."
       );
     } else if (e.error !== "no-speech") {
       liveStatus.textContent = `Microphone error: ${e.error}`;
@@ -1221,17 +1227,22 @@ async function convStartListening() {
         "  → Site Settings → Microphone → Allow → reload the page."
       );
     } else if (e.error === "service-not-allowed") {
-      // The browser's speech-recognition service rejected the request.
-      // On Safari this means Apple's STT servers are unreachable or the site
-      // is not allowed to use the service — not a mic-permission problem.
+      // On Safari, "service-not-allowed" almost always means the page is on
+      // HTTP (not HTTPS). Safari requires HTTPS to use speech recognition.
       convStopListening();
+      const isHttp = window.location.protocol !== "https:";
       alert(
         "Speech recognition service unavailable.\n\n" +
-        (_isSafari
-          ? "Safari routes speech recognition through Apple's servers.\n" +
-            "Check your internet connection and try again.\n\n" +
-            "If the problem persists, try Chrome or Firefox instead."
-          : "Check your internet connection and try again.")
+        (_isSafari && isHttp
+          ? "Safari requires HTTPS to use the microphone.\n\n" +
+            "Fix: run  ./make-certs.sh  on the MacBook, then restart\n" +
+            "both servers. Open the app at  https://<MacBook-IP>:3000\n" +
+            "on your iPhone after trusting the certificate."
+          : _isSafari
+            ? "Safari routes speech recognition through Apple's servers.\n" +
+              "Check your internet connection and try again.\n\n" +
+              "If the problem persists, try Chrome or Firefox instead."
+            : "Check your internet connection and try again.")
       );
     }
     // All other errors (aborted, network, no-speech, audio-capture) are
