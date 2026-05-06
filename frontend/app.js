@@ -1277,10 +1277,10 @@ function convStopListening() {
 }
 
 // ── iOS mic — MediaRecorder → Groq Whisper (live chunked streaming) ───────
-// MediaRecorder fires ondataavailable every IOS_CHUNK_MS ms while unmuted.
-// Each chunk is queued and sent to Groq Whisper serially; transcripts enter
-// the normal per-participant translation pipeline. No extra credentials needed.
-const IOS_CHUNK_MS  = 3000;   // Whisper call interval (ms)
+// Safari ignores the timeslice param in MediaRecorder.start(); we use
+// requestData() on a setInterval instead so ondataavailable fires reliably
+// every IOS_CHUNK_MS ms while unmuted.
+const IOS_CHUNK_MS  = 3000;   // requestData interval (ms)
 const IOS_MIN_BYTES = 1024;   // skip silent/near-empty chunks
 
 let _iosMicStream   = null;
@@ -1288,7 +1288,8 @@ let _iosRecorder    = null;
 let _iosMimeType    = "";
 let _iosMicActive   = false;
 let _iosProcessing  = false;
-let _iosChunkQueue  = [];     // blobs waiting to be transcribed
+let _iosChunkQueue  = [];
+let _iosTimerID     = null;
 
 async function convStartIosMic() {
   try {
@@ -1311,9 +1312,12 @@ async function convStartIosMic() {
       _iosDrainQueue();
     }
   };
-  _iosRecorder.onstop = () => _iosDrainQueue(); // flush any final chunk
 
-  _iosRecorder.start(IOS_CHUNK_MS);
+  _iosRecorder.start(); // no timeslice — requestData() via timer is reliable on Safari
+  _iosTimerID = setInterval(() => {
+    if (_iosRecorder?.state === "recording") _iosRecorder.requestData();
+  }, IOS_CHUNK_MS);
+
   _iosMicActive = true;
   convSetMicUI(true);
   convMicLabel.textContent = "Listening…";
@@ -1324,6 +1328,8 @@ async function convStartIosMic() {
 function convStopIosMic() {
   if (!_iosMicActive) return;
   _iosMicActive = false;
+  clearInterval(_iosTimerID);
+  _iosTimerID = null;
   if (_iosRecorder?.state !== "inactive") _iosRecorder.stop();
   _iosMicStream?.getTracks().forEach(t => t.stop());
   _iosMicStream = null;
