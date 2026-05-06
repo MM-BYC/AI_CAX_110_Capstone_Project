@@ -1,5 +1,5 @@
 """
-Static file server with HTTP/1.1 + range-request support.
+HTTP/1.1 static file server with range-request support.
 If certs/server.crt and certs/server.key exist at the project root,
 the server starts in HTTPS mode (required for getUserMedia on iPhone/iPad).
 """
@@ -20,19 +20,28 @@ class HTTP11Handler(SimpleHTTPRequestHandler):
         super().send_response(code, message)
         self.send_header("Accept-Ranges", "bytes")
 
-    def log_message(self, fmt, *args):
-        pass  # suppress per-request noise
+    def log_message(self, format, *args):
+        pass  # suppress per-request access logs
+
+
+class QuietHTTPServer(HTTPServer):
+    def handle_error(self, request, client_address):
+        import traceback
+        exc = traceback.format_exc()
+        if "BrokenPipeError" in exc or "ConnectionResetError" in exc:
+            return  # normal browser disconnects — ignore
+        super().handle_error(request, client_address)
 
 
 if __name__ == "__main__":
-    os.chdir(Path(__file__).parent)
-    server = HTTPServer(("0.0.0.0", 3000), HTTP11Handler)
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    server = QuietHTTPServer(("0.0.0.0", 3000), HTTP11Handler)
 
     if CERT.exists() and KEY.exists():
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(str(CERT), str(KEY))
         server.socket = ctx.wrap_socket(server.socket, server_side=True)
-        print(f"Serving frontend at https://0.0.0.0:3000  (HTTPS — iPhone mic enabled)")
+        print("Serving frontend at https://0.0.0.0:3000  (HTTPS — iPhone mic enabled)")
     else:
         print(
             "Serving frontend at http://0.0.0.0:3000\n"

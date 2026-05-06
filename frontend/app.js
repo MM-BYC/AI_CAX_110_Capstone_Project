@@ -1,7 +1,12 @@
-// Use the same host the page was loaded from so the app works from any device
-// (localhost, LAN IP via hotspot, etc.) without hard-coding 127.0.0.1.
-const _proto = window.location.protocol === "https:" ? "https" : "http";
-const API_BASE = `${_proto}://${window.location.hostname}:8000`;
+// In production the frontend is served by FastAPI itself, so use a same-origin
+// (relative) base. In local dev the static server runs on :3000 and needs to
+// hit the backend on :8000 explicitly.
+const API_BASE = (window.location.port === "3000" || window.location.protocol === "file:")
+  ? `http://${window.location.hostname}:8000`
+  : "";
+
+// Safari only allows one tab at a time to hold the microphone.
+const _isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 document.getElementById("copyright").textContent = `© ${new Date().getFullYear()} AI-Translate. All rights reserved.`;
 
@@ -15,24 +20,39 @@ const copyBtn        = document.getElementById("copyBtn");
 const textSwapBtn    = document.getElementById("textSwapBtn");
 
 // Audio tab elements
-const audioSourceLang   = document.getElementById("audioSourceLang");
-const audioTargetLang   = document.getElementById("audioTargetLang");
-const audioFile         = document.getElementById("audioFile");
-const dropZone          = document.getElementById("dropZone");
-const dropFileName      = document.getElementById("dropFileName");
-const audioPlayer       = document.getElementById("audioPlayer");
-const audioTranscript   = document.getElementById("audioTranscript");
-const audioOutputBox    = document.getElementById("audioOutputText");
+const audioSourceLang    = document.getElementById("audioSourceLang");
+const audioTargetLang    = document.getElementById("audioTargetLang");
+const audioFile          = document.getElementById("audioFile");
+const dropZone           = document.getElementById("dropZone");
+const dropFileName       = document.getElementById("dropFileName");
+const audioPlayer        = document.getElementById("audioPlayer");
+const audioTranscript    = document.getElementById("audioTranscript");
+const audioOutputBox     = document.getElementById("audioOutputText");
+const audioQualityBadge  = document.getElementById("audioQualityBadge");
+const audioQualityCritique = document.getElementById("audioQualityCritique");
 // audioDetectedLang element removed from HTML — not used
-const audioCopyBtn      = document.getElementById("audioCopyBtn");
+const audioCopyBtn       = document.getElementById("audioCopyBtn");
 
 // Tab elements
 const tabText  = document.getElementById("tabText");
 const tabAudio = document.getElementById("tabAudio");
+const tabLive  = document.getElementById("tabLive");
 const tabConv  = document.getElementById("tabConv");
 const textTab  = document.getElementById("textTab");
 const audioTab = document.getElementById("audioTab");
+const liveTab  = document.getElementById("liveTab");
 const convTab  = document.getElementById("convTab");
+
+// Live tab elements
+const liveSourceLang        = document.getElementById("liveSourceLang");
+const liveTargetLang        = document.getElementById("liveTargetLang");
+const micBtn                = document.getElementById("micBtn");
+const liveStatus            = document.getElementById("liveStatus");
+const liveTranscript        = document.getElementById("liveTranscript");
+const liveOutputText        = document.getElementById("liveOutputText");
+const liveCopyBtn            = document.getElementById("liveCopyBtn");
+const liveTranslationCopyBtn = document.getElementById("liveTranslationCopyBtn");
+const liveResetBtn           = document.getElementById("liveResetBtn");
 
 const spinner = document.getElementById("spinner");
 
@@ -43,6 +63,12 @@ const LANG_NAMES = {
   ko: "Korean", ar: "Arabic", ru: "Russian", hi: "Hindi",
   nl: "Dutch", pl: "Polish", tr: "Turkish", tl: "Tagalog"
 };
+
+// ── Block file drops everywhere except the audio drop zone ─────────────────
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("drop", e => {
+  if (!dropZone.contains(e.target)) e.preventDefault();
+});
 
 // ── Drop zone ──────────────────────────────────────────────────────────────
 function showFileName(file) {
@@ -78,21 +104,21 @@ dropZone.addEventListener("drop", e => {
 });
 
 // ── Tab switching ───────────────────────────────────────────────────────────
-function _activateTab(activeBtn, activePanel) {
-  [tabText, tabAudio, tabConv].forEach((b) => b.classList.remove("active"));
-  [textTab, audioTab, convTab].forEach((p) => { p.style.display = "none"; });
-  activeBtn.classList.add("active");
-  activePanel.style.display = "block";
+function showTab(active) {
+  [tabText, tabAudio, tabLive, tabConv].forEach(t => t.classList.remove("active"));
+  [textTab, audioTab, liveTab, convTab].forEach(t => { t.style.display = "none"; });
+  active.btn.classList.add("active");
+  active.panel.style.display = "block";
+  // Stop mics/camera if leaving live or conversation tabs
+  if (active.btn !== tabLive && isListening) stopListening();
+  if (active.btn !== tabConv && convIsListening) convStopListening();
+  if (active.btn !== tabConv && convCamOn) convStopCamera();
 }
 
-tabText.addEventListener("click", () => _activateTab(tabText, textTab));
-
-tabAudio.addEventListener("click", () => _activateTab(tabAudio, audioTab));
-
-tabConv.addEventListener("click", () => {
-  _activateTab(tabConv, convTab);
-  initConversationTab(); // lazy-init once (defined in conversation.js)
-});
+tabText.addEventListener("click",  () => showTab({ btn: tabText,  panel: textTab }));
+tabAudio.addEventListener("click", () => showTab({ btn: tabAudio, panel: audioTab }));
+tabLive.addEventListener("click",  () => showTab({ btn: tabLive,  panel: liveTab }));
+tabConv.addEventListener("click",  () => showTab({ btn: tabConv,  panel: convTab }));
 
 // ── Language detection helper (Text tab only) ──────────────────────────────
 let detectTimer = null;
@@ -190,6 +216,13 @@ inputText.addEventListener("input", () => {
   const len = inputText.value.length;
   updateCharCount(len);
 
+  // When the field is cleared, reset source to auto so the next word typed
+  // gets detected fresh — even if a previous swap had locked it to a language.
+  if (len === 0 && textSourceLang.value !== "auto") {
+    textSourceLang.value = "auto";
+    resetTextDetectOption();
+  }
+
   clearTimeout(detectTimer);
   if (len > 1 && textSourceLang.value === "auto") {
     detectTimer = setTimeout(() => detectAndShowLanguage(inputText.value), 50);
@@ -278,7 +311,7 @@ async function translateAudio() {
 
     audioPlayer.ontimeupdate = () => {
       const t = audioPlayer.currentTime;
-      const heard = words.filter(w => w.start <= t).map(w => w.word).join("");
+      const heard = words.filter(w => w.start <= t).map(w => w.word.trim()).join(" ");
       audioTranscript.value = heard;
       audioTranscript.scrollTop = audioTranscript.scrollHeight;
     };
@@ -286,8 +319,10 @@ async function translateAudio() {
     audioPlayer.play().catch(() => {});
 
     setAudioOutput(data.translation);
+    setAudioQualityBadge(data.quality ?? null);
   } catch (err) {
     setAudioOutput(`Error: ${err.message}`);
+    setAudioQualityBadge(null);
   } finally {
     showSpinner(false);
   }
@@ -296,8 +331,8 @@ async function translateAudio() {
 // ── Copy buttons ───────────────────────────────────────────────────────────
 copyBtn.addEventListener("click", () => {
   navigator.clipboard.writeText(outputBox.textContent.trim()).then(() => {
-    copyBtn.textContent = "Copied!";
-    setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+    copyBtn.querySelector("span").textContent = "Copied!";
+    setTimeout(() => { copyBtn.querySelector("span").textContent = "Copy"; }, 1500);
   });
 });
 
@@ -306,6 +341,7 @@ audioTargetLang.addEventListener("change", async () => {
   const text = audioTranscript.value.trim();
   if (!text) return;
 
+  setAudioQualityBadge(null);
   showSpinner(true);
   try {
     const params = new URLSearchParams({
@@ -326,8 +362,8 @@ audioTargetLang.addEventListener("change", async () => {
 
 audioCopyBtn.addEventListener("click", () => {
   navigator.clipboard.writeText(audioOutputBox.textContent.trim()).then(() => {
-    audioCopyBtn.textContent = "Copied!";
-    setTimeout(() => { audioCopyBtn.textContent = "Copy"; }, 1500);
+    audioCopyBtn.querySelector("span").textContent = "Copied!";
+    setTimeout(() => { audioCopyBtn.querySelector("span").textContent = "Copy"; }, 1500);
   });
 });
 
@@ -354,7 +390,1497 @@ function setAudioOutput(translation) {
   }
 }
 
+function setAudioQualityBadge(quality) {
+  if (!quality) {
+    audioQualityBadge.style.display = "none";
+    audioQualityCritique.style.display = "none";
+    return;
+  }
+  audioQualityBadge.style.display = "inline-flex";
+  audioQualityBadge.className = quality.passed ? "quality-badge passed" : "quality-badge flagged";
+  audioQualityBadge.innerHTML = quality.passed
+    ? '<i data-lucide="check-circle"></i> Passed'
+    : '<i data-lucide="alert-triangle"></i> Flagged';
+  lucide.createIcons({ nodes: [audioQualityBadge] });
+
+  if (!quality.passed && quality.critique) {
+    audioQualityCritique.textContent = quality.critique;
+    audioQualityCritique.style.display = "block";
+  } else {
+    audioQualityCritique.style.display = "none";
+  }
+}
+
 function showSpinner(visible, message = "Translating…") {
   spinner.style.display = visible ? "flex" : "none";
   if (visible) spinner.querySelector("p").textContent = message;
+}
+
+// ── Live Listen ─────────────────────────────────────────────────────────────
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+const LANG_LOCALES = {
+  en: "en-US", es: "es-ES", fr: "fr-FR", de: "de-DE",
+  it: "it-IT", pt: "pt-BR", zh: "zh-CN", ja: "ja-JP",
+  ko: "ko-KR", ar: "ar-SA", ru: "ru-RU", hi: "hi-IN",
+  nl: "nl-NL", pl: "pl-PL", tr: "tr-TR", tl: "fil-PH",
+};
+
+let recognition    = null;
+let isListening    = false;
+let finalText      = "";
+let liveXlateTimer = null;
+let liveDetectTimer = null;
+let liveDetectedLang = null;
+
+function startListening() {
+  if (!SpeechRecognition) {
+    liveStatus.textContent = "Speech recognition not supported — use Chrome or Edge";
+    return;
+  }
+
+  finalText = "";
+  liveDetectedLang = null;
+  liveTranscript.innerHTML = '<span class="placeholder">Listening…</span>';
+  liveOutputText.innerHTML = '<span class="placeholder">Translation will appear here…</span>';
+  liveCopyBtn.style.display = "none";
+  liveTranslationCopyBtn.style.display = "none";
+
+  recognition = new SpeechRecognition();
+  recognition.continuous     = true;
+  recognition.interimResults = true;
+  recognition.lang           = LANG_LOCALES[liveSourceLang.value] || "en-US";
+
+  recognition.onresult = e => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        finalText += e.results[i][0].transcript + " ";
+        clearTimeout(liveXlateTimer);
+        liveXlateTimer = setTimeout(() => translateLiveText(finalText.trim()), 400);
+      } else {
+        interim += e.results[i][0].transcript;
+      }
+    }
+    const fullText = (finalText + interim).trim();
+    liveTranscript.innerHTML =
+      (finalText || "") +
+      (interim ? `<span class="interim">${interim}</span>` : "");
+    liveCopyBtn.style.display = finalText.trim() ? "inline-block" : "none";
+    if (fullText) {
+      clearTimeout(liveDetectTimer);
+      liveDetectTimer = setTimeout(() => detectLiveLanguage(fullText), 100);
+      clearTimeout(liveXlateTimer);
+      liveXlateTimer = setTimeout(() => translateLiveText(fullText), 50);
+    }
+  };
+
+  // Auto-restart so recognition doesn't silently stop mid-session
+  recognition.onend = () => { if (isListening) recognition.start(); };
+
+  recognition.onerror = e => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      stopListening();
+      liveStatus.textContent = "Microphone blocked — see instructions below";
+      alert(
+        "Microphone access was denied.\n\n" +
+        "To fix:\n" +
+        "1. Click the lock (or ⓘ) icon in the address bar.\n" +
+        "2. Set Microphone to Allow.\n" +
+        "3. Reload the page and try again.\n\n" +
+        "If on macOS, also check System Settings → Privacy & Security → Microphone."
+      );
+    } else if (e.error !== "no-speech") {
+      liveStatus.textContent = `Microphone error: ${e.error}`;
+    }
+  };
+
+  recognition.start();
+  isListening = true;
+  micBtn.classList.add("active");
+  liveStatus.textContent = "Listening…";
+}
+
+function stopListening() {
+  isListening = false;
+  if (recognition) { recognition.stop(); recognition = null; }
+  micBtn.classList.remove("active");
+  liveStatus.textContent = "Click the mic to start listening";
+  clearTimeout(liveDetectTimer);
+}
+
+micBtn.addEventListener("click", () => {
+  isListening ? stopListening() : startListening();
+});
+
+liveResetBtn.addEventListener("click", () => {
+  stopListening();
+  finalText = "";
+  liveDetectedLang = null;
+  clearTimeout(liveXlateTimer);
+  clearTimeout(liveDetectTimer);
+  liveTranscript.innerHTML = '<span class="placeholder">Your speech will appear here…</span>';
+  liveOutputText.innerHTML = '<span class="placeholder">Translation will appear here…</span>';
+  liveCopyBtn.style.display = "none";
+  liveTranslationCopyBtn.style.display = "none";
+  liveStatus.textContent = "Click the mic to start listening";
+});
+
+async function detectLiveLanguage(text) {
+  if (!text.trim() || text.length < 3) return;
+  try {
+    const res = await fetch(`${API_BASE}/detect_language?text=${encodeURIComponent(text)}`, { method: "POST" });
+    if (!res.ok) return;
+    const data = await res.json();
+    const detected = data.detected_language;
+    if (detected && detected !== liveDetectedLang) {
+      liveDetectedLang = detected;
+      liveSourceLang.value = detected;
+    }
+  } catch (_) {}
+}
+
+async function translateLiveText(text) {
+  if (!text.trim()) return;
+  try {
+    const params = new URLSearchParams({
+      source: liveSourceLang.value,
+      target: liveTargetLang.value,
+      text,
+    });
+    const res = await fetch(`${API_BASE}/translate_text?${params}`, { method: "POST" });
+    if (!res.ok) return;
+    const data = await res.json();
+    liveOutputText.textContent = data.translation;
+    liveTranslationCopyBtn.style.display = "inline-block";
+  } catch (_) {}
+}
+
+// Restart recognition with new language if changed mid-session
+liveSourceLang.addEventListener("change", () => {
+  if (isListening) { stopListening(); startListening(); }
+});
+
+// Re-translate existing transcript when target language changes
+liveTargetLang.addEventListener("change", () => {
+  if (finalText.trim()) translateLiveText(finalText.trim());
+});
+
+liveCopyBtn.addEventListener("click", () => {
+  navigator.clipboard.writeText(liveTranscript.textContent.trim()).then(() => {
+    liveCopyBtn.querySelector("span").textContent = "Copied!";
+    setTimeout(() => { liveCopyBtn.querySelector("span").textContent = "Copy"; }, 1500);
+  });
+});
+
+liveTranslationCopyBtn.addEventListener("click", () => {
+  navigator.clipboard.writeText(liveOutputText.textContent.trim()).then(() => {
+    liveTranslationCopyBtn.querySelector("span").textContent = "Copied!";
+    setTimeout(() => { liveTranslationCopyBtn.querySelector("span").textContent = "Copy"; }, 1500);
+  });
+});
+
+// ── Live Conversation (multi-user) ────────────────────────────────────────
+let convWs           = null;
+let convRoomId       = null;
+let convUserId       = null;   // this session's user_id assigned by server
+let convIsHost       = false;
+let convUsers        = {};     // user_id → {name, language, is_host, mic_on, camera_on}
+let convIsListening         = false;
+let convRecognition         = null;
+let convXlateTimer          = null;
+let convFinalText           = "";
+let convInterimTimer        = null;
+let _recognitionRestartCount = 0;
+let convCamStream    = null;
+let convCamOn        = false;
+let _convReconnectAttempts = 0;
+const _CONV_MAX_RECONNECTS = 3;
+
+// Persistent colour palette — one colour per participant (8 distinct)
+const _PARTICIPANT_PALETTE = [
+  "#4f8ef7", "#e84393", "#22b573", "#f7a540",
+  "#a259f7", "#e85c3a", "#2ec4b6", "#b59b00",
+];
+const _participantColors = {};   // user_id → hex colour
+let   _paletteIndex = 0;
+
+function convColorFor(userId) {
+  if (!_participantColors[userId]) {
+    _participantColors[userId] = _PARTICIPANT_PALETTE[_paletteIndex % _PARTICIPANT_PALETTE.length];
+    _paletteIndex++;
+  }
+  return _participantColors[userId];
+}
+
+// ── Translated-speech TTS ─────────────────────────────────────────────────
+// When a participant unmutes and speaks, every listener hears the translation
+// read aloud in their own language via the Web Speech API (speechSynthesis).
+// The text has already passed through the full anti-hallucination pipeline
+// (ConversationAgent → strict TranslationAgent temp=0 → QualityReviewAgent)
+// so TTS is just reading verified text — zero hallucination from synthesis.
+
+let _ttsEnabled  = true;
+let _ttsVoices   = [];
+let _ttsUnlocked = false;
+
+if (window.speechSynthesis) {
+  const _loadVoices = () => { _ttsVoices = window.speechSynthesis.getVoices(); };
+  _loadVoices();
+  window.speechSynthesis.onvoiceschanged = _loadVoices;
+}
+
+// Must be called synchronously from a click/tap handler (user-gesture context).
+// Chrome blocks speechSynthesis.speak() from async/WS callbacks until the API
+// has been "activated" by at least one call inside a user gesture.
+function _unlockTts() {
+  if (!window.speechSynthesis || _ttsUnlocked) return;
+  // Fire a barely-audible primer utterance inside this user-gesture call so
+  // Chrome registers the page as speech-synthesis-activated.  Subsequent
+  // calls from WebSocket handlers are then allowed by the browser.
+  try {
+    const primer = new SpeechSynthesisUtterance(" ");
+    primer.volume = 0.01; // non-zero: some Chrome builds require audible output
+    primer.rate   = 16;   // completes in milliseconds
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(primer);
+    _ttsUnlocked = true;
+  } catch (e) {
+    console.warn("[TTS] unlock failed:", e);
+  }
+}
+
+function convSpeak(text, langCode) {
+  if (!_ttsEnabled || !window.speechSynthesis || !text.trim()) return;
+  const ss = window.speechSynthesis;
+  // Always resume — Chrome can silently enter a stuck state that is NOT
+  // reflected by ss.paused (happens after tab-switch or long idle periods).
+  try { ss.resume(); } catch (_) {}
+  // Cancel any queued-but-not-yet-spoken utterances so the listener always
+  // hears the *latest* translation rather than a stale backlog.
+  if (ss.pending) ss.cancel();
+  const locale = LANG_LOCALES[langCode] || langCode;
+  const utt    = new SpeechSynthesisUtterance(text.trim());
+  utt.lang     = locale;
+  utt.rate     = 1.0;
+  utt.pitch    = 1.0;
+  const voices = _ttsVoices.length ? _ttsVoices : ss.getVoices();
+  const prefix = langCode.split("-")[0];
+  utt.voice    = voices.find(v => v.lang === locale)
+              || voices.find(v => v.lang.startsWith(langCode))
+              || voices.find(v => v.lang.startsWith(prefix))
+              || null;
+  try { ss.speak(utt); }
+  catch (e) { console.warn("[TTS] speak failed:", e); }
+}
+
+function convSpeakCancel() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+}
+
+const convSetup          = document.getElementById("convSetup");
+const convActive         = document.getElementById("convActive");
+const convNameInput      = document.getElementById("convName");
+const convLangSelect     = document.getElementById("convLang");
+const convCreateBtn      = document.getElementById("convCreateBtn");
+const convJoinBtn        = document.getElementById("convJoinBtn");
+const convRoomInput      = document.getElementById("convRoomInput");
+const convRoomCode       = document.getElementById("convRoomCode");
+const convCopyCodeBtn    = document.getElementById("convCopyCodeBtn");
+const convLeaveBtn       = document.getElementById("convLeaveBtn");
+// convParticipantsBar removed — replaced by carousel
+const convMessages       = document.getElementById("convMessages");
+const convMicBtn         = document.getElementById("convMicBtn");
+const convMicLabel       = document.getElementById("convMicLabel");
+const convCamBtn         = document.getElementById("convCamBtn");
+const convCamLabel       = document.getElementById("convCamLabel");
+const convTtsBtn         = document.getElementById("convTtsBtn");
+const convTtsLabel       = document.getElementById("convTtsLabel");
+// convCamPreview / convCamVideo removed — local camera shown in own carousel card
+
+function convShowScreen(screen) {
+  convSetup.style.display  = "none";
+  convActive.style.display = "none";
+  screen.style.display     = "block";
+}
+
+function convGetWsBase() {
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const host  = (window.location.port === "3000" || window.location.protocol === "file:")
+    ? "127.0.0.1:8000"
+    : window.location.host;
+  return `${proto}//${host}`;
+}
+
+// ── Participant carousel ───────────────────────────────────────────────────
+// Each participant gets a square card (name overlay + camera video inside).
+// Cards fill a 3-row grid; left/right arrows paginate when count exceeds one page.
+
+const _CARD_SLOT = 108;   // card width (100px) + gap (8px)
+const _CARD_ROWS = 3;
+
+let _carouselPage  = 0;
+const _carouselCards = [];   // ordered DOM elements; order = join order
+
+function _carouselCols() {
+  const vp = document.getElementById("convCarouselViewport");
+  return vp ? Math.max(2, Math.floor(vp.clientWidth / _CARD_SLOT)) : 3;
+}
+
+function _buildCard(uid, user) {
+  const isMe  = uid === convUserId;
+  const color = convColorFor(uid);
+
+  const card = document.createElement("div");
+  card.className = "conv-participant-card" + (isMe ? " me" : "");
+  card.id        = `conv-card-${uid}`;
+  card.dataset.uid = uid;
+
+  // ── Square video box ──────────────────────────────────────────
+  const box = document.createElement("div");
+  box.className = "conv-card-box";
+  box.style.borderColor = color;
+
+  // Initials placeholder (shown when camera is off)
+  const ph = document.createElement("div");
+  ph.className   = "conv-card-placeholder";
+  ph.id          = `conv-card-ph-${uid}`;
+  const _nameParts = user.name.trim().split(/\s+/);
+  ph.textContent = _nameParts.length >= 2
+    ? (_nameParts[0][0] + _nameParts[_nameParts.length - 1][0]).toUpperCase()
+    : _nameParts[0][0].toUpperCase();
+  ph.style.background = color;
+
+  // Video element (hidden until camera opens)
+  const vid = document.createElement("video");
+  vid.autoplay    = true;
+  vid.playsInline = true;
+  vid.muted       = true;
+  vid.id          = `conv-card-vid-${uid}`;
+  vid.className   = "conv-card-vid";
+  if (isMe) vid.style.transform = "scaleX(-1)"; // mirror selfie
+
+  // Live caption overlay (interim/translated text for remote peers)
+  const cap = document.createElement("div");
+  cap.className = "conv-remote-caption";
+  cap.id        = `conv-caption-${uid}`;
+
+  // Name bar overlaid at bottom of box
+  const nameBar = document.createElement("div");
+  nameBar.className = "conv-card-name-bar";
+
+  const micDot = document.createElement("div");
+  micDot.className = "conv-participant-mic-dot" + (user.mic_on ? " on" : "");
+  micDot.id = `conv-mic-dot-${uid}`;
+
+  const nameTxt = document.createElement("span");
+  nameTxt.className   = "conv-card-name-txt";
+  nameTxt.textContent = user.name + (isMe ? " (You)" : "");
+
+  const langBadge = document.createElement("span");
+  langBadge.className   = "conv-lang-badge conv-card-lang-badge";
+  langBadge.textContent = user.language.toUpperCase();
+  langBadge.style.background = color;
+
+  const camDot = document.createElement("div");
+  camDot.className = "conv-participant-cam-dot" + (user.camera_on ? " on" : "");
+  camDot.id = `conv-cam-dot-${uid}`;
+
+  nameBar.appendChild(micDot);
+  nameBar.appendChild(nameTxt);
+  nameBar.appendChild(langBadge);
+  nameBar.appendChild(camDot);
+
+  if (user.is_host) {
+    const hostBadge = document.createElement("span");
+    hostBadge.className   = "conv-host-badge conv-card-host-badge";
+    hostBadge.textContent = "Host";
+    box.appendChild(hostBadge);
+  }
+
+  box.appendChild(ph);
+  box.appendChild(vid);
+  box.appendChild(cap);
+  box.appendChild(nameBar);
+  card.appendChild(box);
+  return card;
+}
+
+function _carouselRenderPage() {
+  const track = document.getElementById("convCarouselTrack");
+  if (!track) return;
+
+  const cols      = _carouselCols();
+  const pageSize  = cols * _CARD_ROWS;
+  const total     = _carouselCards.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  _carouselPage   = Math.min(_carouselPage, totalPages - 1);
+
+  const start = _carouselPage * pageSize;
+  const end   = start + pageSize;
+
+  // Detach all, re-append only the current page's cards
+  // (video elements keep playing when detached in modern browsers)
+  while (track.firstChild) track.removeChild(track.firstChild);
+  _carouselCards.slice(start, end).forEach(c => track.appendChild(c));
+  track.style.gridTemplateColumns = `repeat(${cols}, 100px)`;
+
+  const btnL = document.getElementById("convCarouselLeft");
+  const btnR = document.getElementById("convCarouselRight");
+  if (btnL) btnL.style.visibility = _carouselPage > 0            ? "visible" : "hidden";
+  if (btnR) btnR.style.visibility = _carouselPage < totalPages-1 ? "visible" : "hidden";
+
+  lucide.createIcons({ nodes: [
+    document.getElementById("convCarouselLeft"),
+    document.getElementById("convCarouselRight"),
+  ].filter(Boolean) });
+}
+
+function convRenderParticipants() {
+  // Add cards for new participants (preserves existing DOM nodes with live video)
+  Object.entries(convUsers).forEach(([uid, user]) => {
+    if (!_carouselCards.find(c => c.dataset.uid === uid)) {
+      _carouselCards.push(_buildCard(uid, user));
+    }
+  });
+
+  // Remove cards for departed participants
+  for (let i = _carouselCards.length - 1; i >= 0; i--) {
+    if (!convUsers[_carouselCards[i].dataset.uid]) {
+      _carouselCards.splice(i, 1);
+    }
+  }
+
+  _carouselRenderPage();
+}
+
+function convUpdateChipMic(userId, isOn) {
+  const card = document.getElementById(`conv-card-${userId}`);
+  if (card) card.classList.toggle("speaking", isOn);
+  const dot = document.getElementById(`conv-mic-dot-${userId}`);
+  if (dot) dot.className = "conv-participant-mic-dot" + (isOn ? " on" : "");
+}
+
+function convUpdateChipCam(userId, isOn) {
+  const dot = document.getElementById(`conv-cam-dot-${userId}`);
+  if (dot) dot.className = "conv-participant-cam-dot" + (isOn ? " on" : "");
+}
+
+// Re-paginate when the window resizes (column count may change)
+window.addEventListener("resize", () => _carouselRenderPage());
+
+// Arrow click handlers
+document.getElementById("convCarouselLeft")?.addEventListener("click", () => {
+  if (_carouselPage > 0) { _carouselPage--; _carouselRenderPage(); }
+});
+document.getElementById("convCarouselRight")?.addEventListener("click", () => {
+  const cols      = _carouselCols();
+  const pageSize  = cols * _CARD_ROWS;
+  const totalPages = Math.ceil(_carouselCards.length / pageSize);
+  if (_carouselPage < totalPages - 1) { _carouselPage++; _carouselRenderPage(); }
+});
+
+// ── Message rendering ──────────────────────────────────────────────────────
+function convAddMessage(msg) {
+  convClearInterim();
+
+  const color = convColorFor(msg.from_id);
+
+  const bubble = document.createElement("div");
+  bubble.className = `conv-bubble ${msg.is_self ? "self" : "partner"}`;
+  bubble.style.borderLeftColor = color;
+
+  const nameEl = document.createElement("div");
+  nameEl.className = "conv-bubble-name";
+  nameEl.style.color = color;
+  nameEl.textContent = msg.from;
+
+  // Main content — show translated text to others, original to self
+  const mainEl = document.createElement("div");
+  mainEl.className = "conv-bubble-main";
+  mainEl.textContent = msg.is_self ? msg.original : msg.translation;
+
+  // "Show original" toggle (always available for non-self messages)
+  const hasOriginal = !msg.is_self && msg.original && msg.original !== msg.translation;
+  let showingOriginal = false;
+
+  const toggleBtn = document.createElement("button");
+  toggleBtn.className = "conv-toggle-original";
+  if (!hasOriginal) {
+    toggleBtn.style.display = "none";
+  } else {
+    toggleBtn.textContent = "Show original";
+    toggleBtn.addEventListener("click", () => {
+      showingOriginal = !showingOriginal;
+      mainEl.textContent = showingOriginal ? msg.original : msg.translation;
+      toggleBtn.textContent = showingOriginal ? "Show translation" : "Show original";
+    });
+  }
+
+  bubble.appendChild(nameEl);
+  bubble.appendChild(mainEl);
+  bubble.appendChild(toggleBtn);
+
+  convMessages.querySelector(".conv-start-hint")?.remove();
+  convMessages.appendChild(bubble);
+  convMessages.scrollTop = convMessages.scrollHeight;
+}
+
+function convShowInterim(fromId, fromName, text) {
+  let el = convMessages.querySelector(".conv-interim");
+  if (!el) {
+    el = document.createElement("div");
+    el.className = "conv-interim";
+    convMessages.appendChild(el);
+  }
+  el.textContent = `${fromName}: ${text}…`;
+  convMessages.scrollTop = convMessages.scrollHeight;
+  const dot = document.getElementById(`conv-mic-dot-${fromId}`);
+  if (dot) dot.classList.add("pulsing");
+  convUpdateCaption(fromId, text + "…", false);
+}
+
+function convClearInterim() {
+  convMessages.querySelector(".conv-interim")?.remove();
+  document.querySelectorAll(".conv-participant-mic-dot.pulsing")
+    .forEach(d => d.classList.remove("pulsing"));
+}
+
+// Typing indicators — keyed by user_id so multiple typers stack correctly
+const _typingUsers = {};   // user_id → {name, color, timerId}
+
+function convShowTyping(userId, name) {
+  // Each heartbeat resets the expiry timer — if no heartbeat arrives within
+  // _TYPING_EXPIRE_MS the indicator self-clears (handles disconnects / lost stop signals)
+  if (_typingUsers[userId]) clearTimeout(_typingUsers[userId].timerId);
+  _typingUsers[userId] = {
+    name,
+    color: convColorFor(userId),
+    timerId: setTimeout(() => convClearTyping(userId), _TYPING_EXPIRE_MS),
+  };
+  _convRenderTypingBar();
+}
+
+function convClearTyping(userId) {
+  if (!_typingUsers[userId]) return;
+  clearTimeout(_typingUsers[userId].timerId);
+  delete _typingUsers[userId];
+  _convRenderTypingBar();
+}
+
+function _convRenderTypingBar() {
+  let bar = document.getElementById("conv-typing-bar");
+  const entries = Object.values(_typingUsers);
+  if (!entries.length) { bar?.remove(); return; }
+
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "conv-typing-bar";
+    bar.className = "conv-typing-bar";
+    convMessages.appendChild(bar);
+  }
+
+  const names = entries.map(u =>
+    `<span class="conv-typing-name" style="color:${u.color}">${u.name}</span>`
+  ).join(", ");
+  const verb = entries.length === 1 ? "is typing" : "are typing";
+  bar.innerHTML =
+    `${names} <span class="conv-typing-dots"><span></span><span></span><span></span></span> ${verb}…`;
+  convMessages.scrollTop = convMessages.scrollHeight;
+}
+
+function convAddSystemMsg(text) {
+  const el = document.createElement("div");
+  el.className = "conv-system-msg";
+  el.textContent = text;
+  convMessages.appendChild(el);
+  convMessages.scrollTop = convMessages.scrollHeight;
+}
+
+// ── Mic UI ─────────────────────────────────────────────────────────────────
+function convSetMicUI(isOn) {
+  convMicBtn.classList.toggle("active", isOn);
+  convMicBtn.innerHTML = isOn
+    ? '<i data-lucide="mic"></i>'
+    : '<i data-lucide="mic-off"></i>';
+  convMicLabel.textContent = isOn ? "Mic on — tap to mute" : "Tap to speak";
+  lucide.createIcons({ nodes: [convMicBtn] });
+  if (convUserId && convUsers[convUserId]) {
+    convUsers[convUserId].mic_on = isOn;
+    convUpdateChipMic(convUserId, isOn);
+  }
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────────
+async function convConnect(roomId) {
+  convRoomId = roomId;
+  const name = convNameInput.value.trim();
+  const lang = convLangSelect.value;
+
+  const wsUrl = `${convGetWsBase()}/ws/conversation/${roomId}`;
+  convWs = new WebSocket(wsUrl);
+
+  convWs.onopen = () => {
+    _convReconnectAttempts = 0;
+    convWs.send(JSON.stringify({ type: "join", name, language: lang }));
+  };
+
+  convWs.onmessage = e => {
+    convHandleMessage(JSON.parse(e.data));
+  };
+
+  convWs.onclose = event => {
+    if (event.code !== 1000 && convUserId) {
+      if (_convReconnectAttempts < _CONV_MAX_RECONNECTS) {
+        _convReconnectAttempts++;
+        convAddSystemMsg(`Connection lost. Reconnecting…`);
+        setTimeout(() => convConnect(roomId), _convReconnectAttempts * 2000);
+      } else {
+        convHandleDisconnect("Connection lost. Please rejoin.");
+      }
+    } else if (convUserId) {
+      convHandleDisconnect();
+    } else {
+      convCreateBtn.disabled = false;
+      convCreateBtn.querySelector("span").textContent = "Create Room";
+      if (event.code !== 1000) alert("Could not connect to server. Please try again.");
+    }
+  };
+
+  convWs.onerror = err => console.error("[Conv] WS error:", err);
+}
+
+function convHandleMessage(msg) {
+  switch (msg.type) {
+
+    case "joined":
+      convUserId = msg.user_id;
+      convIsHost = msg.is_host;
+      convRoomCode.textContent = msg.room;
+      convUsers = {};
+      msg.users.forEach(u => {
+        convUsers[u.user_id] = {
+          name: u.name, language: u.language,
+          is_host: u.is_host, mic_on: u.mic_on || false,
+        };
+      });
+      convRenderParticipants();
+      convShowScreen(convActive);
+      break;
+
+    case "user_joined":
+      convUsers[msg.user.user_id] = {
+        name: msg.user.name, language: msg.user.language,
+        is_host: msg.user.is_host, mic_on: false,
+      };
+      convRenderParticipants();
+      convAddSystemMsg(`${msg.user.name} joined the room.`);
+      webrtcOnUserJoined(msg.user.user_id);
+      break;
+
+    case "user_left":
+      webrtcOnUserLeft(msg.user_id);
+      convClearTyping(msg.user_id);
+      delete convUsers[msg.user_id];
+      convRenderParticipants();
+      convAddSystemMsg(`${msg.name} left the room.`);
+      break;
+
+    case "webrtc_offer":  rtcHandleOffer(msg.from_id, msg.sdp);  break;
+    case "webrtc_answer": rtcHandleAnswer(msg.from_id, msg.sdp); break;
+    case "webrtc_ice":    rtcHandleIce(msg.from_id, msg.candidate); break;
+
+    case "host_changed":
+      if (msg.new_host_id === convUserId) {
+        convIsHost = true;
+        if (convUsers[convUserId]) convUsers[convUserId].is_host = true;
+        convRenderParticipants();
+        convAddSystemMsg("You are now the host.");
+      }
+      break;
+
+    case "message":
+      convAddMessage(msg);
+      if (!msg.is_self) {
+        convUpdateCaption(msg.from_id, msg.translation, true);
+        convSpeak(msg.translation, convUsers[convUserId]?.language || "en");
+      }
+      break;
+
+    case "interim":
+      convShowInterim(msg.from_id, msg.from, msg.text);
+      break;
+
+    case "typing":
+      if (msg.is_typing) convShowTyping(msg.user_id, msg.name);
+      else               convClearTyping(msg.user_id);
+      break;
+
+    case "user_mic_status":
+      if (convUsers[msg.user_id]) convUsers[msg.user_id].mic_on = msg.is_on;
+      convUpdateChipMic(msg.user_id, msg.is_on);
+      break;
+
+    case "user_camera_status":
+      if (convUsers[msg.user_id]) convUsers[msg.user_id].camera_on = msg.is_on;
+      convUpdateChipCam(msg.user_id, msg.is_on);
+      break;
+
+    case "error":
+      alert(msg.message || "Could not join room.");
+      convReset();
+      break;
+  }
+}
+
+// ── Mic start / stop ───────────────────────────────────────────────────────
+async function convStartListening() {
+  if (!SpeechRecognition) {
+    alert("Speech recognition is not supported — please use Chrome or Edge.");
+    return;
+  }
+
+  // Microphone requires a secure context (HTTPS or localhost).
+  if (!window.isSecureContext) {
+    alert(
+      "Microphone access requires a secure connection.\n\n" +
+      "Open this app via HTTPS or http://localhost instead of a plain HTTP address."
+    );
+    return;
+  }
+
+  const myInfo = convUsers[convUserId];
+  if (!myInfo) return;
+
+  convFinalText = "";
+  _recognitionRestartCount = 0;
+  convRecognition = new SpeechRecognition();
+  convRecognition.continuous     = true;
+  convRecognition.interimResults = true;
+  convRecognition.lang           = LANG_LOCALES[myInfo.language] || "en-US";
+
+  convRecognition.onresult = e => {
+    _recognitionRestartCount = 0; // successful audio — reset the drop counter
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        convFinalText += e.results[i][0].transcript + " ";
+        clearTimeout(convXlateTimer);
+        convXlateTimer = setTimeout(() => {
+          const text = convFinalText.trim();
+          if (text && convWs?.readyState === WebSocket.OPEN) {
+            convWs.send(JSON.stringify({ type: "speech", text, is_final: true }));
+            convFinalText = "";
+          }
+        }, 300);
+      } else {
+        interim += e.results[i][0].transcript;
+      }
+    }
+    if (interim && convWs?.readyState === WebSocket.OPEN) {
+      clearTimeout(convInterimTimer);
+      convInterimTimer = setTimeout(() => {
+        convWs.send(JSON.stringify({ type: "interim", text: interim }));
+      }, 100);
+    }
+  };
+
+  convRecognition.onend = () => {
+    if (!convIsListening) return;
+    // Guard against a tight spin-loop (e.g. iOS backgrounding the recognizer,
+    // a persistent audio-capture failure, or network drops). If the recognizer
+    // fires onend 5 times in a row without any successful onresult in between,
+    // stop and surface a clear message rather than spinning silently forever.
+    if (_recognitionRestartCount >= 5) {
+      convStopListening();
+      alert("Microphone dropped repeatedly — tap the mic button to try again.");
+      return;
+    }
+    _recognitionRestartCount++;
+    convRecognition.start();
+  };
+
+  convRecognition.onerror = e => {
+    if (e.error === "not-allowed") {
+      convStopListening();
+      const safariNote = _isSafari
+        ? "Safari limitation detected:\n" +
+          "  Safari allows only ONE tab to use the mic at a time.\n" +
+          "  If another tab in this Safari window is using the mic,\n" +
+          "  that tab blocks all others.\n\n" +
+          "  ► In production (different devices / phones), this is not an issue.\n\n"
+        : "";
+      alert(
+        "Microphone blocked — browser cannot access the mic.\n\n" +
+        safariNote +
+        "macOS check:\n" +
+        "  System Settings → Privacy & Security → Microphone\n" +
+        "  → make sure your browser is toggled ON\n\n" +
+        "Browser check:\n" +
+        "  Click the lock icon in the address bar\n" +
+        "  → Site Settings → Microphone → Allow → reload the page."
+      );
+    } else if (e.error === "service-not-allowed") {
+      // The browser's speech-recognition service rejected the request.
+      // On Safari this means Apple's STT servers are unreachable or the site
+      // is not allowed to use the service — not a mic-permission problem.
+      convStopListening();
+      alert(
+        "Speech recognition service unavailable.\n\n" +
+        (_isSafari
+          ? "Safari routes speech recognition through Apple's servers.\n" +
+            "Check your internet connection and try again.\n\n" +
+            "If the problem persists, try Chrome or Firefox instead."
+          : "Check your internet connection and try again.")
+      );
+    }
+    // All other errors (aborted, network, no-speech, audio-capture) are
+    // transient. onend fires after onerror and will restart automatically.
+  };
+
+  convRecognition.start();
+  convIsListening = true;
+  convWs?.readyState === WebSocket.OPEN &&
+    convWs.send(JSON.stringify({ type: "mic_status", is_on: true }));
+  convSetMicUI(true);
+  // Safari: SpeechRecognition already holds the mic; a simultaneous getUserMedia
+  // call for WebRTC audio would race for the same audio session and cause a
+  // not-allowed error that erroneously shows the "mic blocked" dialog.
+  if (!_isSafari) webrtcStartAudio();
+}
+
+function convStopListening() {
+  convIsListening = false;
+  if (convRecognition) { convRecognition.stop(); convRecognition = null; }
+  convWs?.readyState === WebSocket.OPEN &&
+    convWs.send(JSON.stringify({ type: "mic_status", is_on: false }));
+  convSetMicUI(false);
+  if (!_isSafari) webrtcStopAudio();
+}
+
+convMicBtn.addEventListener("click", () => {
+  // Do NOT call _unlockTts() here: on Safari, speechSynthesis.speak() and
+  // SpeechRecognition.start() both compete for the audio session within the
+  // same event-loop tick, causing a "not-allowed" mic error.
+  // TTS is already unlocked via the Create/Join button clicks (which fire
+  // before any audio is involved), so no primer is needed here.
+  convIsListening ? convStopListening() : convStartListening();
+});
+
+// ── TTS toggle ─────────────────────────────────────────────────────────────
+function convSetTtsUI(enabled) {
+  if (!convTtsBtn || !convTtsLabel) return;
+  convTtsBtn.classList.toggle("tts-off", !enabled);
+  convTtsBtn.querySelector("i")?.setAttribute("data-lucide", enabled ? "volume-2" : "volume-x");
+  convTtsLabel.textContent = enabled ? "Voice on" : "Voice off";
+  lucide.createIcons({ nodes: [convTtsBtn] });
+}
+
+convTtsBtn?.addEventListener("click", () => {
+  _unlockTts(); // also unlock from TTS toggle (user gesture)
+  _ttsEnabled = !_ttsEnabled;
+  if (!_ttsEnabled) convSpeakCancel();
+  convSetTtsUI(_ttsEnabled);
+});
+
+// ── Camera start / stop ────────────────────────────────────────────────────
+async function convStartCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    alert("Camera is not supported in this browser.");
+    return;
+  }
+  if (!window.isSecureContext) {
+    alert(
+      "Camera access requires a secure connection.\n\n" +
+      "Open this app via HTTPS or http://localhost."
+    );
+    return;
+  }
+
+  if (navigator.permissions) {
+    try {
+      const perm = await navigator.permissions.query({ name: "camera" });
+      if (perm.state === "denied") {
+        alert(
+          "Camera is blocked for this site.\n\n" +
+          "To unblock it:\n" +
+          "1. Click the lock (or ⓘ) icon in the address bar.\n" +
+          "2. Set Camera to Allow.\n" +
+          "3. Reload the page and try again."
+        );
+        return;
+      }
+    } catch (_) {}
+  }
+
+  // Confirm a video input device is actually present before requesting access.
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const hasCamera = devices.some(d => d.kind === "videoinput");
+    if (!hasCamera) {
+      alert("No camera detected on this device. Please connect a camera and try again.");
+      return;
+    }
+  } catch (_) {}
+
+  // Try to open the camera. If the browser rejects the boolean shorthand
+  // (`video: true`) with a constraint error, retry with an empty constraints
+  // object — both are spec-equivalent but some engines handle them differently.
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+  } catch (err) {
+    const n = err.name;
+    if (n === "NotAllowedError" || n === "PermissionDeniedError") {
+      alert(
+        "Camera access was denied.\n\n" +
+        "To fix:\n" +
+        "1. Click the lock (or ⓘ) icon in the address bar.\n" +
+        "2. Set Camera to Allow.\n" +
+        "3. Reload the page and try again.\n\n" +
+        "If on macOS, also check System Settings → Privacy & Security → Camera."
+      );
+      return;
+    }
+    if (n === "NotReadableError" || n === "TrackStartError") {
+      alert("Camera is already in use by another application. Close it and try again.");
+      return;
+    }
+    if (n === "NotFoundError" || n === "DevicesNotFoundError") {
+      alert("No camera found. Please connect a camera and try again.");
+      return;
+    }
+    // Constraint / overconstrained / unknown — retry with minimal constraints.
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: {}, audio: false });
+    } catch (_) {
+      alert("Could not open camera. Make sure no other app is using it, then try again.");
+      return;
+    }
+  }
+
+  convCamStream = stream;
+  // Show local stream inside the participant's own carousel card
+  const _myVid = document.getElementById(`conv-card-vid-${convUserId}`);
+  const _myPh  = document.getElementById(`conv-card-ph-${convUserId}`);
+  if (_myVid) { _myVid.srcObject = stream; _myVid.style.display = "block"; }
+  if (_myPh)  _myPh.style.display = "none";
+  convCamOn = true;
+  convSetCamUI(true);
+  convWs?.readyState === WebSocket.OPEN &&
+    convWs.send(JSON.stringify({ type: "camera_status", is_on: true }));
+  webrtcStartVideo(stream);
+}
+
+function convStopCamera() {
+  if (convCamStream) {
+    convCamStream.getTracks().forEach(t => t.stop());
+    convCamStream = null;
+  }
+  // Clear local stream from carousel card
+  const _myVid = document.getElementById(`conv-card-vid-${convUserId}`);
+  const _myPh  = document.getElementById(`conv-card-ph-${convUserId}`);
+  if (_myVid) { _myVid.srcObject = null; _myVid.style.display = ""; }
+  if (_myPh)  _myPh.style.display = "";
+  convCamOn = false;
+  convSetCamUI(false);
+  convWs?.readyState === WebSocket.OPEN &&
+    convWs.send(JSON.stringify({ type: "camera_status", is_on: false }));
+  webrtcStopVideo();
+}
+
+function convSetCamUI(isOn) {
+  convCamBtn.classList.toggle("active", isOn);
+  convCamBtn.innerHTML = isOn
+    ? '<i data-lucide="video"></i>'
+    : '<i data-lucide="video-off"></i>';
+  convCamLabel.textContent = isOn ? "Camera on — tap to stop" : "Tap for camera";
+  lucide.createIcons({ nodes: [convCamBtn] });
+  if (convUserId && convUsers[convUserId]) {
+    convUsers[convUserId].camera_on = isOn;
+    convUpdateChipCam(convUserId, isOn);
+  }
+}
+
+convCamBtn.addEventListener("click", () => {
+  convCamOn ? convStopCamera() : convStartCamera();
+});
+
+// ── Reset / disconnect ─────────────────────────────────────────────────────
+function convHandleDisconnect(reason) {
+  if (convWs) { convWs.onclose = null; convWs.onerror = null; convWs = null; }
+  convStopListening();
+  if (reason) alert(reason + "\nReturning to setup.");
+  convReset();
+}
+
+function convReset() {
+  webrtcCloseAll();
+  convStopListening();
+  convStopCamera();
+  convSpeakCancel();
+  _ttsUnlocked = false;
+  if (convWs) { convWs.close(); convWs = null; }
+  convRoomId  = null;
+  convUserId  = null;
+  convIsHost  = false;
+  convUsers   = {};
+  // Reset carousel, colour and typing state for next session
+  _carouselCards.length = 0;
+  _carouselPage = 0;
+  const _track = document.getElementById("convCarouselTrack");
+  if (_track) _track.innerHTML = "";
+  Object.keys(_participantColors).forEach(k => delete _participantColors[k]);
+  _paletteIndex = 0;
+  Object.keys(_typingUsers).forEach(k => { clearTimeout(_typingUsers[k].timerId); delete _typingUsers[k]; });
+  clearTimeout(_typingTimer);
+  clearInterval(_typingHeartbeat);
+  _typingHeartbeat = null;
+  _isTyping = false;
+  convMessages.innerHTML = '<div class="conv-start-hint">Press your mic to start speaking</div>';
+  convRoomCode.textContent = "------";
+  convShowScreen(convSetup);
+  convCreateBtn.disabled = false;
+  convCreateBtn.querySelector("span").textContent = "Create Room";
+}
+
+// ── Create / Join buttons ──────────────────────────────────────────────────
+convCreateBtn.addEventListener("click", async () => {
+  _unlockTts(); // synchronous — before first await, still in user-gesture context
+  const name = convNameInput.value.trim();
+  if (!name) { convNameInput.focus(); return; }
+
+  convCreateBtn.disabled = true;
+  convCreateBtn.querySelector("span").textContent = "Connecting…";
+
+  try {
+    const res = await fetch(`${API_BASE}/create_room`);
+    if (!res.ok) {
+      convCreateBtn.disabled = false;
+      convCreateBtn.querySelector("span").textContent = "Create Room";
+      alert(`Backend error (${res.status}). Is the server running?`);
+      return;
+    }
+    const data = await res.json();
+    if (!data.room_id) {
+      convCreateBtn.disabled = false;
+      convCreateBtn.querySelector("span").textContent = "Create Room";
+      alert("Invalid response from server.");
+      return;
+    }
+    await convConnect(data.room_id);
+  } catch (e) {
+    convCreateBtn.disabled = false;
+    convCreateBtn.querySelector("span").textContent = "Create Room";
+    alert(`Failed to create room: ${e.message}`);
+  }
+});
+
+convJoinBtn.addEventListener("click", () => {
+  _unlockTts(); // synchronous — user-gesture context
+  const roomId = convRoomInput.value.trim().toUpperCase();
+  if (!roomId) { convRoomInput.focus(); return; }
+  const name   = convNameInput.value.trim();
+  if (!name)   { convNameInput.focus(); return; }
+  convConnect(roomId);
+});
+
+convRoomInput.addEventListener("keydown", e => { if (e.key === "Enter") convJoinBtn.click(); });
+convNameInput.addEventListener("keydown", e => { if (e.key === "Enter") convCreateBtn.click(); });
+
+convLeaveBtn.addEventListener("click", () => convReset());
+
+convCopyCodeBtn.addEventListener("click", () => {
+  navigator.clipboard.writeText(convRoomCode.textContent).then(() => {
+    convCopyCodeBtn.title = "Copied!";
+    setTimeout(() => { convCopyCodeBtn.title = "Copy room code"; }, 1500);
+  });
+});
+
+// ── Invite Modal ───────────────────────────────────────────────────────────
+const convInviteBtn   = document.getElementById("convInviteBtn");
+const convInviteModal = document.getElementById("convInviteModal");
+const convInviteMsg   = document.getElementById("convInviteMsg");
+const convInviteClose = document.getElementById("convInviteClose");
+
+const INVITE_PLATFORMS = [
+  { id: "copy",      label: "Copy",      bg: "#6366f1", emoji: "📋" },
+  { id: "sms",       label: "SMS",       bg: "#10b981", emoji: "💬" },
+  { id: "email",     label: "Email",     bg: "#f59e0b", emoji: "✉️"  },
+  { id: "whatsapp",  label: "WhatsApp",  bg: "#25d366", emoji: "📱" },
+  { id: "teams",     label: "Teams",     bg: "#5059c9", emoji: "🏢" },
+  { id: "messenger", label: "Messenger", bg: "#0084ff", emoji: "💙" },
+  { id: "telegram",  label: "Telegram",  bg: "#2ca5e0", emoji: "✈️"  },
+  { id: "slack",     label: "Slack",     bg: "#4a154b", emoji: "💼" },
+  { id: "discord",   label: "Discord",   bg: "#5865f2", emoji: "🎮" },
+];
+
+function inviteText() {
+  const code = convRoomCode.textContent.trim();
+  const url  = window.location.origin + window.location.pathname;
+  return `You're invited to a live AI Translate conversation!\n\nRoom Code: ${code}\nOpen the app: ${url}\n\nEnter the room code to join.`;
+}
+function inviteShort() {
+  const code = convRoomCode.textContent.trim();
+  const url  = window.location.origin + window.location.pathname;
+  return `Join my AI Translate room! Code: ${code} | ${url}`;
+}
+
+function inviteCopyAndLabel(platformId, label) {
+  navigator.clipboard.writeText(inviteText()).then(() => {
+    const el = document.querySelector(`[data-platform="${platformId}"] .conv-invite-platform-name`);
+    if (!el) return;
+    const orig = el.textContent;
+    el.textContent = label;
+    setTimeout(() => { el.textContent = orig; }, 2200);
+  });
+}
+
+function inviteShare(platformId) {
+  const enc  = encodeURIComponent(inviteText());
+  const encs = encodeURIComponent(inviteShort());
+  const url  = encodeURIComponent(window.location.origin + window.location.pathname);
+  const subj = encodeURIComponent("Join my AI Translate room");
+  ({
+    copy:      () => inviteCopyAndLabel("copy", "Copied!"),
+    sms:       () => window.open(`sms:?&body=${enc}`),
+    email:     () => window.open(`mailto:?subject=${subj}&body=${enc}`),
+    whatsapp:  () => window.open(`https://api.whatsapp.com/send?text=${enc}`),
+    teams:     () => window.open(`https://teams.microsoft.com/l/chat/0/0?users=&message=${encs}`),
+    messenger: () => inviteCopyAndLabel("messenger", "Copied!"),
+    telegram:  () => window.open(`https://t.me/share/url?url=${url}&text=${encs}`),
+    slack:     () => inviteCopyAndLabel("slack",   "Copied — paste in Slack"),
+    discord:   () => inviteCopyAndLabel("discord", "Copied — paste in Discord"),
+  })[platformId]?.();
+}
+
+(function buildInviteGrid() {
+  const grid = document.getElementById("convInvitePlatforms");
+  INVITE_PLATFORMS.forEach(p => {
+    const btn = document.createElement("button");
+    btn.className = "conv-invite-platform";
+    btn.dataset.platform = p.id;
+    btn.innerHTML = `<div class="conv-invite-platform-icon" style="background:${p.bg}">${p.emoji}</div>
+      <span class="conv-invite-platform-name">${p.label}</span>`;
+    btn.addEventListener("click", () => inviteShare(p.id));
+    grid.appendChild(btn);
+  });
+})();
+
+convInviteBtn.addEventListener("click", () => {
+  convInviteMsg.value = inviteText();
+  convInviteModal.style.display = "flex";
+  lucide.createIcons({ nodes: [convInviteClose] });
+});
+convInviteClose.addEventListener("click", () => { convInviteModal.style.display = "none"; });
+convInviteModal.addEventListener("click", e => {
+  if (e.target === convInviteModal) convInviteModal.style.display = "none";
+});
+
+// ── Keyboard Input Module ──────────────────────────────────────────────────
+const convKeyboardInput = document.getElementById("convKeyboardInput");
+const convKeyboardSend  = document.getElementById("convKeyboardSend");
+
+// Typing heartbeat — best practice used by Slack / WhatsApp / iMessage:
+//   • Send typing=true ONCE on first keystroke (not on every keystroke)
+//   • Resend typing=true every HEARTBEAT_MS while the user is still composing
+//   • Send typing=false immediately on send, clear, or blur
+//   • Receiver auto-expires the indicator after EXPIRE_MS — handles
+//     disconnects / lost stop signals with no zombie "X is typing…"
+const _TYPING_HEARTBEAT_MS = 3000;
+const _TYPING_EXPIRE_MS    = 5000;  // slightly longer than heartbeat for network slack
+
+let _typingTimer     = null;
+let _typingHeartbeat = null;
+let _isTyping        = false;
+
+function _typingSend(on) {
+  if (_isTyping === on || convWs?.readyState !== WebSocket.OPEN) return;
+  _isTyping = on;
+  convWs.send(JSON.stringify({ type: "typing", is_typing: on }));
+}
+
+function _typingStart() {
+  if (!_isTyping) {
+    _typingSend(true);
+    _typingHeartbeat = setInterval(() => {
+      if (convWs?.readyState === WebSocket.OPEN)
+        convWs.send(JSON.stringify({ type: "typing", is_typing: true }));
+    }, _TYPING_HEARTBEAT_MS);
+  }
+}
+
+function _typingStop() {
+  clearInterval(_typingHeartbeat);
+  _typingHeartbeat = null;
+  _typingSend(false);
+}
+
+function convSendKeyboard() {
+  const text = convKeyboardInput.value.trim();
+  if (!text || convWs?.readyState !== WebSocket.OPEN) return;
+  _typingStop();
+  convWs.send(JSON.stringify({ type: "keyboard", text }));
+  convKeyboardInput.value = "";
+  convKeyboardSend.disabled = false;
+}
+
+convKeyboardSend.addEventListener("click", convSendKeyboard);
+
+convKeyboardInput.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); convSendKeyboard(); }
+});
+
+convKeyboardInput.addEventListener("input", () => {
+  if (convKeyboardInput.value.trim().length > 0) {
+    _typingStart();
+  } else {
+    _typingStop();
+  }
+});
+
+// Stop typing indicator when user clicks/tabs away from the field
+convKeyboardInput.addEventListener("blur", () => _typingStop());
+
+// ── WebRTC Module ─────────────────────────────────────────────────────────
+const WEBRTC_ICE = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+];
+
+// convVideoGrid removed — remote video shown inside carousel cards
+
+let rtcPeers        = {};   // userId → RTCPeerConnection
+let rtcAudioTrack   = null; // local mic audio track (for WebRTC)
+let rtcVideoTrack   = null; // local camera video track (for WebRTC)
+let rtcAudioContext = null; // created on user click so it's always activated
+let rtcAudioSources = {};   // userId → AudioContext source node
+
+function rtcLocalTracks() {
+  return [rtcAudioTrack, rtcVideoTrack].filter(Boolean);
+}
+
+// Perfect Negotiation (W3C standard)
+// ─────────────────────────────────────────────────────────────────────────────
+// When both peers add tracks simultaneously both fire onnegotiationneeded and
+// send offers at the same moment ("glare"). Without handling this one side's
+// setRemoteDescription throws InvalidStateError (have-local-offer), the track
+// is silently dropped, and one direction of audio/video never connects.
+//
+// Fix: designate host as "impolite" (its offer wins) and joiner as "polite"
+// (it rolls back its own pending offer and accepts the remote one).
+// The browser re-fires onnegotiationneeded after rollback so the polite peer's
+// own tracks get negotiated in the next round-trip.
+
+function rtcCreatePeer(userId) {
+  if (rtcPeers[userId]) return rtcPeers[userId];
+
+  const pc = new RTCPeerConnection({ iceServers: WEBRTC_ICE });
+  rtcPeers[userId] = pc;
+  pc._makingOffer = false;
+
+  rtcLocalTracks().forEach(t => pc.addTrack(t));
+
+  // onnegotiationneeded fires automatically when tracks are added/removed —
+  // no need to call rtcNegotiate manually anywhere.
+  pc.onnegotiationneeded = async () => {
+    if (pc.signalingState !== "stable") return;
+    try {
+      pc._makingOffer = true;
+      const offer = await pc.createOffer();
+      if (pc.signalingState !== "stable") return; // re-check after async gap
+      await pc.setLocalDescription(offer);
+      convWs?.readyState === WebSocket.OPEN && convWs.send(JSON.stringify({
+        type: "webrtc_offer", target_id: userId,
+        sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+      }));
+    } catch (e) { console.error("[WebRTC] negotiate:", e); }
+    finally { pc._makingOffer = false; }
+  };
+
+  pc.ontrack = ({ track }) => {
+    if (track.kind === "video") rtcShowRemoteVideo(userId, track);
+    else rtcPlayRemoteAudio(userId, track);
+  };
+
+  pc.onicecandidate = ({ candidate }) => {
+    if (candidate && convWs?.readyState === WebSocket.OPEN) {
+      convWs.send(JSON.stringify({
+        type: "webrtc_ice", target_id: userId,
+        candidate: candidate.toJSON(),
+      }));
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === "failed") {
+      rtcRemoveRemote(userId);
+      pc.close();
+      delete rtcPeers[userId];
+    }
+  };
+
+  return pc;
+}
+
+async function rtcHandleOffer(fromId, sdp) {
+  let pc = rtcPeers[fromId];
+  if (!pc) pc = rtcCreatePeer(fromId);
+
+  // Polite = joiner (!convIsHost); impolite = host.
+  // Collision: we already sent an offer that hasn't been answered yet.
+  const polite    = !convIsHost;
+  const collision = pc._makingOffer || pc.signalingState !== "stable";
+
+  if (!polite && collision) return; // impolite peer drops the colliding offer
+
+  try {
+    // Polite peer: setRemoteDescription auto-rolls back the pending local offer
+    // (implicit rollback — Chrome 80+, Firefox 75+, Safari 14.1+).
+    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    convWs?.readyState === WebSocket.OPEN && convWs.send(JSON.stringify({
+      type: "webrtc_answer", target_id: fromId,
+      sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+    }));
+  } catch (e) { console.error("[WebRTC] handle offer:", e); }
+}
+
+async function rtcHandleAnswer(fromId, sdp) {
+  try {
+    await rtcPeers[fromId]?.setRemoteDescription(new RTCSessionDescription(sdp));
+  } catch (e) { console.error("[WebRTC] handle answer:", e); }
+}
+
+async function rtcHandleIce(fromId, candidate) {
+  if (!candidate || !rtcPeers[fromId]) return;
+  try {
+    await rtcPeers[fromId].addIceCandidate(new RTCIceCandidate(candidate));
+  } catch (e) { console.error("[WebRTC] ICE:", e); }
+}
+
+function rtcShowRemoteVideo(userId, track) {
+  // Remote video goes directly into the participant's carousel card video box
+  const vid = document.getElementById(`conv-card-vid-${userId}`);
+  const ph  = document.getElementById(`conv-card-ph-${userId}`);
+  if (!vid) return;
+  if (!vid.srcObject) {
+    vid.srcObject = new MediaStream([track]);
+  } else if (!vid.srcObject.getVideoTracks().length) {
+    vid.srcObject.addTrack(track);
+  }
+  vid.style.display = "block";
+  if (ph) ph.style.display = "none";
+  vid.play().catch(() => {});
+}
+
+function convUpdateCaption(userId, text, isFinal) {
+  const el = document.getElementById(`conv-caption-${userId}`);
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle("final", isFinal);
+  if (isFinal) {
+    clearTimeout(el._clearTimer);
+    el._clearTimer = setTimeout(() => { el.textContent = ""; }, 4000);
+  }
+}
+
+function rtcPlayRemoteAudio(userId, track) {
+  // Raw WebRTC audio is intentionally suppressed.
+  // Each listener hears a TTS voice in their own language instead, driven by
+  // the translated text that arrives via the anti-hallucination pipeline.
+  // We accept the track so the peer connection stays healthy, but never route
+  // it to a speaker.
+  rtcAudioSources[userId]?.disconnect();
+  delete rtcAudioSources[userId];
+}
+
+function rtcRemoveRemote(userId) {
+  const vid = document.getElementById(`conv-card-vid-${userId}`);
+  const ph  = document.getElementById(`conv-card-ph-${userId}`);
+  if (vid) { vid.srcObject = null; vid.style.display = ""; }
+  if (ph)  ph.style.display = "";
+  rtcAudioSources[userId]?.disconnect();
+  delete rtcAudioSources[userId];
+}
+
+async function webrtcStartAudio() {
+  if (rtcAudioTrack) return;
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    rtcAudioTrack = s.getAudioTracks()[0];
+    for (const [uid, pc] of Object.entries(rtcPeers)) {
+      if (!pc.getSenders().some(s => s.track?.kind === "audio")) {
+        pc.addTrack(rtcAudioTrack); // triggers onnegotiationneeded
+      }
+    }
+    Object.keys(convUsers).filter(uid => uid !== convUserId && !rtcPeers[uid])
+      .forEach(uid => rtcCreatePeer(uid)); // onnegotiationneeded fires when track added
+  } catch (e) {
+    console.error("[WebRTC] audio start:", e);
+    if (e.name === "NotAllowedError" && _isSafari) {
+      convStopListening();
+      alert(
+        "Safari mic conflict:\n\n" +
+        "Safari allows only ONE tab to use the mic at a time.\n" +
+        "Another tab in this Safari window already holds the mic.\n\n" +
+        "► Use Chrome or Firefox to test multiple participants in separate tabs.\n" +
+        "► On real devices (separate phones/computers) this is not a problem."
+      );
+    }
+  }
+}
+
+function webrtcStopAudio() {
+  if (!rtcAudioTrack) return;
+  rtcAudioTrack.stop();
+  rtcAudioTrack = null;
+  for (const pc of Object.values(rtcPeers)) {
+    pc.getSenders().filter(s => s.track?.kind === "audio").forEach(s => pc.removeTrack(s));
+    // removeTrack triggers onnegotiationneeded automatically
+  }
+}
+
+function webrtcStartVideo(stream) {
+  const vt = stream.getVideoTracks()[0];
+  if (!vt) return;
+  rtcVideoTrack = vt;
+  for (const [uid, pc] of Object.entries(rtcPeers)) {
+    const sender = pc.getSenders().find(s => s.track?.kind === "video");
+    if (sender) { sender.replaceTrack(vt); } // replaceTrack: no renegotiation needed
+    else { pc.addTrack(vt); }                // addTrack triggers onnegotiationneeded
+  }
+  Object.keys(convUsers).filter(uid => uid !== convUserId && !rtcPeers[uid])
+    .forEach(uid => rtcCreatePeer(uid));
+}
+
+function webrtcStopVideo() {
+  rtcVideoTrack = null;
+  for (const pc of Object.values(rtcPeers)) {
+    pc.getSenders().filter(s => s.track?.kind === "video").forEach(s => pc.removeTrack(s));
+    // removeTrack triggers onnegotiationneeded automatically
+  }
+}
+
+function webrtcOnUserJoined(userId) {
+  if (rtcAudioTrack || rtcVideoTrack) rtcCreatePeer(userId);
+}
+
+function webrtcOnUserLeft(userId) {
+  rtcPeers[userId]?.close();
+  delete rtcPeers[userId];
+  rtcRemoveRemote(userId);
+}
+
+function webrtcCloseAll() {
+  Object.keys(rtcPeers).forEach(uid => {
+    rtcPeers[uid].close();
+    rtcRemoveRemote(uid);
+  });
+  rtcPeers = {};
+  rtcAudioTrack?.stop();
+  rtcAudioTrack = null;
+  rtcVideoTrack = null;
+  rtcAudioSources = {};
 }

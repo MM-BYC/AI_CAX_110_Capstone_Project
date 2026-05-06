@@ -1,9 +1,9 @@
-fastapi
-uvicorn
-groq
-openai-whisper
-langdetect
-python-multipart
-python-dotenv
+fastapi>=0.135.1
+uvicorn[standard]>=0.34.0
+groq>=1.1.1
+lingua-language-detector>=2.0.2
+python-multipart>=0.0.22
+python-dotenv>=1.2.2
+requests>=2.31.0
 aiortc
 aioice

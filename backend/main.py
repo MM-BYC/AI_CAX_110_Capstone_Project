@@ -1,41 +1,40 @@
 import os
 import json
-import base64
 import asyncio
-from contextlib import asynccontextmanager
-from concurrent.futures import ThreadPoolExecutor
+import random
+import string
+import logging
 from pathlib import Path
-
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+
+# Load environment variables BEFORE importing agents (they need GROQ_API_KEY)
+load_dotenv(override=False)
+
 from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from lingua import Language, LanguageDetectorBuilder
+from fastapi.staticfiles import StaticFiles
+from agents.orchestrator import run_text_pipeline, run_audio_pipeline, run_keyboard_pipeline, run_conversation_pipeline
+from agents import language_detection_agent
 
-from agent import translation_agent
-from room_manager import room_manager, Participant
-from speaker_orchestrator import SpeakerOrchestrator
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-load_dotenv(Path(__file__).parent / ".env")
-
-_SUPPORTED = [
-    Language.ENGLISH, Language.SPANISH, Language.FRENCH, Language.GERMAN,
-    Language.ITALIAN, Language.PORTUGUESE, Language.CHINESE, Language.JAPANESE,
-    Language.KOREAN, Language.ARABIC, Language.RUSSIAN, Language.HINDI,
-    Language.DUTCH, Language.POLISH, Language.TURKISH, Language.TAGALOG,
-]
-_detector = LanguageDetectorBuilder.from_languages(*_SUPPORTED).build()
-_executor = ThreadPoolExecutor(max_workers=4)
+# Frontend directory - works whether run from project root or from backend directory
+_current_file = Path(__file__).resolve()
+if _current_file.parent.name == "backend":
+    FRONTEND_DIR = _current_file.parent.parent / "frontend"
+else:
+    FRONTEND_DIR = _current_file.parent / "frontend"
 
 
 @asynccontextmanager
 async def lifespan(app):
-    yield  # detector already loaded above
-    _executor.shutdown(wait=False)
+    yield
 
+app = FastAPI(title="AI Translate", version="2.0.0", lifespan=lifespan)
 
-app = FastAPI(title="Language Translation Agent", version="1.0.0", lifespan=lifespan)
-
-# Allow requests from the frontend (served on any local origin during dev)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -43,190 +42,346 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Conversation rooms: room_id → {
+#   "conns":   {user_id: WebSocket},
+#   "info":    {user_id: {name, language, is_host, mic_on}},
+#   "host_id": str | None
+# }
+_rooms: dict = {}
+
+
+def _gen_room_id() -> str:
+    return "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+
+def _gen_user_id() -> str:
+    return "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
+
+
+@app.get("/")
+async def root():
+    """Serve index.html for the SPA."""
+    index_file = FRONTEND_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    return {"message": "AI Translate API"}
+
+
+@app.get("/api/health")
+async def health_check():
+    """API health check endpoint."""
+    return {"status": "ok"}
+
+
+@app.get("/create_room")
+async def create_room():
+    """Generate a new room ID for live conversation."""
+    room_id = _gen_room_id()
+    while room_id in _rooms:
+        room_id = _gen_room_id()
+    return {"room_id": room_id}
+
+
+@app.websocket("/ws/conversation/{room_id}")
+async def conversation_ws(websocket: WebSocket, room_id: str):
+    """WebSocket endpoint for live multi-user conversation."""
+    await websocket.accept()
+
+    if room_id not in _rooms:
+        _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None}
+
+    room = _rooms[room_id]
+
+    # Wait for join message
+    try:
+        raw = await asyncio.wait_for(websocket.receive_text(), timeout=15)
+        data = json.loads(raw)
+        if data.get("type") != "join":
+            await websocket.close()
+            return
+    except (asyncio.TimeoutError, Exception):
+        await websocket.close()
+        return
+
+    user_id = _gen_user_id()
+    is_host = room["host_id"] is None
+    if is_host:
+        room["host_id"] = user_id
+
+    room["conns"][user_id] = websocket
+    room["info"][user_id] = {
+        "name": data["name"],
+        "language": data["language"],
+        "is_host": is_host,
+        "mic_on": False,
+        "camera_on": False,
+    }
+
+    # Confirm join with full room snapshot
+    await websocket.send_json({
+        "type": "joined",
+        "user_id": user_id,
+        "room": room_id,
+        "is_host": is_host,
+        "users": [{"user_id": uid, **info} for uid, info in room["info"].items()],
+    })
+
+    # Announce arrival to everyone already in the room
+    new_user = {"user_id": user_id, **room["info"][user_id]}
+    for uid, ws in list(room["conns"].items()):
+        if uid != user_id:
+            try:
+                await ws.send_json({"type": "user_joined", "user": new_user})
+            except Exception:
+                pass
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            data = json.loads(raw)
+            msg_type = data.get("type")
+
+            if msg_type == "speech":
+                text = data.get("text", "").strip()
+                if not text:
+                    continue
+
+                my_info = room["info"].get(user_id)
+                if not my_info:
+                    continue
+
+                # Echo original back to speaker
+                await websocket.send_json({
+                    "type": "message",
+                    "from_id": user_id,
+                    "from": my_info["name"],
+                    "original": text,
+                    "translation": text,
+                    "is_self": True,
+                })
+
+                # Translate and deliver to every other participant
+                for other_id, other_ws in list(room["conns"].items()):
+                    if other_id == user_id or not other_ws:
+                        continue
+                    other_info = room["info"].get(other_id)
+                    if not other_info:
+                        continue
+                    try:
+                        if other_info["language"] == my_info["language"]:
+                            translated = text
+                        else:
+                            result = await asyncio.to_thread(
+                                run_conversation_pipeline,
+                                text,
+                                my_info["language"],
+                                other_info["language"],
+                            )
+                            translated = result.get("translation", text)
+
+                        await other_ws.send_json({
+                            "type": "message",
+                            "from_id": user_id,
+                            "from": my_info["name"],
+                            "original": text,
+                            "translation": translated,
+                            "is_self": False,
+                        })
+                    except Exception as e:
+                        logger.error(f"Translation error for {other_id}: {e}")
+
+            elif msg_type == "interim":
+                my_info = room["info"].get(user_id)
+                if not my_info:
+                    continue
+                for other_id, other_ws in list(room["conns"].items()):
+                    if other_id == user_id or not other_ws:
+                        continue
+                    try:
+                        await other_ws.send_json({
+                            "type": "interim",
+                            "from_id": user_id,
+                            "from": my_info["name"],
+                            "text": data.get("text", ""),
+                        })
+                    except Exception:
+                        pass
+
+            elif msg_type == "typing":
+                my_info = room["info"].get(user_id)
+                if not my_info:
+                    continue
+                for other_id, other_ws in list(room["conns"].items()):
+                    if other_id == user_id or not other_ws:
+                        continue
+                    try:
+                        await other_ws.send_json({
+                            "type": "typing",
+                            "user_id": user_id,
+                            "name": my_info["name"],
+                            "is_typing": bool(data.get("is_typing", False)),
+                        })
+                    except Exception:
+                        pass
+
+            elif msg_type == "keyboard":
+                text = data.get("text", "").strip()
+                if not text:
+                    continue
+
+                my_info = room["info"].get(user_id)
+                if not my_info:
+                    continue
+
+                # Echo original back to sender
+                await websocket.send_json({
+                    "type": "message",
+                    "from_id": user_id,
+                    "from": my_info["name"],
+                    "original": text,
+                    "translation": text,
+                    "is_self": True,
+                })
+
+                # Translate via conversation pipeline and deliver to every other participant
+                for other_id, other_ws in list(room["conns"].items()):
+                    if other_id == user_id or not other_ws:
+                        continue
+                    other_info = room["info"].get(other_id)
+                    if not other_info:
+                        continue
+                    try:
+                        if other_info["language"] == my_info["language"]:
+                            translated = text
+                        else:
+                            result = await asyncio.to_thread(
+                                run_conversation_pipeline,
+                                text,
+                                my_info["language"],
+                                other_info["language"],
+                            )
+                            translated = result.get("translation", text)
+
+                        await other_ws.send_json({
+                            "type": "message",
+                            "from_id": user_id,
+                            "from": my_info["name"],
+                            "original": text,
+                            "translation": translated,
+                            "is_self": False,
+                        })
+                    except Exception as e:
+                        logger.error(f"Keyboard translation error for {other_id}: {e}")
+
+            elif msg_type == "mic_status":
+                is_on = bool(data.get("is_on", False))
+                if user_id in room["info"]:
+                    room["info"][user_id]["mic_on"] = is_on
+                for other_id, other_ws in list(room["conns"].items()):
+                    if other_id == user_id or not other_ws:
+                        continue
+                    try:
+                        await other_ws.send_json({
+                            "type": "user_mic_status",
+                            "user_id": user_id,
+                            "is_on": is_on,
+                        })
+                    except Exception:
+                        pass
+
+            elif msg_type == "camera_status":
+                is_on = bool(data.get("is_on", False))
+                if user_id in room["info"]:
+                    room["info"][user_id]["camera_on"] = is_on
+                for other_id, other_ws in list(room["conns"].items()):
+                    if other_id == user_id or not other_ws:
+                        continue
+                    try:
+                        await other_ws.send_json({
+                            "type": "user_camera_status",
+                            "user_id": user_id,
+                            "is_on": is_on,
+                        })
+                    except Exception:
+                        pass
+
+            elif msg_type in ("webrtc_offer", "webrtc_answer", "webrtc_ice"):
+                target_id = data.get("target_id")
+                if target_id and target_id in room["conns"]:
+                    payload = {"type": msg_type, "from_id": user_id}
+                    if msg_type in ("webrtc_offer", "webrtc_answer"):
+                        payload["sdp"] = data.get("sdp")
+                    else:
+                        payload["candidate"] = data.get("candidate")
+                    try:
+                        await room["conns"][target_id].send_json(payload)
+                    except Exception:
+                        pass
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        user_name = (room["info"].get(user_id) or {}).get("name", "Someone")
+        room["conns"].pop(user_id, None)
+        room["info"].pop(user_id, None)
+
+        # Pass host role to next participant if host left
+        if room.get("host_id") == user_id:
+            remaining = list(room["conns"].keys())
+            if remaining:
+                new_host_id = remaining[0]
+                room["host_id"] = new_host_id
+                if new_host_id in room["info"]:
+                    room["info"][new_host_id]["is_host"] = True
+                try:
+                    await room["conns"][new_host_id].send_json({
+                        "type": "host_changed",
+                        "new_host_id": new_host_id,
+                    })
+                except Exception:
+                    pass
+            else:
+                room["host_id"] = None
+
+        # Notify remaining participants
+        for uid, ws in list(room["conns"].items()):
+            if ws:
+                try:
+                    await ws.send_json({"type": "user_left", "user_id": user_id, "name": user_name})
+                except Exception:
+                    pass
+
+        if not room["conns"]:
+            _rooms.pop(room_id, None)
+
 
 @app.post("/detect_language")
 async def detect_language_endpoint(text: str):
-    """Detect the language of the given text using lingua (high accuracy, pre-loaded)."""
-    loop = asyncio.get_event_loop()
-    lang = await loop.run_in_executor(_executor, _detector.detect_language_of, text)
-    if lang is None:
-        return {"detected_language": "unknown"}
-    code = lang.iso_code_639_1.name.lower()
-    return {"detected_language": code}
+    """Routes every keystroke through the Language Detection Agent."""
+    detected = language_detection_agent.run(text)
+    return {"detected_language": detected}
 
 
 @app.post("/translate_text")
 async def translate_text(source: str, target: str, text: str):
-    """You are a multi lingual expert.
-    Translate plain text from source language to target language."""
-    result = translation_agent(text, source, target, is_audio=False)
+    result = run_text_pipeline(text, source, target)
     return result
 
 
 @app.post("/translate_audio")
 async def translate_audio(source: str, target: str, file: UploadFile):
-    """Translate spoken audio from source language to target language."""
     filepath = f"temp_{file.filename}"
     with open(filepath, "wb") as f:
         f.write(await file.read())
 
-    result = translation_agent(filepath, source, target, is_audio=True)
+    result = run_audio_pipeline(filepath, source, target)
 
-    # Clean up temp file
     if os.path.exists(filepath):
         os.remove(filepath)
 
     return result
 
 
-@app.websocket("/ws/room")
-async def room_websocket(ws: WebSocket):
-    """
-    Real-time conversation room over WebSocket.
-
-    Message types (client → server, JSON):
-      create_room  {participant_id, name, lang}
-      join_room    {code, participant_id, name, lang}
-      audio_chunk  {data: base64}   ← full recording sent when mic is muted
-      leave_room   {}
-
-    Message types (server → client, JSON):
-      room_created       {code, participants}
-      joined             {code, participants, is_reconnect}
-      join_error         {message}
-      participant_joined {id, name, lang, is_host}
-      participant_left   {id, name}
-      speaker_translation {speaker_id, speaker_name, original, translation, target_lang}
-      error              {message}
-    """
-    await ws.accept()
-
-    current_room_code: str | None = None
-    current_participant_id: str | None = None
-
-    try:
-        while True:
-            data = await ws.receive_text()
-            msg = json.loads(data)
-            msg_type = msg.get("type")
-
-            # ── Create room ──────────────────────────────────────────────────
-            if msg_type == "create_room":
-                participant_id = msg["participant_id"]
-                name = msg["name"]
-                lang = msg["lang"]
-
-                code = room_manager.create_room()
-                participant = Participant(
-                    participant_id=participant_id,
-                    name=name,
-                    lang=lang,
-                    ws=ws,
-                    is_host=True,
-                )
-                room_manager.join_room(code, participant)
-                current_room_code = code
-                current_participant_id = participant_id
-
-                await ws.send_text(json.dumps({
-                    "type": "room_created",
-                    "code": code,
-                    "participants": room_manager.get_room(code).to_participant_list(),
-                }))
-
-            # ── Join room ────────────────────────────────────────────────────
-            elif msg_type == "join_room":
-                code = msg["code"]
-                participant_id = msg["participant_id"]
-                name = msg["name"]
-                lang = msg["lang"]
-
-                participant = Participant(
-                    participant_id=participant_id,
-                    name=name,
-                    lang=lang,
-                    ws=ws,
-                    is_host=False,
-                )
-                success, error, is_reconnect = room_manager.join_room(code, participant)
-
-                if not success:
-                    await ws.send_text(json.dumps({
-                        "type": "join_error",
-                        "message": error,
-                    }))
-                    continue
-
-                current_room_code = code
-                current_participant_id = participant_id
-                room = room_manager.get_room(code)
-
-                await ws.send_text(json.dumps({
-                    "type": "joined",
-                    "code": code,
-                    "participants": room.to_participant_list(),
-                    "is_reconnect": is_reconnect,
-                }))
-
-                if not is_reconnect:
-                    await room_manager.broadcast(code, {
-                        "type": "participant_joined",
-                        "id": participant_id,
-                        "name": name,
-                        "lang": lang,
-                        "is_host": False,
-                    }, exclude_id=participant_id)
-
-            # ── Audio chunk ──────────────────────────────────────────────────
-            elif msg_type == "audio_chunk":
-                if current_room_code and current_participant_id:
-                    room = room_manager.get_room(current_room_code)
-                    if room and current_participant_id in room.participants:
-                        p = room.participants[current_participant_id]
-                        audio_bytes = base64.b64decode(msg["data"])
-                        orchestrator = SpeakerOrchestrator(
-                            speaker_id=current_participant_id,
-                            speaker_name=p.name,
-                            speaker_lang=p.lang,
-                            room_code=current_room_code,
-                            room_manager=room_manager,
-                        )
-                        await orchestrator.process(audio_bytes)
-
-            # ── WebRTC signaling relay ───────────────────────────────────────
-            # Server is a pure relay: it stamps from_id and forwards to target.
-            elif msg_type in ("webrtc_offer", "webrtc_answer", "webrtc_ice"):
-                to_id = msg.get("to_id")
-                if current_room_code and current_participant_id and to_id:
-                    await room_manager.send_to(current_room_code, to_id, {
-                        **msg,
-                        "from_id": current_participant_id,
-                    })
-
-            # ── Leave room ───────────────────────────────────────────────────
-            elif msg_type == "leave_room":
-                if current_room_code and current_participant_id:
-                    p_name = room_manager.leave_room(
-                        current_room_code, current_participant_id
-                    )
-                    await room_manager.broadcast(current_room_code, {
-                        "type": "participant_left",
-                        "id": current_participant_id,
-                        "name": p_name,
-                    })
-                    current_room_code = None
-                    current_participant_id = None
-
-    except WebSocketDisconnect:
-        if current_room_code and current_participant_id:
-            p_name = room_manager.leave_room(current_room_code, current_participant_id)
-            await room_manager.broadcast(current_room_code, {
-                "type": "participant_left",
-                "id": current_participant_id,
-                "name": p_name,
-            })
-    except Exception as e:
-        try:
-            await ws.send_text(json.dumps({"type": "error", "message": str(e)}))
-        except Exception:
-            pass
+# Serve the frontend as static files
+if FRONTEND_DIR.exists():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=False), name="frontend")

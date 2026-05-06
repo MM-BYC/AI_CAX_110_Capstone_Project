@@ -7,7 +7,10 @@
       "Bash(kill 21573)",
       "Bash(kill 22092)",
       "Bash(kill 12754)",
-      "Read(//private/tmp/**)"
+      "Read(//private/tmp/**)",
+      "Bash(kill 1612)",
+      "Bash(kill 48577)",
+      "Bash(xargs kill:*)"
     ]
   }
 }
