@@ -1229,12 +1229,18 @@ async function convStartListening() {
         "  → Site Settings → Microphone → Allow → reload the page."
       );
     } else if (e.error === "service-not-allowed") {
-      // On Safari, "service-not-allowed" almost always means the page is on
-      // HTTP (not HTTPS). Safari requires HTTPS to use speech recognition.
+      // On Safari/iOS, "service-not-allowed" has two causes:
+      // 1. Page is served over plain HTTP (not HTTPS) — Safari blocks STT on HTTP
+      // 2. iOS Dictation is disabled in Settings (Settings → General → Keyboard → Enable Dictation)
       convStopListening();
       const isHttp = window.location.protocol !== "https:";
+      const iosNote = _isIOS && !isHttp
+        ? "iPhone fix:\n" +
+          "  Settings → General → Keyboard → Enable Dictation → ON\n\n"
+        : "";
       alert(
         "Speech recognition service unavailable.\n\n" +
+        iosNote +
         (_isSafari && isHttp
           ? "Safari requires HTTPS to use the microphone.\n\n" +
             "Fix: run  ./make-certs.sh  on the MacBook, then restart\n" +
@@ -1242,8 +1248,7 @@ async function convStartListening() {
             "on your iPhone after trusting the certificate."
           : _isSafari
             ? "Safari routes speech recognition through Apple's servers.\n" +
-              "Check your internet connection and try again.\n\n" +
-              "If the problem persists, try Chrome or Firefox instead."
+              "Check your internet connection and try again."
             : "Check your internet connection and try again.")
       );
     }
@@ -1360,13 +1365,11 @@ function convStopIosMic() {
 }
 
 convMicBtn.addEventListener("click", () => {
-  if (_isIOS) {
-    // Hot mic via Google Cloud STT: unmute = live, mute = stop.
-    _iosMicActive ? convStopIosMic() : convStartIosMic();
-  } else {
-    // Desktop / non-iOS: continuous webkitSpeechRecognition.
-    convIsListening ? convStopListening() : convStartListening();
-  }
+  // Use webkitSpeechRecognition on all platforms including iOS.
+  // The Google Cloud STT path (convStartIosMic) requires server-side
+  // credentials that are rarely configured; SpeechRecognition works on
+  // iOS 14.5+ as long as Siri & Dictation is enabled in Settings.
+  convIsListening ? convStopListening() : convStartListening();
 });
 
 // ── TTS toggle ─────────────────────────────────────────────────────────────
