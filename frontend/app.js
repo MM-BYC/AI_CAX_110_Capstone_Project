@@ -1283,11 +1283,12 @@ function convStopListening() {
 // stream binary frames to /ws/stt/{room}/{user} which pipes them through
 // Google Cloud STT streaming_recognize. Transcripts arrive as speech messages
 // and pass through the normal per-participant translation pipeline.
-let _iosMicStream   = null;
-let _iosAudioCtx    = null;
-let _iosProcessor   = null;
-let _iosSttWs       = null;
-let _iosMicActive   = false;
+let _iosMicStream         = null;
+let _iosAudioCtx          = null;
+let _iosProcessor         = null;
+let _iosSttWs             = null;
+let _iosMicActive         = false;
+let _iosUsingSpeechFallback = false; // true when Google STT unavailable and we fell back
 
 async function convStartIosMic() {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -1324,8 +1325,25 @@ async function convStartIosMic() {
     }));
   };
 
-  _iosSttWs.onerror = () => convStopIosMic();
-  _iosSttWs.onclose = () => { if (_iosMicActive) convStopIosMic(); };
+  // onerror always fires before onclose — don't act here; let onclose decide.
+  _iosSttWs.onerror = () => {};
+  _iosSttWs.onclose = (e) => {
+    if (!_iosMicActive) return;
+    if (e.code === 1011) {
+      // Server closed because Google Cloud STT is not configured.
+      // Silently clean up the iOS pipeline and fall back to SpeechRecognition —
+      // the mic UI already shows "on" so the user sees no disruption.
+      _iosMicActive = false;
+      _iosProcessor?.disconnect();
+      _iosAudioCtx?.close().catch(() => {});
+      _iosMicStream?.getTracks().forEach(t => t.stop());
+      _iosSttWs = null; _iosAudioCtx = null; _iosProcessor = null; _iosMicStream = null;
+      _iosUsingSpeechFallback = true;
+      convStartListening(); // takes over mic UI from here
+      return;
+    }
+    convStopIosMic();
+  };
 
   // Convert Float32 PCM → Int16 and stream to server every ~93 ms (4096 frames).
   _iosProcessor.onaudioprocess = (e) => {
@@ -1365,11 +1383,16 @@ function convStopIosMic() {
 }
 
 convMicBtn.addEventListener("click", () => {
-  // Use webkitSpeechRecognition on all platforms including iOS.
-  // The Google Cloud STT path (convStartIosMic) requires server-side
-  // credentials that are rarely configured; SpeechRecognition works on
-  // iOS 14.5+ as long as Siri & Dictation is enabled in Settings.
-  convIsListening ? convStopListening() : convStartListening();
+  if (_isIOS && !_iosUsingSpeechFallback) {
+    // iOS: prefer Google Cloud STT (high-quality, no Siri dependency).
+    // If the server lacks credentials the onclose handler falls back to
+    // SpeechRecognition automatically and sets _iosUsingSpeechFallback = true,
+    // so subsequent clicks take the else branch below.
+    _iosMicActive ? convStopIosMic() : convStartIosMic();
+  } else {
+    // Desktop, Android, or iOS after Google STT fallback.
+    convIsListening ? convStopListening() : convStartListening();
+  }
 });
 
 // ── TTS toggle ─────────────────────────────────────────────────────────────
@@ -1522,6 +1545,8 @@ function convHandleDisconnect(reason) {
 function convReset() {
   webrtcCloseAll();
   convStopListening();
+  convStopIosMic();
+  _iosUsingSpeechFallback = false;
   convStopCamera();
   convSpeakCancel();
   _ttsUnlocked = false;
