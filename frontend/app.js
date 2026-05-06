@@ -1276,49 +1276,80 @@ function convStopListening() {
   if (!_isSafari) webrtcStopAudio();
 }
 
-// ── iOS mic — MediaRecorder → Groq Whisper (live chunked streaming) ───────
-// Safari ignores the timeslice param in MediaRecorder.start(); we use
-// requestData() on a setInterval instead so ondataavailable fires reliably
-// every IOS_CHUNK_MS ms while unmuted.
-const IOS_CHUNK_MS  = 1500;   // requestData interval (ms)
-const IOS_MIN_BYTES = 1024;   // skip silent/near-empty chunks
+// ── iOS mic — AudioContext → ScriptProcessorNode → Deepgram streaming ─────
+// Raw LINEAR16 PCM is streamed continuously to the backend Deepgram proxy.
+// Deepgram returns speech_final transcripts which the backend injects
+// directly into the translation pipeline — no chunked HTTP calls needed.
 
 let _iosMicStream   = null;
-let _iosRecorder    = null;
-let _iosMimeType    = "";
+let _iosAudioCtx    = null;
+let _iosProcessor   = null;
+let _iosDgWs        = null;
 let _iosMicActive   = false;
-let _iosProcessing  = false;
-let _iosChunkQueue  = [];
-let _iosTimerID     = null;
+let _iosStarting    = false;  // guard against double-tap race
 
 async function convStartIosMic() {
+  if (_iosStarting || _iosMicActive) return;
+  _iosStarting = true;
   try {
     _iosMicStream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
     });
   } catch {
     alert("Microphone access denied.\n\nSettings → Safari → Microphone → Allow, then reload.");
+    _iosStarting = false;
     return;
   }
 
-  _iosChunkQueue = [];
-  _iosMimeType = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg"]
-    .find(t => MediaRecorder.isTypeSupported(t)) || "";
-  _iosRecorder = new MediaRecorder(_iosMicStream, _iosMimeType ? { mimeType: _iosMimeType } : {});
+  // AudioContext — iOS may lock to 44100 Hz; read actual rate and tell Deepgram
+  _iosAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+  await _iosAudioCtx.resume();
+  const actualRate = Math.round(_iosAudioCtx.sampleRate);
 
-  _iosRecorder.ondataavailable = e => {
-    if (e.data.size >= IOS_MIN_BYTES) {
-      _iosChunkQueue.push(e.data);
-      _iosDrainQueue();
+  const lang    = convUsers[convUserId]?.language || "en";
+  const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+  const wsBase  = (API_BASE || location.origin).replace(/^https?:/, wsProto);
+  _iosDgWs = new WebSocket(
+    `${wsBase}/ws/deepgram/${convRoomId}/${convUserId}?language=${lang}&sample_rate=${actualRate}`
+  );
+  _iosDgWs.binaryType = "arraybuffer";
+
+  try {
+    await new Promise((resolve, reject) => {
+      _iosDgWs.onopen  = resolve;
+      _iosDgWs.onerror = () => reject(new Error("WebSocket error"));
+      _iosDgWs.onclose = () => reject(new Error("WebSocket closed"));
+    });
+  } catch (err) {
+    console.error("[iOS mic] Deepgram WS failed to open:", err);
+    alert("Could not connect to transcription service — check your DEEPGRAM_API_KEY on Render.");
+    _iosMicStream?.getTracks().forEach(t => t.stop());
+    _iosMicStream = null;
+    _iosAudioCtx?.close(); _iosAudioCtx = null;
+    _iosStarting = false;
+    return;
+  }
+
+  // Permanent close/error handler now that connection is established
+  _iosDgWs.onclose = _iosDgWs.onerror = () => { if (_iosMicActive) convStopIosMic(); };
+
+  // Float32 mic → Int16 PCM → Deepgram
+  const source = _iosAudioCtx.createMediaStreamSource(_iosMicStream);
+  _iosProcessor = _iosAudioCtx.createScriptProcessor(4096, 1, 1);
+  _iosProcessor.onaudioprocess = e => {
+    if (_iosDgWs?.readyState !== WebSocket.OPEN) return;
+    const f32 = e.inputBuffer.getChannelData(0);
+    const i16 = new Int16Array(f32.length);
+    for (let i = 0; i < f32.length; i++) {
+      i16[i] = Math.max(-32768, Math.min(32767, Math.round(f32[i] * 32767)));
     }
+    _iosDgWs.send(i16.buffer);
   };
-
-  _iosRecorder.start(); // no timeslice — requestData() via timer is reliable on Safari
-  _iosTimerID = setInterval(() => {
-    if (_iosRecorder?.state === "recording") _iosRecorder.requestData();
-  }, IOS_CHUNK_MS);
+  source.connect(_iosProcessor);
+  _iosProcessor.connect(_iosAudioCtx.destination);
 
   _iosMicActive = true;
+  _iosStarting  = false;
   convSetMicUI(true);
   convMicLabel.textContent = "Listening…";
   convWs?.readyState === WebSocket.OPEN &&
@@ -1328,46 +1359,16 @@ async function convStartIosMic() {
 function convStopIosMic() {
   if (!_iosMicActive) return;
   _iosMicActive = false;
-  clearInterval(_iosTimerID);
-  _iosTimerID = null;
-  if (_iosRecorder?.state !== "inactive") _iosRecorder.stop();
+  if (_iosProcessor) { _iosProcessor.disconnect(); _iosProcessor = null; }
+  if (_iosAudioCtx)  { _iosAudioCtx.close();       _iosAudioCtx  = null; }
+  if (_iosDgWs && _iosDgWs.readyState < WebSocket.CLOSING) _iosDgWs.close();
+  _iosDgWs = null;
   _iosMicStream?.getTracks().forEach(t => t.stop());
   _iosMicStream = null;
   convSetMicUI(false);
   convMicLabel.textContent = "Tap to speak";
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "mic_status", is_on: false }));
-}
-
-async function _iosDrainQueue() {
-  if (_iosProcessing || !_iosChunkQueue.length) return;
-  _iosProcessing = true;
-  while (_iosChunkQueue.length) {
-    const chunk = _iosChunkQueue.shift();
-    await _iosTranscribeChunk(new Blob([chunk], { type: _iosMimeType || "audio/mp4" }));
-  }
-  _iosProcessing = false;
-}
-
-async function _iosTranscribeChunk(blob) {
-  try {
-    const ext  = (_iosMimeType || "audio/mp4").includes("mp4") ? "mp4"
-               : (_iosMimeType || "").includes("ogg") ? "ogg" : "webm";
-    const lang = convUsers[convUserId]?.language || "en";
-    const form = new FormData();
-    form.append("file", blob, `speech.${ext}`);
-    const base = API_BASE || "";
-    const resp = await fetch(`${base}/transcribe_audio?source=${lang}`, {
-      method: "POST", body: form,
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const { text } = await resp.json();
-    if (text?.trim() && convWs?.readyState === WebSocket.OPEN) {
-      convWs.send(JSON.stringify({ type: "speech", text: text.trim(), is_final: true }));
-    }
-  } catch (err) {
-    console.error("[iOS mic] transcription failed:", err);
-  }
 }
 
 convMicBtn.addEventListener("click", () => {

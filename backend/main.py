@@ -599,6 +599,87 @@ async def transcribe_audio_only(source: str, file: UploadFile):
     return {"text": result["text"]}
 
 
+@app.websocket("/ws/deepgram/{room_id}/{user_id}")
+async def deepgram_stream(
+    websocket: WebSocket,
+    room_id: str,
+    user_id: str,
+    language: str = "en",
+    sample_rate: int = 16000,
+):
+    """Deepgram Nova-2 streaming STT proxy for iOS clients.
+
+    Binary frames from the browser are raw LINEAR16 PCM at sample_rate Hz.
+    Final transcripts are injected into the per-participant translation pipeline
+    via inject_speech(), identical to the Google STT path.
+    """
+    api_key = os.environ.get("DEEPGRAM_API_KEY", "").strip()
+    if not api_key:
+        await websocket.close(code=1011, reason="DEEPGRAM_API_KEY not configured")
+        return
+
+    await websocket.accept()
+
+    import websockets as _wsl  # local import avoids name clash with FastAPI WebSocket
+
+    dg_url = (
+        "wss://api.deepgram.com/v1/listen"
+        f"?encoding=linear16&sample_rate={sample_rate}&channels=1"
+        f"&model=nova-2-general&language={language}"
+        "&interim_results=false&endpointing=300&smart_format=true"
+    )
+
+    try:
+        async with _wsl.connect(
+            dg_url,
+            additional_headers={"Authorization": f"Token {api_key}"},
+        ) as dg_ws:
+
+            async def relay_audio():
+                """Forward raw PCM frames from client to Deepgram."""
+                try:
+                    while True:
+                        data = await websocket.receive_bytes()
+                        await dg_ws.send(data)
+                except (WebSocketDisconnect, Exception):
+                    pass
+                finally:
+                    await dg_ws.close()
+
+            async def relay_transcripts():
+                """Read Deepgram transcripts and inject into translation pipeline."""
+                try:
+                    async for raw in dg_ws:
+                        payload = json.loads(raw)
+                        alts = payload.get("channel", {}).get("alternatives", [{}])
+                        text = (alts[0].get("transcript", "") if alts else "").strip()
+                        speech_final = payload.get("speech_final", False)
+                        if text and speech_final:
+                            await inject_speech(room_id, user_id, text)
+                except Exception as e:
+                    logger.debug("Deepgram transcript relay ended: %s", e)
+
+            audio_task      = asyncio.ensure_future(relay_audio())
+            transcript_task = asyncio.ensure_future(relay_transcripts())
+            done, pending   = await asyncio.wait(
+                {audio_task, transcript_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for t in pending:
+                t.cancel()
+                try:
+                    await t
+                except (asyncio.CancelledError, Exception):
+                    pass
+
+    except Exception as e:
+        logger.error("Deepgram WS error: %s", e)
+        try:
+            await websocket.close(code=1011, reason=str(e)[:120])
+        except Exception:
+            pass
+
+
 # Serve the frontend as static files
 if FRONTEND_DIR.exists():
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=False), name="frontend")
