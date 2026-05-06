@@ -1158,14 +1158,16 @@ async function convStartListening() {
   }
 
   const myInfo = convUsers[convUserId];
-  if (!myInfo) return;
+  // myInfo may not have arrived yet if clicked immediately after joining —
+  // fall back to "en-US" so the mic still starts rather than silently doing nothing
+  const lang = LANG_LOCALES[myInfo?.language] || "en-US";
 
   convFinalText = "";
   _recognitionRestartCount = 0;
   convRecognition = new SpeechRecognition();
   convRecognition.continuous     = true;
   convRecognition.interimResults = true;
-  convRecognition.lang           = LANG_LOCALES[myInfo.language] || "en-US";
+  convRecognition.lang           = lang;
 
   convRecognition.onresult = e => {
     _recognitionRestartCount = 0; // successful audio — reset the drop counter
@@ -1256,7 +1258,13 @@ async function convStartListening() {
     // transient. onend fires after onerror and will restart automatically.
   };
 
-  convRecognition.start();
+  try {
+    convRecognition.start();
+  } catch (err) {
+    console.error("[mic] SpeechRecognition.start() failed:", err);
+    convRecognition = null;
+    return;
+  }
   convIsListening = true;
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "mic_status", is_on: true }));
@@ -1292,12 +1300,26 @@ async function convStartIosMic() {
   if (_iosStarting || _iosMicActive) return;
   _iosStarting = true;
   try {
+    await _convStartIosMicInner();
+  } catch (err) {
+    console.error("[iOS mic] unexpected error during startup:", err);
+    _iosMicStream?.getTracks().forEach(t => t.stop()); _iosMicStream = null;
+    _iosAudioCtx?.close(); _iosAudioCtx = null;
+    if (_iosDgWs && _iosDgWs.readyState < WebSocket.CLOSING) _iosDgWs.close();
+    _iosDgWs = null;
+    _iosProcessor = null;
+  } finally {
+    _iosStarting = false;  // always reset — never leave the button locked
+  }
+}
+
+async function _convStartIosMicInner() {
+  try {
     _iosMicStream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
     });
   } catch {
     alert("Microphone access denied.\n\nSettings → Safari → Microphone → Allow, then reload.");
-    _iosStarting = false;
     return;
   }
 
@@ -1363,7 +1385,6 @@ async function convStartIosMic() {
   _iosProcessor.connect(_iosAudioCtx.destination);
 
   _iosMicActive = true;
-  _iosStarting  = false;
   convSetMicUI(true);
   convMicLabel.textContent = "Listening…";
   convWs?.readyState === WebSocket.OPEN &&
@@ -1387,7 +1408,12 @@ function convStopIosMic() {
 
 convMicBtn.addEventListener("click", () => {
   if (_isIOS) {
-    _iosMicActive ? convStopIosMic() : convStartIosMic();
+    if (_iosMicActive) {
+      convStopIosMic();
+    } else {
+      _iosStarting = false; // clear any stale lock from a previous failed attempt
+      convStartIosMic();
+    }
   } else {
     convIsListening ? convStopListening() : convStartListening();
   }
