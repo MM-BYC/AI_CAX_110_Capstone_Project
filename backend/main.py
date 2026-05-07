@@ -688,10 +688,8 @@ async def deepgram_stream(
             await websocket.close(code=1011, reason="ASSEMBLYAI_API_KEY not configured on server")
             return
 
-        aai_url = (
-            f"wss://api.assemblyai.com/v2/realtime/ws"
-            f"?sample_rate={sample_rate}&encoding=pcm_s16le"
-        )
+        # AssemblyAI v2 real-time: sample_rate only, no encoding param
+        aai_url = f"wss://api.assemblyai.com/v2/realtime/ws?sample_rate={sample_rate}"
 
         def parse_aai(payload):
             text     = payload.get("text", "").strip()

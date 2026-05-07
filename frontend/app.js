@@ -1313,27 +1313,35 @@ async function convStartIosMic() {
   }
 }
 
+function _micTrace(msg) {
+  console.log(`[mic] ${msg}`);
+  if (convMicLabel) convMicLabel.textContent = msg;
+}
+
 async function _convStartIosMicInner() {
+  _micTrace("Requesting mic…");
   try {
     _iosMicStream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
     });
   } catch {
+    _micTrace("Tap to speak");
     alert("Microphone access denied.\n\nSettings → Safari → Microphone → Allow, then reload.");
     return;
   }
+  _micTrace("Mic granted, building audio context…");
 
-  // AudioContext — iOS may lock to 44100 Hz; read actual rate and tell Deepgram
   _iosAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
   await _iosAudioCtx.resume();
   const actualRate = Math.round(_iosAudioCtx.sampleRate);
+  _micTrace(`AudioContext ready (${actualRate} Hz), connecting to STT…`);
 
   const lang    = convUsers[convUserId]?.language || "en";
   const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
   const wsBase  = (API_BASE || location.origin).replace(/^https?:/, wsProto);
-  _iosDgWs = new WebSocket(
-    `${wsBase}/ws/deepgram/${convRoomId}/${convUserId}?language=${lang}&sample_rate=${actualRate}`
-  );
+  const wsUrl   = `${wsBase}/ws/deepgram/${convRoomId}/${convUserId}?language=${lang}&sample_rate=${actualRate}`;
+  console.log("[mic] WS URL:", wsUrl);
+  _iosDgWs = new WebSocket(wsUrl);
   _iosDgWs.binaryType = "arraybuffer";
 
   // Wait for WS to open (or fail)
@@ -1344,24 +1352,26 @@ async function _convStartIosMicInner() {
   });
 
   if (!opened) {
-    console.error("[iOS mic] Deepgram WS failed to open");
-    alert("Could not connect to transcription service.\n\nMake sure DEEPGRAM_API_KEY is set on Render.");
+    _micTrace("Tap to speak");
+    console.error("[iOS mic] STT WS failed to open");
+    alert("Could not connect to transcription service.\n\nCheck that API keys are set on Render.");
     _iosMicStream?.getTracks().forEach(t => t.stop()); _iosMicStream = null;
     _iosAudioCtx?.close(); _iosAudioCtx = null;
     _iosDgWs = null;
     _iosStarting = false;
     return;
   }
+  _micTrace("STT connected, checking stability…");
 
-  // WS opened — yield one event-loop turn so any immediate server-close
-  // (e.g. missing API key) can fire onclose before we commit to active state
+  // Yield one event-loop turn so any immediate server-close fires onclose first
   let _dgCloseReason = "";
   _iosDgWs.onclose = (e) => { _dgCloseReason = e.reason || ""; _iosDgWs = null; };
   _iosDgWs.onerror = ()  => { _iosDgWs = null; };
   await new Promise(r => setTimeout(r, 50));
 
   if (!_iosDgWs || _iosDgWs.readyState !== WebSocket.OPEN) {
-    console.error("[iOS mic] Deepgram WS closed immediately after open:", _dgCloseReason);
+    _micTrace("Tap to speak");
+    console.error("[iOS mic] STT WS closed immediately:", _dgCloseReason);
     alert("Mic connection failed — server closed immediately.\n\n" +
           (_dgCloseReason ? `Reason: ${_dgCloseReason}` : "Check Render logs for details."));
     _iosMicStream?.getTracks().forEach(t => t.stop()); _iosMicStream = null;
@@ -1369,6 +1379,7 @@ async function _convStartIosMicInner() {
     _iosStarting = false;
     return;
   }
+  _micTrace("STT stable, starting audio stream…");
 
   // Connection is stable — set permanent handlers and start audio pipeline
   _iosDgWs.onclose = _iosDgWs.onerror = () => { if (_iosMicActive) convStopIosMic(); };
