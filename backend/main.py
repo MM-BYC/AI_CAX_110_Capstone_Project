@@ -632,10 +632,19 @@ async def deepgram_stream(
     # extra_headers regardless of the top-level websockets version installed.
     from websockets.legacy.client import connect as _dg_connect  # noqa: E402
 
+    # Nova-2 supports a limited language set; fall back to whisper-large for
+    # everything else (e.g. Tagalog "tl") — whisper supports 100+ languages.
+    _NOVA2_LANGS = {
+        "bg","ca","cs","da","de","el","en","es","et","fi","fr","hi","hr",
+        "hu","id","it","ja","ko","lt","lv","ms","nl","no","pl","pt","ro",
+        "ru","sk","sl","sv","th","tr","uk","vi","zh",
+    }
+    model = "nova-2-general" if language in _NOVA2_LANGS else "whisper-large"
+
     dg_url = (
         "wss://api.deepgram.com/v1/listen"
         f"?encoding=linear16&sample_rate={sample_rate}&channels=1"
-        f"&model=nova-2-general&language={language}"
+        f"&model={model}&language={language}"
         "&interim_results=true&endpointing=300&smart_format=true"
     )
 
