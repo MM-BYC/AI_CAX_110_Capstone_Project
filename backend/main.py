@@ -146,10 +146,18 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
         raw = await asyncio.wait_for(websocket.receive_text(), timeout=15)
         data = json.loads(raw)
         if data.get("type") != "join":
-            await websocket.close()
+            try:
+                await websocket.close()
+            except Exception:
+                pass
             return
+    except WebSocketDisconnect:
+        return  # client already gone — nothing to close
     except (asyncio.TimeoutError, Exception):
-        await websocket.close()
+        try:
+            await websocket.close()
+        except Exception:
+            pass
         return
 
     user_id = _gen_user_id()
