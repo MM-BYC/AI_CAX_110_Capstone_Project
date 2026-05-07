@@ -607,81 +607,33 @@ async def transcribe_audio_only(source: str, file: UploadFile):
     return {"text": result["text"]}
 
 
-@app.websocket("/ws/deepgram/{room_id}/{user_id}")
-async def deepgram_stream(
-    websocket: WebSocket,
-    room_id: str,
-    user_id: str,
-    language: str = "en",
-    sample_rate: int = 16000,
-):
-    """Deepgram Nova-2 streaming STT proxy for iOS clients.
-
-    Binary frames from the browser are raw LINEAR16 PCM at sample_rate Hz.
-    Final transcripts are injected into the per-participant translation pipeline
-    via inject_speech(), identical to the Google STT path.
-    """
-    await websocket.accept()
-
-    api_key = os.environ.get("DEEPGRAM_API_KEY", "").strip()
-    if not api_key:
-        await websocket.close(code=1011, reason="DEEPGRAM_API_KEY not configured on server")
-        return
-
-    # Use the legacy websockets client explicitly — its parameter is always
-    # extra_headers regardless of the top-level websockets version installed.
-    from websockets.legacy.client import connect as _dg_connect  # noqa: E402
-
-    # Nova-2 supports a fixed language set. For unsupported languages (e.g.
-    # Tagalog "tl"), omit the language param and use detect_language=true so
-    # Nova-2 auto-detects rather than returning HTTP 400/405.
-    # Note: Deepgram streaming does NOT support Whisper models (batch only).
-    _NOVA2_LANGS = {
-        "bg","ca","cs","da","de","el","en","es","et","fi","fr","hi","hr",
-        "hu","id","it","ja","ko","lt","lv","ms","nl","no","pl","pt","ro",
-        "ru","sk","sl","sv","th","tr","uk","vi","zh",
-    }
-    if language in _NOVA2_LANGS:
-        lang_param = f"&language={language}"
-    else:
-        lang_param = "&detect_language=true"
-
-    dg_url = (
-        "wss://api.deepgram.com/v1/listen"
-        f"?encoding=linear16&sample_rate={sample_rate}&channels=1"
-        f"&model=nova-2-general{lang_param}"
-        "&interim_results=true&endpointing=300&smart_format=true"
-    )
+async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
+                    room_id: str, user_id: str, parse_transcript):
+    """Generic PCM-relay helper: forwards audio to an STT WebSocket and injects
+    final transcripts. parse_transcript(payload) must return (text, is_final)."""
+    from websockets.legacy.client import connect as _ws_connect
 
     try:
-        async with _dg_connect(
-            dg_url,
-            extra_headers={"Authorization": f"Token {api_key}"},
-        ) as dg_ws:
+        async with _ws_connect(stt_url, extra_headers=stt_headers) as stt_ws:
 
             async def relay_audio():
-                """Forward raw PCM frames from client to Deepgram."""
                 try:
                     while True:
                         data = await websocket.receive_bytes()
-                        await dg_ws.send(data)
+                        await stt_ws.send(data)
                 except (WebSocketDisconnect, Exception):
                     pass
                 finally:
-                    await dg_ws.close()
+                    await stt_ws.close()
 
             async def relay_transcripts():
-                """Read Deepgram transcripts and inject into translation pipeline."""
                 try:
-                    async for raw in dg_ws:
-                        payload = json.loads(raw)
-                        alts = payload.get("channel", {}).get("alternatives", [{}])
-                        text = (alts[0].get("transcript", "") if alts else "").strip()
-                        speech_final = payload.get("speech_final", False)
-                        if text and speech_final:
+                    async for raw in stt_ws:
+                        text, is_final = parse_transcript(json.loads(raw))
+                        if text and is_final:
                             await inject_speech(room_id, user_id, text)
                 except Exception as e:
-                    logger.debug("Deepgram transcript relay ended: %s", e)
+                    logger.debug("STT transcript relay ended: %s", e)
 
             audio_task      = asyncio.ensure_future(relay_audio())
             transcript_task = asyncio.ensure_future(relay_transcripts())
@@ -697,11 +649,83 @@ async def deepgram_stream(
                     pass
 
     except Exception as e:
-        logger.error("Deepgram WS error: %s", e)
+        logger.error("STT WS error: %s", e)
         try:
             await websocket.close(code=1011, reason=str(e)[:120])
         except Exception:
             pass
+
+
+# Languages that use AssemblyAI (supports Tagalog and other langs Deepgram misses)
+_AAI_LANGS = {"tl"}
+
+# Languages supported by Deepgram Nova-2 with explicit language code
+_NOVA2_LANGS = {
+    "bg","ca","cs","da","de","el","en","es","et","fi","fr","hi","hr",
+    "hu","id","it","ja","ko","lt","lv","ms","nl","no","pl","pt","ro",
+    "ru","sk","sl","sv","th","tr","uk","vi","zh",
+}
+
+
+@app.websocket("/ws/deepgram/{room_id}/{user_id}")
+async def deepgram_stream(
+    websocket: WebSocket,
+    room_id: str,
+    user_id: str,
+    language: str = "en",
+    sample_rate: int = 16000,
+):
+    """Streaming STT proxy — routes to AssemblyAI (Tagalog) or Deepgram (all others).
+
+    Binary frames from the browser are raw LINEAR16 PCM at sample_rate Hz.
+    """
+    await websocket.accept()
+
+    # ── AssemblyAI path (Tagalog and other languages Deepgram doesn't support) ──
+    if language in _AAI_LANGS:
+        aai_key = os.environ.get("ASSEMBLYAI_API_KEY", "").strip()
+        if not aai_key:
+            await websocket.close(code=1011, reason="ASSEMBLYAI_API_KEY not configured on server")
+            return
+
+        aai_url = (
+            f"wss://api.assemblyai.com/v2/realtime/ws"
+            f"?sample_rate={sample_rate}&encoding=pcm_s16le"
+        )
+
+        def parse_aai(payload):
+            text     = payload.get("text", "").strip()
+            is_final = payload.get("message_type") == "FinalTranscript"
+            return text, is_final
+
+        await _ws_relay(websocket, aai_url,
+                        {"Authorization": aai_key},
+                        room_id, user_id, parse_aai)
+        return
+
+    # ── Deepgram path (all other languages) ────────────────────────────────────
+    dg_key = os.environ.get("DEEPGRAM_API_KEY", "").strip()
+    if not dg_key:
+        await websocket.close(code=1011, reason="DEEPGRAM_API_KEY not configured on server")
+        return
+
+    lang_param = f"&language={language}" if language in _NOVA2_LANGS else "&detect_language=true"
+    dg_url = (
+        "wss://api.deepgram.com/v1/listen"
+        f"?encoding=linear16&sample_rate={sample_rate}&channels=1"
+        f"&model=nova-2-general{lang_param}"
+        "&interim_results=true&endpointing=300&smart_format=true"
+    )
+
+    def parse_dg(payload):
+        alts     = payload.get("channel", {}).get("alternatives", [{}])
+        text     = (alts[0].get("transcript", "") if alts else "").strip()
+        is_final = payload.get("speech_final", False)
+        return text, is_final
+
+    await _ws_relay(websocket, dg_url,
+                    {"Authorization": f"Token {dg_key}"},
+                    room_id, user_id, parse_dg)
 
 
 # Serve the frontend as static files
