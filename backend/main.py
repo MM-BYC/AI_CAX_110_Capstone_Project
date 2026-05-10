@@ -699,6 +699,7 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
         SESSION_SECS = 270  # restart before Google's 5-min hard limit
         consecutive_errors = 0
         last_emit = {"text": "", "ts": 0.0}
+        session_idx = [0]
 
         while not stop_evt.is_set():
             first_chunk_logged = False
@@ -722,12 +723,19 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                     except _queue.Empty:
                         continue
 
+            session_idx_local = session_idx[0] = session_idx[0] + 1
+            logger.info("STT session %d starting (room=%s user=%s)",
+                        session_idx_local, room_id, user_id)
             try:
                 first_resp_logged = False
                 for resp in client.streaming_recognize(config=streaming_cfg, requests=_gen()):
                     if not first_resp_logged:
-                        logger.info("STT first Google response (room=%s user=%s)", room_id, user_id)
+                        logger.info("STT session %d first Google response", session_idx_local)
                         first_resp_logged = True
+                    # Log speech events (END_OF_SINGLE_UTTERANCE, etc.)
+                    sev = getattr(resp, "speech_event_type", None)
+                    if sev:
+                        logger.info("STT session %d speech_event=%s", session_idx_local, sev)
                     for result in resp.results:
                         if not result.is_final:
                             continue
@@ -737,14 +745,12 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                         transcript = (alt.transcript or "").strip()
                         confidence = float(getattr(alt, "confidence", 0.0) or 0.0)
                         if _is_likely_hallucination(transcript):
-                            logger.info("STT dropped hallucination: %r", transcript[:80])
+                            logger.info("STT dropped hallucination (sess=%d): %r",
+                                        session_idx_local, transcript[:80])
                             continue
-                        # Drop low-confidence transcripts (Google STT hallucinations on noise).
-                        # confidence==0 means Google didn't score it — keep those (most short
-                        # streaming results have no score).
                         if confidence and confidence < 0.6:
-                            logger.info("STT dropped low-confidence %.2f: %r",
-                                        confidence, transcript[:80])
+                            logger.info("STT dropped low-confidence (sess=%d) %.2f: %r",
+                                        session_idx_local, confidence, transcript[:80])
                             continue
                         # Suppress identical repeats within 5s — Google sometimes
                         # emits the same final twice (e.g., on session restart/flush).
@@ -755,11 +761,12 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                             continue
                         last_emit["text"] = norm
                         last_emit["ts"] = now_ts
-                        logger.info("STT final: room=%s user=%s conf=%.2f text=%r",
-                                    room_id, user_id, confidence, transcript[:100])
+                        logger.info("STT final (sess=%d): room=%s user=%s conf=%.2f text=%r",
+                                    session_idx_local, room_id, user_id, confidence, transcript[:100])
                         asyncio.run_coroutine_threadsafe(
                             inject_speech(room_id, user_id, transcript), loop
                         )
+                logger.info("STT session %d ended cleanly", session_idx_local)
                 consecutive_errors = 0
             except Exception as e:
                 if stop_evt.is_set():
