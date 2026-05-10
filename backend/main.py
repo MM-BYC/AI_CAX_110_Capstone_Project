@@ -703,12 +703,19 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
 
         while not stop_evt.is_set():
             first_chunk_logged = False
-            session_done = [False]  # list so generator's closure can read updates
+            session_done = [False]   # list so generator's closure can read updates
+            speech_event_ts = [0.0]  # set when END_OF_SINGLE_UTTERANCE fires
 
             def _gen():
                 nonlocal first_chunk_logged
                 deadline = time.monotonic() + SESSION_SECS
                 while not stop_evt.is_set() and not session_done[0]:
+                    # Safety: if Google sent END_OF_SINGLE_UTTERANCE but never
+                    # followed it with a final transcript, end the session so
+                    # the outer loop can spin up a fresh recognizer instead of
+                    # hanging indefinitely on stale audio.
+                    if speech_event_ts[0] and time.monotonic() - speech_event_ts[0] > 1.5:
+                        return
                     left = deadline - time.monotonic()
                     if left <= 0:
                         return
@@ -736,13 +743,8 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                     sev = getattr(resp, "speech_event_type", None)
                     if sev:
                         logger.info("STT session %d speech_event=%s", session_idx_local, sev)
-                    # Google sometimes sends END_OF_SINGLE_UTTERANCE without
-                    # an accompanying is_final AND without closing the stream
-                    # (seen on the 5th utterance of a session). Treat any
-                    # non-zero speech event as a hard end-of-session signal so
-                    # the outer loop spins up a fresh recognizer.
-                    if sev:
-                        session_done[0] = True
+                        if not speech_event_ts[0]:
+                            speech_event_ts[0] = time.monotonic()
                     for result in resp.results:
                         if not result.is_final:
                             continue
