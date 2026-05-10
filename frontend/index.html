@@ -13,6 +13,9 @@
     <div class="container">
 
       <header>
+        <button type="button" class="hamburger-btn" id="hamburgerBtn" aria-label="Open menu" aria-expanded="false">
+          <i data-lucide="menu"></i>
+        </button>
         <div class="logo">
           <i data-lucide="languages"></i>
           <h1>AI Translate</h1>
@@ -22,8 +25,8 @@
       </header>
 
       <main>
-        <!-- Tab menu -->
-        <div class="tab-menu-wrap">
+        <!-- Tab menu (becomes hamburger dropdown on mobile) -->
+        <div class="tab-menu-wrap" id="tabMenuWrap">
         <div class="tab-menu">
           <button type="button" class="tab-btn active" id="tabConv">
             <i data-lucide="users"></i>
