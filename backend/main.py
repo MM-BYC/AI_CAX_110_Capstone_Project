@@ -623,17 +623,24 @@ async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
 
     audio_q: asyncio.Queue = asyncio.Queue(maxsize=200)
     browser_closed = asyncio.Event()
+    rx_bytes = {"total": 0, "frames": 0}
 
     async def browser_reader():
         try:
             while True:
                 data = await websocket.receive_bytes()
+                rx_bytes["total"] += len(data)
+                rx_bytes["frames"] += 1
+                if rx_bytes["frames"] in (1, 5, 25, 100) or rx_bytes["frames"] % 250 == 0:
+                    logger.info("browser_reader rx: frames=%d total=%d bytes (room=%s user=%s)",
+                                rx_bytes["frames"], rx_bytes["total"], room_id, user_id)
                 try:
                     audio_q.put_nowait(data)
                 except asyncio.QueueFull:
                     pass  # drop frame — STT is reconnecting
-        except (WebSocketDisconnect, Exception):
-            pass
+        except (WebSocketDisconnect, Exception) as e:
+            logger.info("browser_reader ended: rx_frames=%d total=%d err=%s",
+                        rx_bytes["frames"], rx_bytes["total"], type(e).__name__)
         finally:
             browser_closed.set()
 
@@ -651,13 +658,19 @@ async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
                                 stt_url.split("?")[0], room_id, user_id)
 
                     async def stt_sender():
+                        sent = 0
                         while not browser_closed.is_set():
                             try:
                                 data = await asyncio.wait_for(audio_q.get(), timeout=0.5)
                                 await stt_ws.send(data)
+                                sent += 1
+                                if sent in (1, 25, 100) or sent % 250 == 0:
+                                    logger.info("stt_sender forwarded: %d frames (room=%s user=%s)",
+                                                sent, room_id, user_id)
                             except asyncio.TimeoutError:
                                 continue
-                            except Exception:
+                            except Exception as e:
+                                logger.info("stt_sender ended: sent=%d err=%s", sent, type(e).__name__)
                                 break
 
                     async def relay_transcripts():
