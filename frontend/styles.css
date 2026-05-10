@@ -31,7 +31,7 @@ header {
 
 /* ── Hamburger ── */
 .hamburger-btn {
-  display: none; /* desktop hides it */
+  display: inline-flex; /* visible on every viewport */
   position: absolute;
   top: 0;
   left: 0;
@@ -99,19 +99,22 @@ header h1 {
 
 /* ── Tab menu ── */
 .tab-menu-wrap {
-  display: flex;
-  justify-content: center;
+  display: none;            /* hidden by default — opened by hamburger */
+  justify-content: flex-start;
   margin-bottom: 1.5rem;
 }
+.tab-menu-wrap.open { display: flex; }
 
 .tab-menu {
   display: flex;
-  gap: 0.35rem;
-  background: #9acd32;
+  flex-direction: column;   /* dropdown layout — same on desktop and mobile */
+  gap: 0.25rem;
+  background: #ffffff;
   border: 1px solid #d1d5db;
   border-radius: 12px;
-  padding: 0.35rem;
-  width: fit-content;
+  padding: 0.4rem;
+  width: 220px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .tab-btn {
@@ -124,11 +127,13 @@ header h1 {
   color: #6b7280;
   cursor: pointer;
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   font-weight: 500;
-  padding: 0.5rem 1rem;
+  padding: 0.6rem 0.85rem;
   transition: background 0.15s, color 0.15s;
   white-space: nowrap;
+  width: 100%;
+  justify-content: flex-start;
 }
 
 .tab-btn svg {
