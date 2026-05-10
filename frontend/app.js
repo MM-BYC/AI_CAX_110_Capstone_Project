@@ -2037,12 +2037,14 @@ function rtcShowRemoteVideo(userId, track) {
 
   _bind();
 
-  // When the sender does replaceTrack(null) the track mutes; when they
-  // replaceTrack(newTrack) it unmutes. Re-bind on unmute so the receiver's
-  // <video> element resumes playing instead of staying on a frozen frame.
+  // Zoom-style: when the broadcaster turns camera OFF (replaceTrack(null)
+  // mutes the track), participants see the initials placeholder. When the
+  // broadcaster turns camera ON again (replaceTrack(newTrack) unmutes),
+  // the live video replaces the placeholder.
   track.onunmute = _bind;
   track.onmute = () => {
-    // Track is paused upstream — leave the last frame visible (no action).
+    vid.style.display = "none";
+    if (ph) ph.style.display = "";
   };
 }
 
