@@ -2024,14 +2024,26 @@ function rtcShowRemoteVideo(userId, track) {
   const vid = document.getElementById(`conv-card-vid-${userId}`);
   const ph  = document.getElementById(`conv-card-ph-${userId}`);
   if (!vid) return;
-  if (!vid.srcObject) {
+
+  const _bind = () => {
+    // Always re-create the MediaStream so the video element gets a fresh
+    // decode pipeline. Safari/iOS otherwise leaves the element in a paused
+    // state after the sender pauses (replaceTrack(null)) and resumes.
     vid.srcObject = new MediaStream([track]);
-  } else if (!vid.srcObject.getVideoTracks().length) {
-    vid.srcObject.addTrack(track);
-  }
-  vid.style.display = "block";
-  if (ph) ph.style.display = "none";
-  vid.play().catch(() => {});
+    vid.style.display = "block";
+    if (ph) ph.style.display = "none";
+    vid.play().catch(() => {});
+  };
+
+  _bind();
+
+  // When the sender does replaceTrack(null) the track mutes; when they
+  // replaceTrack(newTrack) it unmutes. Re-bind on unmute so the receiver's
+  // <video> element resumes playing instead of staying on a frozen frame.
+  track.onunmute = _bind;
+  track.onmute = () => {
+    // Track is paused upstream — leave the last frame visible (no action).
+  };
 }
 
 function convUpdateCaption(userId, text, isFinal) {
