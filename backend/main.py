@@ -682,42 +682,22 @@ async def deepgram_stream(
     await websocket.accept()
 
     # ── AssemblyAI path (Tagalog and other languages Deepgram doesn't support) ──
+    # v3 streaming API: API key goes directly in the Authorization header —
+    # no temp-token REST round-trip needed (old /v2/realtime/token is deprecated).
     if language in _AAI_LANGS:
         aai_key = os.environ.get("ASSEMBLYAI_API_KEY", "").strip()
         if not aai_key:
             await websocket.close(code=1011, reason="ASSEMBLYAI_API_KEY not configured on server")
             return
 
-        # AssemblyAI real-time requires a short-lived token fetched via REST first.
-        # Using the API key directly in the header returns 404 (security by obscurity).
-        import requests as _req
-        try:
-            token_resp = await asyncio.to_thread(
-                lambda: _req.post(
-                    "https://api.assemblyai.com/v2/realtime/token",
-                    json={"expires_in": 480},
-                    headers={"authorization": aai_key},
-                    timeout=10,
-                )
-            )
-            token_resp.raise_for_status()
-            temp_token = token_resp.json()["token"]
-        except Exception as e:
-            logger.error("AssemblyAI token fetch failed: %s", e)
-            await websocket.close(code=1011, reason=f"AssemblyAI token error: {e}"[:120])
-            return
-
-        aai_url = (
-            f"wss://api.assemblyai.com/v2/realtime/ws"
-            f"?sample_rate={sample_rate}&token={temp_token}"
-        )
+        aai_url = f"wss://streaming.assemblyai.com/v3/ws?sample_rate={sample_rate}"
 
         def parse_aai(payload):
             text     = payload.get("text", "").strip()
             is_final = payload.get("message_type") == "FinalTranscript"
             return text, is_final
 
-        await _ws_relay(websocket, aai_url, {}, room_id, user_id, parse_aai)
+        await _ws_relay(websocket, aai_url, {"Authorization": aai_key}, room_id, user_id, parse_aai)
         return
 
     # ── Deepgram path (all other languages) ────────────────────────────────────

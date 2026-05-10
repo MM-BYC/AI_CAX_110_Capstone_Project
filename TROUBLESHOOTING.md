@@ -79,9 +79,15 @@ except Exception:
 
 ### Bug: HTTP 404 on temp-token endpoint
 **Symptom:** `POST https://api.assemblyai.com/v2/realtime/token` returns 404.
-**Root cause:** AssemblyAI real-time API requires a short-lived token fetched via REST first. Passing the API key directly in the WebSocket header returns 404 (security enforcement).
-**Fix:** Fetch the token via REST, then use `?token=<temp_token>` in the WebSocket URL.
-**Where fixed:** `backend/main.py` lines 694–713
+**Root cause:** AssemblyAI deprecated their entire `/v2/realtime/` API including the token endpoint. The old workaround (fetch temp token via REST, embed in WebSocket URL) no longer works.
+**Fix:** Upgrade to AssemblyAI v3 streaming. Pass the API key directly in the `Authorization` header — no temp token needed:
+
+```python
+aai_url = f"wss://streaming.assemblyai.com/v3/ws?sample_rate={sample_rate}"
+await _ws_relay(websocket, aai_url, {"Authorization": aai_key}, ...)
+```
+
+**Where fixed:** `backend/main.py` AssemblyAI block (~line 684)
 
 ---
 
