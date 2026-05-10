@@ -661,6 +661,8 @@ async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
                                 break
 
                     async def relay_transcripts():
+                        last_text = ""
+                        last_time = 0.0
                         try:
                             async for raw in stt_ws:
                                 payload = json.loads(raw)
@@ -668,6 +670,12 @@ async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
                                             payload.get("type"), str(payload.get("text", ""))[:60])
                                 text, is_final = parse_transcript(payload)
                                 if text and is_final:
+                                    now = asyncio.get_event_loop().time()
+                                    if text == last_text and now - last_time < 3.0:
+                                        logger.info("STT dedup skipped: %r", text[:40])
+                                        continue
+                                    last_text = text
+                                    last_time = now
                                     await inject_speech(room_id, user_id, text)
                         except Exception as e:
                             logger.info("STT transcript relay ended: %s", e)
@@ -781,7 +789,7 @@ async def deepgram_stream(
         "wss://api.deepgram.com/v1/listen"
         f"?encoding=linear16&sample_rate={sample_rate}&channels=1"
         f"&model=nova-2-general{lang_param}"
-        "&interim_results=true&endpointing=300&smart_format=true"
+        "&interim_results=true&endpointing=700&smart_format=true"
     )
 
     def parse_dg(payload):
