@@ -536,7 +536,6 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
             sample_rate_hertz=sample_rate,
             language_code=lang_code,
             enable_automatic_punctuation=True,
-            model="latest_long",
         )
         streaming_cfg = _google_speech.StreamingRecognitionConfig(
             config=stt_cfg, interim_results=False,
