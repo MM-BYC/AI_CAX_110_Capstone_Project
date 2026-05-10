@@ -702,13 +702,16 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
             cfg_kwargs["model"] = "latest_long"
             cfg_kwargs["use_enhanced"] = True
         stt_cfg = _google_speech.RecognitionConfig(**cfg_kwargs)
-        # Zoom-style continuous streaming: keep one Google session open for
-        # the full mic-on duration. Google emits is_final at every natural
-        # utterance boundary while the stream stays alive — no per-utterance
-        # restart, no session_done dance. The 270 s deadline below restarts
-        # the stream before Google's 5-minute hard limit kicks in.
+        # single_utterance=True is required for fast per-pause finalization.
+        # Without it, Google holds all speech in one giant transcript until a
+        # very long silence — making subsequent utterances appear "not picked
+        # up" until the speaker mutes. With single_utterance=True the inner
+        # for-loop ends on each natural pause; the outer while-loop spins up
+        # a fresh session so streaming continues through the whole mic-on
+        # period. The 270 s deadline below caps a single session length to
+        # stay under Google's 5-min hard limit.
         streaming_cfg = _google_speech.StreamingRecognitionConfig(
-            config=stt_cfg, interim_results=False,
+            config=stt_cfg, interim_results=False, single_utterance=True,
         )
         SESSION_SECS = 270  # restart before Google's 5-min hard limit
         consecutive_errors = 0
@@ -717,11 +720,18 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
 
         while not stop_evt.is_set():
             first_chunk_logged = False
+            speech_event_ts = [0.0]  # set when END_OF_SINGLE_UTTERANCE fires
 
             def _gen():
                 nonlocal first_chunk_logged
                 deadline = time.monotonic() + SESSION_SECS
                 while not stop_evt.is_set():
+                    # Safety: if Google sent END_OF_SINGLE_UTTERANCE but never
+                    # followed it with a final transcript, end the session so
+                    # the outer loop spins up a fresh recognizer instead of
+                    # hanging on stale audio.
+                    if speech_event_ts[0] and time.monotonic() - speech_event_ts[0] > 1.5:
+                        return
                     left = deadline - time.monotonic()
                     if left <= 0:
                         return
@@ -746,6 +756,11 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                     if not first_resp_logged:
                         logger.info("STT session %d first Google response", session_idx_local)
                         first_resp_logged = True
+                    sev = getattr(resp, "speech_event_type", None)
+                    if sev:
+                        logger.info("STT session %d speech_event=%s", session_idx_local, sev)
+                        if not speech_event_ts[0]:
+                            speech_event_ts[0] = time.monotonic()
                     for result in resp.results:
                         if not result.is_final:
                             continue
