@@ -147,6 +147,22 @@ except Exception:
 
 ---
 
+### Bug: HTTP 400 using `detect_language=true` on Deepgram WebSocket
+
+**Symptom:** Deepgram rejects the WebSocket handshake with HTTP 400 for any language not in `_NOVA2_LANGS` (e.g., `tl`).
+
+**Root cause:** `detect_language=true` is a pre-recorded REST API parameter — it is **not** valid for the WebSocket streaming endpoint (`wss://api.deepgram.com/v1/listen`). Sending it causes an immediate 400.
+
+**Fix:** Omit the `language` param entirely for unsupported codes. Nova-2 is a multilingual model and will attempt transcription without an explicit language hint.
+
+```python
+lang_param = f"&language={language}" if language in _NOVA2_LANGS else ""
+```
+
+**Where fixed:** `backend/main.py` Deepgram URL construction inside `deepgram_stream`.
+
+---
+
 ## Render Deployment
 
 ### Bug: Build fails with "Read-only file system"

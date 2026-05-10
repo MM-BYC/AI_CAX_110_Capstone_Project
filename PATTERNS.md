@@ -81,7 +81,7 @@ Never duplicate the audio-relay + transcript-inject logic — extend `_ws_relay`
 When adding a new language code, update all three places in sequence:
 
 1. `_AAI_LANGS` set in `main.py` line 660 — if AssemblyAI handles it
-2. `_NOVA2_LANGS` set in `main.py` lines 663–667 — if Deepgram supports it natively
+2. `_NOVA2_LANGS` set in `main.py` lines 663–667 — if Deepgram supports it natively (if not in this set, language param is omitted and Nova-2 handles it as multilingual)
 3. `_SUPPORTED` dict in `language_detection_agent.py` lines 5–22 — so lingua can detect it
 4. `LANG_NAMES` dict in `translation_agent.py` and `quality_review_agent.py` — for LLM prompts
 5. `_GOOGLE_LANG` dict in `main.py` lines 53–58 — for Google Cloud STT BCP-47 mapping

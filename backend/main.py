@@ -774,7 +774,9 @@ async def deepgram_stream(
         await websocket.close(code=1011, reason="DEEPGRAM_API_KEY not configured on server")
         return
 
-    lang_param = f"&language={language}" if language in _NOVA2_LANGS else "&detect_language=true"
+    # detect_language is not valid for WebSocket streaming (only pre-recorded REST API).
+    # For unsupported codes like tl, omit the language param — Nova-2 is multilingual.
+    lang_param = f"&language={language}" if language in _NOVA2_LANGS else ""
     dg_url = (
         "wss://api.deepgram.com/v1/listen"
         f"?encoding=linear16&sample_rate={sample_rate}&channels=1"
