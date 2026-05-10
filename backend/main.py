@@ -542,6 +542,7 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
             config=stt_cfg, interim_results=False,
         )
         SESSION_SECS = 270  # restart before Google's 5-min hard limit
+        consecutive_errors = 0
 
         while not stop_evt.is_set():
             def _gen():
@@ -560,7 +561,7 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                         continue
 
             try:
-                for resp in client.streaming_recognize(_gen()):
+                for resp in client.streaming_recognize(requests=_gen()):
                     for result in resp.results:
                         if not result.is_final:
                             continue
@@ -570,10 +571,19 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                         asyncio.run_coroutine_threadsafe(
                             inject_speech(room_id, user_id, transcript), loop
                         )
+                consecutive_errors = 0
             except Exception as e:
                 if stop_evt.is_set():
                     return
-                logger.warning("STT session reset (%s), restarting", type(e).__name__)
+                consecutive_errors += 1
+                logger.warning(
+                    "STT session reset (%s: %s) [%d], restarting",
+                    type(e).__name__, str(e)[:200], consecutive_errors,
+                )
+                if consecutive_errors >= 5:
+                    logger.error("STT giving up after %d consecutive errors", consecutive_errors)
+                    return
+                time.sleep(min(2.0, 0.2 * consecutive_errors))
 
     threading.Thread(target=run_stt, daemon=True).start()
 
