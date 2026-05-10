@@ -546,7 +546,6 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
 
         while not stop_evt.is_set():
             def _gen():
-                yield _google_speech.StreamingRecognizeRequest(streaming_config=streaming_cfg)
                 deadline = time.monotonic() + SESSION_SECS
                 while not stop_evt.is_set():
                     left = deadline - time.monotonic()
@@ -561,7 +560,7 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                         continue
 
             try:
-                for resp in client.streaming_recognize(requests=_gen()):
+                for resp in client.streaming_recognize(config=streaming_cfg, requests=_gen()):
                     for result in resp.results:
                         if not result.is_final:
                             continue
