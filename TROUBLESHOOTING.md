@@ -135,6 +135,18 @@ except Exception:
 
 ---
 
+### Bug: AssemblyAI closes every connection with 3006
+
+**Symptom:** `STT msg type=Error text=''` followed by `received 3006 (registered) See Error message for details` immediately after every connect. Infinite reconnect loop, no transcripts.
+
+**Root cause:** WebSocket close code 3006 = "Not Authorized". The `ASSEMBLYAI_API_KEY` is invalid, expired, or the account does not have real-time streaming access (paid feature).
+
+**Fix:** Set `_AAI_LANGS = set()` in `main.py`. All languages including Tagalog route to Deepgram with `detect_language=true`. Deepgram auto-detects the language from audio — no explicit code needed.
+
+**Where fixed:** `backend/main.py` `_AAI_LANGS` definition.
+
+---
+
 ## Render Deployment
 
 ### Bug: Build fails with "Read-only file system"

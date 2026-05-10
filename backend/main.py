@@ -717,8 +717,9 @@ async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
             pass
 
 
-# Languages that use AssemblyAI (supports Tagalog and other langs Deepgram misses)
-_AAI_LANGS = {"tl"}
+# AssemblyAI disabled — 3006 (not authorized) on every connect.
+# tl and all other langs now use Deepgram detect_language=true.
+_AAI_LANGS: set = set()
 
 # Languages supported by Deepgram Nova-2 with explicit language code
 _NOVA2_LANGS = {
