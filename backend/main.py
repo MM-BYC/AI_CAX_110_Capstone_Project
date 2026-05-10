@@ -624,6 +624,7 @@ async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
     audio_q: asyncio.Queue = asyncio.Queue(maxsize=200)
     browser_closed = asyncio.Event()
     rx_bytes = {"total": 0, "frames": 0}
+    relay_state = {"last_interim": "", "last_injected": ""}
 
     async def browser_reader():
         try:
@@ -674,9 +675,7 @@ async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
                                 break
 
                     async def relay_transcripts():
-                        last_text = ""
                         last_time = 0.0
-                        last_interim = ""  # most recent non-empty interim transcript
                         try:
                             async for raw in stt_ws:
                                 payload = json.loads(raw)
@@ -689,16 +688,17 @@ async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
                                 # can't fully transcribe (e.g. tl), the final event arrives empty
                                 # and the interim guess is the best we have.
                                 if text and not is_final:
-                                    last_interim = text
+                                    relay_state["last_interim"] = text
                                 if is_final or sf:
-                                    inject_text = text or last_interim
-                                    last_interim = ""
+                                    inject_text = text or relay_state["last_interim"]
+                                    relay_state["last_interim"] = ""
                                     if inject_text:
                                         now = asyncio.get_event_loop().time()
-                                        if inject_text == last_text and now - last_time < 3.0:
+                                        if (inject_text == relay_state["last_injected"]
+                                                and now - last_time < 3.0):
                                             logger.info("STT dedup skipped: %r", inject_text[:40])
                                             continue
-                                        last_text = inject_text
+                                        relay_state["last_injected"] = inject_text
                                         last_time = now
                                         await inject_speech(room_id, user_id, inject_text)
                         except Exception as e:
@@ -758,6 +758,16 @@ async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
             await reader_task
         except (asyncio.CancelledError, Exception):
             pass
+        # Flush any pending interim transcript captured before the browser disconnected.
+        # Without this, mid-utterance mic-off loses the last few seconds of speech.
+        pending = relay_state["last_interim"]
+        if pending and pending != relay_state["last_injected"]:
+            logger.info("STT flush on disconnect: %r (room=%s user=%s)",
+                        pending[:60], room_id, user_id)
+            try:
+                await inject_speech(room_id, user_id, pending)
+            except Exception as e:
+                logger.warning("STT flush inject failed: %s", e)
 
 
 # AssemblyAI disabled — 3006 (not authorized) on every connect.
@@ -824,7 +834,7 @@ async def deepgram_stream(
         "wss://api.deepgram.com/v1/listen"
         f"?encoding=linear16&sample_rate={sample_rate}&channels=1"
         f"&model=nova-2-general{lang_param}"
-        "&interim_results=true&endpointing=700&smart_format=true"
+        "&interim_results=true&endpointing=500&smart_format=true"
     )
 
     def parse_dg(payload):
