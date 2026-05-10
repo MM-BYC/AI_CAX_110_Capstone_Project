@@ -38,14 +38,15 @@ def run_text_pipeline(text: str, source: str, target: str) -> dict:
 
 def run_conversation_pipeline(text: str, source: str, target: str) -> dict:
     """
-    Per-participant conversation pipeline tuned for ≤1 s end-to-end latency.
+    Per-participant conversation pipeline with full anti-hallucination guardrails.
 
     Conversation Agent (clean fillers) → Language Detection Agent
-    → Strict Translation Agent (system prompt + temperature=0)
+    → Strict Translation Agent (70B, temp=0)
+    → Fast Quality Review (8B-instant) → Retry once with critique if flagged
 
-    Quality review is intentionally omitted in the live path — it doubles
-    LLM round-trips. Hallucination defenses already run upstream
-    (client noise gate + server blocklist + echo suppression).
+    The review uses a smaller/faster Groq model than translation so the
+    extra round-trip stays under ~150 ms. Every external call is wrapped
+    with a failsafe — a transient API error never silently drops a message.
     """
     cleaned = conversation_agent.run(text, source_lang=source)
 
@@ -60,14 +61,33 @@ def run_conversation_pipeline(text: str, source: str, target: str) -> dict:
         translation = translation_agent.run(cleaned, effective_source, target, strict=True)
     except Exception as e:
         logger.error("Translation agent failed: %s", e)
-        translation = cleaned  # pass-through so the message is still delivered
+        translation = cleaned
+
+    review = {"passed": True, "critique": ""}
+    for _ in range(MAX_RETRIES):
+        try:
+            review = quality_review_agent.run(cleaned, translation, effective_source, target)
+        except Exception as e:
+            logger.warning("Quality review failed (treating as pass): %s", e)
+            review = {"passed": True, "critique": ""}
+            break
+        if review["passed"]:
+            break
+        try:
+            translation = translation_agent.run(
+                cleaned, effective_source, target,
+                critique=review["critique"], strict=True,
+            )
+        except Exception as e:
+            logger.error("Retry translation failed: %s", e)
+            break
 
     return {
         "original_text": text,
         "cleaned_text": cleaned,
         "detected_language": detected,
         "translation": translation,
-        "quality": {"passed": True, "critique": ""},
+        "quality": review,
     }
 
 

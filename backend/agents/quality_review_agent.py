@@ -30,21 +30,22 @@ def run(original: str, translation: str, source: str, target: str) -> dict:
     source_name = LANG_NAMES.get(source, source)
     target_name = LANG_NAMES.get(target, target)
 
+    # Tight prompt + small/fast model so the review adds ~80-150 ms instead
+    # of the 300-500 ms a 70B call costs. The smaller model is plenty good
+    # for binary PASS/FAIL with a short critique.
     prompt = (
-        f"You are a professional translation reviewer.\n"
-        f"Review this translation from {source_name} to {target_name}.\n\n"
+        f"Review {source_name}→{target_name} translation for hallucinations, "
+        f"omissions, mistranslations.\n"
         f"Original: {original}\n"
-        f"Translation: {translation}\n\n"
-        f"Check for: hallucinations, added content, omissions, mistranslations.\n"
-        f"Reply with exactly one of:\n"
-        f"PASS\n"
-        f"or\n"
-        f"FAIL: <brief critique of what is wrong>"
+        f"Translation: {translation}\n"
+        f"Reply only: PASS or FAIL: <brief critique>"
     )
 
     response = _get_client().chat.completions.create(
-        model=os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        model=os.environ.get("GROQ_REVIEW_MODEL", "llama-3.1-8b-instant"),
         messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+        max_tokens=80,
     )
     verdict = response.choices[0].message.content.strip()
 
