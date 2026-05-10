@@ -26,6 +26,33 @@ body {
 header {
   text-align: center;
   margin-bottom: 2.5rem;
+  position: relative;
+}
+
+/* ── Hamburger ── */
+.hamburger-btn {
+  display: none; /* desktop hides it */
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40px;
+  height: 40px;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  color: #374151;
+  z-index: 30;
+}
+
+.hamburger-btn svg { width: 20px; height: 20px; }
+
+.hamburger-btn[aria-expanded="true"] {
+  background: #6366f1;
+  color: #ffffff;
+  border-color: #6366f1;
 }
 
 .logo {
@@ -210,6 +237,60 @@ select option {
   .panels { grid-template-columns: 1fr; }
   .language-bar { flex-direction: column; }
   .swap-btn { align-self: center; transform: rotate(90deg); width: 100%; max-width: 80px; }
+
+  /* Anchor the whole UI to the dynamic viewport so iOS Safari's URL bar
+     doesn't push content out of view. */
+  body { min-height: 100dvh; }
+  .container {
+    min-height: 100dvh;
+    padding: 0.75rem 0.75rem 1rem;
+    display: flex;
+    flex-direction: column;
+  }
+  main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .tab-content { flex: 1; min-height: 0; }
+
+  /* Compact header on mobile so the active panel gets every pixel. */
+  header {
+    margin-bottom: 0.5rem;
+    text-align: center;
+  }
+  header .subtitle,
+  header .badge { display: none; }
+  header h1 { font-size: 1.1rem; }
+  header .logo { gap: 0.4rem; margin-bottom: 0; }
+  header .logo svg { width: 22px; height: 22px; }
+
+  /* Show the hamburger; hide the inline tab bar by default. */
+  .hamburger-btn { display: inline-flex; }
+
+  .tab-menu-wrap {
+    display: none;        /* hidden until hamburger opens it */
+    margin-bottom: 0.75rem;
+  }
+  .tab-menu-wrap.open { display: flex; }
+
+  .tab-menu {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.25rem;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    padding: 0.4rem;
+  }
+  .tab-btn {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 0.7rem 0.85rem;
+    font-size: 0.95rem;
+  }
+  .tab-btn svg { width: 18px; height: 18px; }
 }
 
 .panel {

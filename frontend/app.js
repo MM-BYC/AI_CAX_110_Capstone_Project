@@ -117,10 +117,35 @@ function showTab(active) {
   if (active.btn !== tabConv && convCamOn) convStopCamera();
 }
 
-tabText.addEventListener("click",  () => showTab({ btn: tabText,  panel: textTab }));
-tabAudio.addEventListener("click", () => showTab({ btn: tabAudio, panel: audioTab }));
-tabLive.addEventListener("click",  () => showTab({ btn: tabLive,  panel: liveTab }));
-tabConv.addEventListener("click",  () => showTab({ btn: tabConv,  panel: convTab }));
+// Hamburger menu — only visible on mobile. Toggles the .tab-menu-wrap dropdown
+// open/closed. Clicking any tab button closes it again.
+const hamburgerBtn = document.getElementById("hamburgerBtn");
+const tabMenuWrap  = document.getElementById("tabMenuWrap");
+
+function setMenuOpen(open) {
+  if (!hamburgerBtn || !tabMenuWrap) return;
+  tabMenuWrap.classList.toggle("open", open);
+  hamburgerBtn.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+hamburgerBtn?.addEventListener("click", () => {
+  const isOpen = tabMenuWrap.classList.contains("open");
+  setMenuOpen(!isOpen);
+});
+
+const _selectTab = (active) => { showTab(active); setMenuOpen(false); };
+tabText.addEventListener("click",  () => _selectTab({ btn: tabText,  panel: textTab }));
+tabAudio.addEventListener("click", () => _selectTab({ btn: tabAudio, panel: audioTab }));
+tabLive.addEventListener("click",  () => _selectTab({ btn: tabLive,  panel: liveTab }));
+tabConv.addEventListener("click",  () => _selectTab({ btn: tabConv,  panel: convTab }));
+
+// Close the dropdown when tapping outside of it (mobile).
+document.addEventListener("click", e => {
+  if (!tabMenuWrap?.classList.contains("open")) return;
+  if (tabMenuWrap.contains(e.target)) return;
+  if (hamburgerBtn?.contains(e.target)) return;
+  setMenuOpen(false);
+});
 
 // ── Language detection helper (Text tab only) ──────────────────────────────
 let detectTimer = null;
