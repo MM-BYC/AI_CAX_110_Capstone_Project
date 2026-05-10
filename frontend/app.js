@@ -1146,6 +1146,21 @@ function convHandleMessage(msg) {
     case "user_camera_status":
       if (convUsers[msg.user_id]) convUsers[msg.user_id].camera_on = msg.is_on;
       convUpdateChipCam(msg.user_id, msg.is_on);
+      // Zoom-style: explicit signal beats relying on track mute events,
+      // which Safari does not reliably fire when the sender does
+      // replaceTrack(null). Toggle the video element + placeholder here.
+      {
+        const vid = document.getElementById(`conv-card-vid-${msg.user_id}`);
+        const ph  = document.getElementById(`conv-card-ph-${msg.user_id}`);
+        if (msg.is_on) {
+          if (vid) vid.style.display = "block";
+          if (ph)  ph.style.display = "none";
+          vid?.play().catch(() => {});
+        } else {
+          if (vid) vid.style.display = "none";
+          if (ph)  ph.style.display = "";
+        }
+      }
       break;
 
     case "error":
