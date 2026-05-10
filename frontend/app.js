@@ -712,6 +712,140 @@ function convSpeakCancel() {
   if (window.speechSynthesis) window.speechSynthesis.cancel();
 }
 
+// ── Voice Cloning ──────────────────────────────────────────────────────────
+// Captures the speaker's first ~10 s of mic audio, uploads it to
+// /api/v1/voices/enroll, then receives "voice_audio" frames containing the
+// translated text spoken in the speaker's own cloned voice (XTTS-v2).
+// Falls back to browser Web Speech API if cloning is unavailable on the server
+// or the cloned audio doesn't arrive within _VOICE_FALLBACK_MS.
+
+let _voiceCloneEnrolled    = false;
+let _voiceCloneCapturing   = false;
+let _voiceCloneAvailable   = null;       // null = unprobed, true/false after probe
+const _VOICE_REF_SEC       = 10;
+const _VOICE_FALLBACK_MS   = 1500;
+const _voiceAwaiting       = new Map();  // from_id → setTimeout id
+
+async function _voiceCloneProbe() {
+  if (_voiceCloneAvailable !== null) return _voiceCloneAvailable;
+  try {
+    const r = await fetch("/api/v1/voices/status");
+    _voiceCloneAvailable = r.ok ? !!(await r.json()).available : false;
+  } catch {
+    _voiceCloneAvailable = false;
+  }
+  if (_voiceCloneAvailable) console.log("[VoiceClone] available on this server");
+  return _voiceCloneAvailable;
+}
+
+async function convVoiceCloneEnroll(stream) {
+  if (_voiceCloneEnrolled || _voiceCloneCapturing || !convUserId || !stream) return;
+  if (!(await _voiceCloneProbe())) return;
+  _voiceCloneCapturing = true;
+  try {
+    const rec = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+    const chunks = [];
+    rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    rec.onstop = async () => {
+      _voiceCloneCapturing = false;
+      try {
+        const wav = await _webmBlobToWav(new Blob(chunks, { type: "audio/webm" }));
+        if (!wav) return;
+        const fd = new FormData();
+        fd.append("file", wav, "reference.wav");
+        const r = await fetch(
+          `/api/v1/voices/enroll?user_id=${encodeURIComponent(convUserId)}`,
+          { method: "POST", body: fd },
+        );
+        if (r.ok) {
+          _voiceCloneEnrolled = true;
+          console.log("[VoiceClone] enrolled — translations will use cloned voice");
+          if (convWs?.readyState === WebSocket.OPEN) {
+            convWs.send(JSON.stringify({ type: "voice_enrolled" }));
+          }
+        } else {
+          console.warn("[VoiceClone] enroll HTTP", r.status);
+        }
+      } catch (e) {
+        console.warn("[VoiceClone] enroll upload failed:", e);
+      }
+    };
+    rec.start();
+    setTimeout(() => { try { rec.stop(); } catch {} }, _VOICE_REF_SEC * 1000);
+  } catch (e) {
+    _voiceCloneCapturing = false;
+    console.warn("[VoiceClone] capture failed:", e);
+  }
+}
+
+// Speak the translated text. If voice cloning is available we wait briefly
+// for the cloned audio to arrive; otherwise we use browser TTS immediately.
+function convSpeakOrAwaitClone(text, langCode, fromId) {
+  if (_voiceCloneAvailable !== true) {
+    convSpeak(text, langCode);
+    return;
+  }
+  const prev = _voiceAwaiting.get(fromId);
+  if (prev) clearTimeout(prev);
+  _voiceAwaiting.set(fromId, setTimeout(() => {
+    _voiceAwaiting.delete(fromId);
+    convSpeak(text, langCode);
+  }, _VOICE_FALLBACK_MS));
+}
+
+// Play a base64-encoded WAV from a "voice_audio" message and cancel any
+// pending browser-TTS fallback for the same speaker.
+function convPlayClonedAudio(audioB64, fromId) {
+  const tid = _voiceAwaiting.get(fromId);
+  if (tid) { clearTimeout(tid); _voiceAwaiting.delete(fromId); }
+  try {
+    convSpeakCancel();
+    const a = new Audio(`data:audio/wav;base64,${audioB64}`);
+    a.play().catch(e => console.warn("[VoiceClone] play failed:", e));
+  } catch (e) {
+    console.warn("[VoiceClone] play exception:", e);
+  }
+}
+
+// Decode WebM/Opus → mono 22.05 kHz WAV using WebAudio so XTTS can read it.
+async function _webmBlobToWav(blob) {
+  try {
+    const buf = await blob.arrayBuffer();
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    const decoded = await ctx.decodeAudioData(buf);
+    const sr = 22050;
+    const off = new OfflineAudioContext(1, Math.ceil(decoded.duration * sr), sr);
+    const src = off.createBufferSource();
+    src.buffer = decoded;
+    src.connect(off.destination);
+    src.start();
+    const rendered = await off.startRendering();
+    return _audioBufferToWav(rendered);
+  } catch (e) {
+    console.warn("[VoiceClone] decode failed:", e);
+    return null;
+  }
+}
+
+function _audioBufferToWav(buf) {
+  const sr = buf.sampleRate, samples = buf.getChannelData(0), n = samples.length;
+  const ab = new ArrayBuffer(44 + n * 2);
+  const dv = new DataView(ab);
+  let p = 0;
+  const ws = s => { for (let i = 0; i < s.length; i++) dv.setUint8(p++, s.charCodeAt(i)); };
+  const w32 = v => { dv.setUint32(p, v, true); p += 4; };
+  const w16 = v => { dv.setUint16(p, v, true); p += 2; };
+  ws("RIFF"); w32(36 + n * 2); ws("WAVE");
+  ws("fmt "); w32(16); w16(1); w16(1); w32(sr); w32(sr * 2); w16(2); w16(16);
+  ws("data"); w32(n * 2);
+  for (let i = 0; i < n; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    dv.setInt16(p, s * 0x7FFF, true); p += 2;
+  }
+  return new Blob([ab], { type: "audio/wav" });
+}
+
 const convSetup          = document.getElementById("convSetup");
 const convActive         = document.getElementById("convActive");
 const convNameInput      = document.getElementById("convName");
@@ -1152,8 +1286,17 @@ function convHandleMessage(msg) {
       convAddMessage(msg);
       if (!msg.is_self) {
         convUpdateCaption(msg.from_id, msg.translation, true);
-        convSpeak(msg.translation, convUsers[convUserId]?.language || "en");
+        convSpeakOrAwaitClone(
+          msg.translation,
+          convUsers[convUserId]?.language || "en",
+          msg.from_id,
+        );
       }
+      break;
+
+    case "voice_audio":
+      // Cloned-voice playback — replaces browser TTS for this utterance.
+      convPlayClonedAudio(msg.audio_b64, msg.from_id);
       break;
 
     case "interim":
@@ -1498,6 +1641,9 @@ async function _convStartIosMicInner() {
   convMicLabel.textContent = "Listening…";
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "mic_status", is_on: true }));
+  // Voice-clone enrollment from the live mic stream (best-effort, no-op if
+  // already enrolled or the server doesn't support cloning).
+  convVoiceCloneEnroll(_iosMicStream);
 }
 
 function convStopIosMic() {
@@ -2143,6 +2289,9 @@ async function webrtcStartAudio() {
   try {
     const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     rtcAudioTrack = s.getAudioTracks()[0];
+    // Voice-clone enrollment from the live audio stream — best-effort, no-op
+    // if already enrolled or the server doesn't support cloning.
+    convVoiceCloneEnroll(s);
     for (const [uid, pc] of Object.entries(rtcPeers)) {
       let sender = rtcAudioSenders[uid];
       if (sender) {

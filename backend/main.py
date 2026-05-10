@@ -1,10 +1,12 @@
 import os
 import json
 import asyncio
+import base64
 import queue as _queue
 import random
 import string
 import logging
+import tempfile
 import threading
 import time
 from collections import deque
@@ -132,6 +134,7 @@ from agents import language_detection_agent, transcription_agent  # noqa: E402
 import vocabulary_store  # noqa: E402
 import style_profiler  # noqa: E402
 import security  # noqa: E402
+import voice_clone  # noqa: E402  # standalone XTTS-v2 voice cloning module
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -145,6 +148,35 @@ else:
 
 
 _EMPTY_ROOM_TTL_SEC = 300
+
+
+async def _send_voice_clone_audio(ws, speaker_id: str, text: str, target_lang: str) -> None:
+    """Synthesise *text* in *speaker_id*'s cloned voice and push it to *ws*.
+
+    Best-effort: any failure is swallowed silently so the text path is never
+    affected.  Listener-side timeout (~1.5 s) decides whether to use this
+    audio or fall back to browser TTS.
+    """
+    if not text or not text.strip():
+        return
+    try:
+        wav = await asyncio.to_thread(
+            voice_clone.synthesize_for_user, text, target_lang, speaker_id,
+        )
+    except Exception as e:
+        logger.debug("voice clone synth skipped (%s)", e)
+        return
+    if not wav:
+        return
+    try:
+        await ws.send_json({
+            "type":      "voice_audio",
+            "from_id":   speaker_id,
+            "format":    "wav",
+            "audio_b64": base64.b64encode(wav).decode("ascii"),
+        })
+    except Exception:
+        pass
 
 
 async def _cleanup_empty_rooms():
@@ -379,6 +411,95 @@ async def api_detect_language(text: str, request: Request = None):
     return {"detected_language": detected}
 
 
+# ── Voice Cloning API  (/api/v1/voices)  ──────────────────────────────────────
+# Backed by the standalone `voice_clone` module (Coqui XTTS-v2).
+# Gracefully reports 503 when the model can't load (e.g. on Render free tier
+# where torch+XTTS won't fit in 512 MB) so the frontend can fall back to the
+# browser's Web Speech API.
+
+@app.get("/api/v1/voices/status")
+async def voices_status():
+    """Whether voice cloning is available on this deployment."""
+    return {
+        "available":          voice_clone.is_available(),
+        "supported_languages": sorted(voice_clone.SUPPORTED_LANGUAGES),
+    }
+
+
+@app.post("/api/v1/voices/enroll", status_code=201)
+async def voices_enroll(user_id: str, file: UploadFile, request: Request = None):
+    """Enroll a reference voice clip for *user_id*.
+
+    Accepts a multipart audio upload (5-15 s of clean speech recommended).
+    The bytes are stored verbatim under VOICE_CLONE_REF_DIR.  The frontend
+    is responsible for sending a mono PCM WAV — the recorder pipeline does
+    a WebM→WAV decode before upload.
+    """
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="empty upload")
+    path = voice_clone.enroll(audio_bytes, user_id)
+    if request:
+        security.audit("voice_enroll", request, user_id=user_id, bytes=len(audio_bytes))
+    # Run the diagnostic analysis on the saved clip — useful for the UI to
+    # show the speaker their captured pitch/jitter/etc.
+    features = voice_clone.analyze_voice(path)
+    return {"user_id": user_id, "reference_path": path, "features": features}
+
+
+@app.post("/api/v1/voices/analyze")
+async def voices_analyze(file: UploadFile):
+    """Return acoustic attributes for an uploaded clip without enrolling it."""
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="empty upload")
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp.write(audio_bytes)
+        tmp_path = tmp.name
+    try:
+        return voice_clone.analyze_voice(tmp_path)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except FileNotFoundError:
+            pass
+
+
+class VoiceSynthesizeBody(BaseModel):
+    text:    str
+    language: str
+    user_id: str
+
+
+@app.post("/api/v1/voices/synthesize")
+async def voices_synthesize(body: VoiceSynthesizeBody, request: Request = None):
+    """Synthesise translated text in the cloned voice of *user_id*.
+
+    Returns the audio as a base64-encoded WAV in JSON so it can be embedded
+    directly into a `<audio>` element via a data: URL on the frontend.
+    """
+    if not voice_clone.is_available():
+        raise HTTPException(status_code=503, detail="voice cloning not available on this deployment")
+    if not voice_clone.has_enrollment(body.user_id):
+        raise HTTPException(status_code=404, detail=f"no enrollment for user {body.user_id!r}")
+    try:
+        wav = await asyncio.to_thread(
+            voice_clone.synthesize_for_user, body.text, body.language, body.user_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except (FileNotFoundError, RuntimeError) as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    if request:
+        security.audit("voice_synthesize", request,
+                       user_id=body.user_id, language=body.language, chars=len(body.text))
+    return {
+        "format":   "wav",
+        "audio_b64": base64.b64encode(wav).decode("ascii"),
+        "bytes":    len(wav),
+    }
+
+
 @app.websocket("/ws/conversation/{room_id}")
 async def conversation_ws(websocket: WebSocket, room_id: str):
     """WebSocket endpoint for live multi-user conversation."""
@@ -490,6 +611,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                 })
 
                 # Translate and deliver to every other participant
+                speaker_has_clone = voice_clone.has_enrollment(user_id) and voice_clone.is_available()
                 for other_id, other_ws in list(room["conns"].items()):
                     if other_id == user_id or not other_ws:
                         continue
@@ -517,6 +639,14 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                             "translation": translated,
                             "is_self": False,
                         })
+
+                        # Voice clone broadcast — fire-and-forget so it never
+                        # blocks the text path.  Listener falls back to browser
+                        # TTS if the audio doesn't arrive within ~1.5 s.
+                        if speaker_has_clone:
+                            asyncio.create_task(_send_voice_clone_audio(
+                                other_ws, user_id, translated, other_info["language"],
+                            ))
                     except Exception as e:
                         logger.error(f"Translation error for {other_id}: {e}")
 
