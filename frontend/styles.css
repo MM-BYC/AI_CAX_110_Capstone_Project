@@ -1681,3 +1681,165 @@ footer p {
   from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   In-Meeting Layout — Zoom-style dark gallery
+   All selectors scoped to #convActive so the setup screens are
+   completely unaffected.
+   ══════════════════════════════════════════════════════════════════ */
+
+#convActive {
+  display: flex;
+  flex-direction: column;
+  background: #1c1c1e;
+  min-height: calc(100vh - 130px);
+  margin: 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* ── Top bar ── */
+#convActive .conv-room-bar {
+  background: #1c1c1e;
+  border: none;
+  border-bottom: 1px solid #2d2d30;
+  border-radius: 0;
+  margin-bottom: 0;
+  padding: 0.5rem 1rem;
+  box-shadow: none;
+}
+#convActive .conv-room-label       { color: #8e8e93; }
+#convActive .conv-room-code-inline { color: #a78bfa; }
+#convActive .conv-copy-code-btn    { color: #8e8e93; }
+#convActive .conv-copy-code-btn:hover { background: #2d2d30; color: #e4e4e7; }
+#convActive .conv-invite-btn       { border-color: #a78bfa; color: #a78bfa; }
+#convActive .conv-invite-btn:hover { background: #a78bfa; color: #fff; }
+#convActive .conv-leave-btn        { background: #2d2d30; color: #e4e4e7; border-color: #3a3a3c; }
+#convActive .conv-leave-btn:hover  { background: #ef4444; border-color: #ef4444; color: #fff; }
+#convActive .btn.conv-vocab-btn    { background: #2d2d30; color: #e4e4e7; border-color: #3a3a3c; }
+
+/* ── Participant gallery ── */
+#convActive .conv-carousel-wrapper {
+  flex: 1;
+  display: flex;
+  background: #1c1c1e;
+  padding: 10px;
+  border: none;
+  gap: 0;
+  align-items: stretch;
+  overflow: hidden;
+  min-height: 220px;
+}
+#convActive .conv-carousel-arrow   { display: none; }
+#convActive .conv-carousel-viewport {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #3a3a3c transparent;
+}
+#convActive .conv-carousel-track {
+  display: grid;
+  gap: 8px;
+  grid-auto-rows: auto;
+  align-content: start;
+}
+
+/* ── Participant tile (16:9) ── */
+#convActive .conv-participant-card {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  cursor: default;
+}
+#convActive .conv-card-box {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+}
+#convActive .conv-card-placeholder {
+  font-size: 4rem;
+  background: #2d2d30 !important;
+}
+#convActive .conv-participant-card.speaking .conv-card-box {
+  border-color: #22c55e !important;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+}
+
+/* ── Transcript panel ── */
+#convActive .conv-messages {
+  min-height: 110px;
+  max-height: 190px;
+  background: transparent;
+  border-top: 1px solid #2d2d30;
+  margin-bottom: 0;
+  padding: 0.5rem 0.75rem;
+  scrollbar-color: #3a3a3c transparent;
+}
+#convActive .conv-start-hint               { color: #6b7280; }
+#convActive .conv-bubble-main              { color: #e4e4e7; }
+#convActive .conv-bubble.self  .conv-bubble-main {
+  background: linear-gradient(135deg, rgba(99,102,241,.22), rgba(124,58,237,.18));
+  border-color: rgba(99,102,241,.4);
+}
+#convActive .conv-bubble.partner .conv-bubble-main {
+  background: #2d2d30;
+  border-color: #3a3a3c;
+}
+#convActive .conv-bubble-name  { color: #71717a; }
+#convActive .conv-bubble-sub   { color: #6b7280; }
+#convActive .conv-interim {
+  background: rgba(217,119,6,.12);
+  border-color: rgba(217,119,6,.3);
+}
+
+/* ── Voice clone badge ── */
+#convActive #voiceCloneBadge { padding: 0.15rem 0; }
+
+/* ── Controls bar (visual only — handlers untouched) ── */
+#convActive .conv-mic-bar {
+  background: #1c1c1e;
+  border-top: 1px solid #2d2d30;
+  padding: 0.6rem 1rem;
+}
+#convActive .conv-mic-btn {
+  background: #3a3a3c;
+  border-color: #48484a;
+  color: #e4e4e7;
+  box-shadow: none;
+}
+#convActive .conv-mic-btn:hover:not(:disabled) {
+  background: #48484a;
+  border-color: #636366;
+  color: #fff;
+  transform: scale(1.05);
+}
+#convActive .conv-mic-btn.active {
+  background: rgba(239,68,68,.2);
+  border-color: rgba(239,68,68,.8);
+  color: #ef4444;
+}
+#convActive .conv-mic-btn.tts-off {
+  background: rgba(107,114,128,.12);
+  border-color: rgba(107,114,128,.4);
+  color: #71717a;
+}
+#convActive .conv-mic-label { color: #8e8e93; }
+
+/* ── Keyboard input ── */
+#convActive .conv-keyboard-bar {
+  background: #1c1c1e;
+  border-top: 1px solid #2d2d30;
+  padding: 0.55rem 0.75rem;
+}
+#convActive .conv-keyboard-input {
+  background: #2d2d30;
+  border-color: #3a3a3c;
+  color: #e4e4e7;
+}
+#convActive .conv-keyboard-input::placeholder { color: #6b7280; }
+#convActive .conv-keyboard-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99,102,241,.2);
+}
+#convActive .conv-keyboard-send { color: #a78bfa; }
+#convActive .conv-keyboard-send:hover { color: #fff; background: #6366f1; border-color: #6366f1; }

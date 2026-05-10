@@ -888,7 +888,7 @@ const convTtsLabel       = document.getElementById("convTtsLabel");
 function convShowScreen(screen) {
   convSetup.style.display  = "none";
   convActive.style.display = "none";
-  screen.style.display     = "block";
+  screen.style.display     = screen === convActive ? "flex" : "block";
 }
 
 function convGetWsBase() {
@@ -903,15 +903,17 @@ function convGetWsBase() {
 // Each participant gets a square card (name overlay + camera video inside).
 // Cards fill a 3-row grid; left/right arrows paginate when count exceeds one page.
 
-const _CARD_SLOT = 108;   // card width (100px) + gap (8px)
-const _CARD_ROWS = 3;
+const _CARD_ROWS = 20;  // effectively unlimited — all tiles show in one page
 
 let _carouselPage  = 0;
 const _carouselCards = [];   // ordered DOM elements; order = join order
 
 function _carouselCols() {
-  const vp = document.getElementById("convCarouselViewport");
-  return vp ? Math.max(2, Math.floor(vp.clientWidth / _CARD_SLOT)) : 3;
+  const n = _carouselCards.length || 1;
+  if (n === 1) return 1;
+  if (n <= 4)  return 2;
+  if (n <= 9)  return 3;
+  return 4;
 }
 
 function _buildCard(uid, user) {
@@ -1012,7 +1014,7 @@ function _carouselRenderPage() {
   // (video elements keep playing when detached in modern browsers)
   while (track.firstChild) track.removeChild(track.firstChild);
   _carouselCards.slice(start, end).forEach(c => track.appendChild(c));
-  track.style.gridTemplateColumns = `repeat(${cols}, 100px)`;
+  track.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
 
   const btnL = document.getElementById("convCarouselLeft");
   const btnR = document.getElementById("convCarouselRight");
