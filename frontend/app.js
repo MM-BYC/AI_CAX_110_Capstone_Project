@@ -1389,17 +1389,24 @@ async function _convStartIosMicInner() {
 
   const source = _iosAudioCtx.createMediaStreamSource(_iosMicStream);
   _iosProcessor = _iosAudioCtx.createScriptProcessor(4096, 1, 1);
-  // RMS threshold below which the frame is treated as silence and sent as
-  // zeros.  Prevents Google STT from hallucinating words from background
-  // noise.  ~ -36 dBFS — speech is typically -20 to -30 dBFS, room noise
-  // -45 dBFS or lower.
-  const NOISE_GATE_RMS = 0.015;
+  // RMS threshold below which the frame is sent as silence (zeros).
+  // Prevents Google STT from hallucinating words from background noise.
+  // iOS Safari's noiseSuppression and AGC heavily attenuate voice, so the
+  // gate is set conservatively — only true room silence falls below it.
+  const NOISE_GATE_RMS = 0.004;
+  let _frameCount = 0;
+  let _peakRms = 0;
   _iosProcessor.onaudioprocess = e => {
     if (_iosSttWs?.readyState !== WebSocket.OPEN) return;
     const f32 = e.inputBuffer.getChannelData(0);
     let sumSq = 0;
     for (let i = 0; i < f32.length; i++) sumSq += f32[i] * f32[i];
     const rms = Math.sqrt(sumSq / f32.length);
+    if (rms > _peakRms) _peakRms = rms;
+    _frameCount++;
+    if (_frameCount % 25 === 0) {
+      console.log(`[mic] frames=${_frameCount} peakRMS=${_peakRms.toFixed(4)} curRMS=${rms.toFixed(4)}`);
+    }
     const i16 = new Int16Array(f32.length); // initialized to zeros
     if (rms >= NOISE_GATE_RMS) {
       for (let i = 0; i < f32.length; i++) {
