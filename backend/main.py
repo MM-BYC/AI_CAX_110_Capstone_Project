@@ -65,6 +65,28 @@ _LATEST_LONG_LANGS = {
     "nl-NL", "pl-PL", "tr-TR",
 }
 
+# Common Google STT hallucinations that show up when the mic picks up
+# background noise.  Lower-cased, stripped, punctuation removed — checked
+# in inject path.
+_STT_HALLUCINATIONS = {
+    "you", "the", "a", "an", "i", "is", "it", "to", "of",
+    "mom", "mommy", "mama", "dad", "daddy", "papa",
+    "yeah", "yes", "no", "okay", "ok", "uh", "um", "hmm", "huh",
+    "thank you", "thanks", "bye", "goodbye", "hello", "hi",
+    "are you", "are you mom", "you mom", "mom you",
+    "oo", "hindi", "sige",  # very short Tagalog one-word noise hits
+}
+
+
+def _is_likely_hallucination(text: str) -> bool:
+    """Cheap check for common Google STT hallucinations from background noise."""
+    if not text:
+        return True
+    norm = text.strip().lower().rstrip(".!?,").strip()
+    if len(norm) < 4:
+        return True
+    return norm in _STT_HALLUCINATIONS
+
 # Load environment variables BEFORE importing agents (they need GROQ_API_KEY)
 load_dotenv(override=False)
 
@@ -591,11 +613,21 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                             continue
                         if not result.alternatives:
                             continue
-                        transcript = (result.alternatives[0].transcript or "").strip()
-                        if len(transcript) < 2:
+                        alt = result.alternatives[0]
+                        transcript = (alt.transcript or "").strip()
+                        confidence = float(getattr(alt, "confidence", 0.0) or 0.0)
+                        if _is_likely_hallucination(transcript):
+                            logger.info("STT dropped hallucination: %r", transcript[:80])
                             continue
-                        logger.info("STT final: room=%s user=%s text=%r",
-                                    room_id, user_id, transcript[:100])
+                        # Drop low-confidence transcripts (Google STT hallucinations on noise).
+                        # confidence==0 means Google didn't score it — keep those (most short
+                        # streaming results have no score).
+                        if confidence and confidence < 0.6:
+                            logger.info("STT dropped low-confidence %.2f: %r",
+                                        confidence, transcript[:80])
+                            continue
+                        logger.info("STT final: room=%s user=%s conf=%.2f text=%r",
+                                    room_id, user_id, confidence, transcript[:100])
                         asyncio.run_coroutine_threadsafe(
                             inject_speech(room_id, user_id, transcript), loop
                         )

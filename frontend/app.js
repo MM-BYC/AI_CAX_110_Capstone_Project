@@ -1389,12 +1389,22 @@ async function _convStartIosMicInner() {
 
   const source = _iosAudioCtx.createMediaStreamSource(_iosMicStream);
   _iosProcessor = _iosAudioCtx.createScriptProcessor(4096, 1, 1);
+  // RMS threshold below which the frame is treated as silence and sent as
+  // zeros.  Prevents Google STT from hallucinating words from background
+  // noise.  ~ -36 dBFS — speech is typically -20 to -30 dBFS, room noise
+  // -45 dBFS or lower.
+  const NOISE_GATE_RMS = 0.015;
   _iosProcessor.onaudioprocess = e => {
     if (_iosSttWs?.readyState !== WebSocket.OPEN) return;
     const f32 = e.inputBuffer.getChannelData(0);
-    const i16 = new Int16Array(f32.length);
-    for (let i = 0; i < f32.length; i++) {
-      i16[i] = Math.max(-32768, Math.min(32767, Math.round(f32[i] * 32767)));
+    let sumSq = 0;
+    for (let i = 0; i < f32.length; i++) sumSq += f32[i] * f32[i];
+    const rms = Math.sqrt(sumSq / f32.length);
+    const i16 = new Int16Array(f32.length); // initialized to zeros
+    if (rms >= NOISE_GATE_RMS) {
+      for (let i = 0; i < f32.length; i++) {
+        i16[i] = Math.max(-32768, Math.min(32767, Math.round(f32[i] * 32767)));
+      }
     }
     _iosSttWs.send(i16.buffer);
   };
