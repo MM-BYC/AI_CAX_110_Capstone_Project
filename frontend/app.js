@@ -1061,6 +1061,16 @@ async function convConnect(roomId) {
 function convHandleMessage(msg) {
   switch (msg.type) {
 
+    case "error":
+      if (msg.code === "room_not_found") {
+        if (convWs) { convWs.onclose = null; convWs.onerror = null; }
+        alert(msg.message || `Room ${convRoomId} not found. Check the code with the host.`);
+        convRoomId = "";
+        convCreateBtn.disabled = false;
+        convCreateBtn.querySelector("span").textContent = "Create Room";
+      }
+      break;
+
     case "joined":
       convUserId = msg.user_id;
       convIsHost = msg.is_host;

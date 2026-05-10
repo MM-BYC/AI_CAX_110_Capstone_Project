@@ -190,6 +190,11 @@ async def create_room():
     room_id = _gen_room_id()
     while room_id in _rooms:
         room_id = _gen_room_id()
+    # Allocate the room immediately so that subsequent /ws/conversation/{id}
+    # joins can validate the ID exists. Without this, a participant typing
+    # a wrong (or stale) room ID would silently create a brand-new room
+    # and become its host.
+    _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None}
     return {"room_id": room_id}
 
 
@@ -199,7 +204,15 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
     await websocket.accept()
 
     if room_id not in _rooms:
-        _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None}
+        # Reject — no auto-creation. The host must use /create_room first;
+        # everyone else must type the exact existing room code.
+        try:
+            await websocket.send_json({"type": "error", "code": "room_not_found",
+                                       "message": f"Room {room_id} does not exist."})
+            await websocket.close()
+        except Exception:
+            pass
+        return
 
     room = _rooms[room_id]
 
