@@ -855,10 +855,15 @@ async def translate_audio(source: str, target: str, file: UploadFile):
     return result
 
 
-async def inject_speech(room_id: str, user_id: str, text: str):
+async def inject_speech(room_id: str, user_id: str, text: str,
+                        fallback_name: str = "", fallback_language: str = "en"):
     """Inject a Google-STT transcript into a conversation room.
     Echoes the original to the speaker and runs the per-participant
-    translation pipeline for every other participant."""
+    translation pipeline for every other participant.
+
+    `fallback_name`/`fallback_language` come from the STT WebSocket's own
+    config so translations still flow when the speaker's conversation WS
+    has briefly dropped (e.g. just after a Render redeploy wiped state)."""
     if _is_echo(room_id, text):
         logger.info("inject_speech: echo dropped room=%s user=%s text=%r",
                     room_id, user_id, text[:60])
@@ -869,10 +874,16 @@ async def inject_speech(room_id: str, user_id: str, text: str):
         logger.warning("inject_speech: room %s not found", room_id)
         return
     my_info = room["info"].get(user_id)
-    if not my_info:
-        logger.warning("inject_speech: user %s not in room %s. known=%s",
-                       user_id, room_id, list(room["info"].keys()))
-        return
+    info_missing = my_info is None
+    if info_missing:
+        logger.warning("inject_speech: user %s not in room %s — using STT fallback name=%r lang=%s. known=%s",
+                       user_id, room_id, fallback_name, fallback_language,
+                       list(room["info"].keys()))
+        my_info = {
+            "name": fallback_name or "Speaker",
+            "language": fallback_language or "en",
+            "style_profile": None,
+        }
 
     # ── Interruption detection ──────────────────────────────────────────────────
     # If another participant's utterance is still being processed, broadcast an
@@ -1012,6 +1023,14 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str,
 
     lang_code = _GOOGLE_LANG.get(language, "en-US")
 
+    # Cache the speaker's display name so inject_speech can still label
+    # broadcasts if the speaker's conversation WS drops mid-session
+    # (e.g. after a Render redeploy wipes _rooms).
+    _cached_room = _rooms.get(room_id)
+    speaker_name = ""
+    if _cached_room:
+        speaker_name = (_cached_room["info"].get(user_id) or {}).get("name", "")
+
     logger.info("STT session opening: room=%s user=%s lang=%s rate=%d",
                 room_id, user_id, lang_code, sample_rate)
 
@@ -1111,8 +1130,19 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str,
                         last_emit["ts"] = now_ts
                         logger.info("STT final (sess=%d): room=%s user=%s conf=%.2f text=%r",
                                     session_idx_local, room_id, user_id, confidence, transcript[:100])
+                        # Refresh the cached name if the speaker has since
+                        # (re)joined — gives inject_speech the right label
+                        # even after a temporary conv-WS drop.
+                        _r = _rooms.get(room_id)
+                        if _r:
+                            _n = (_r["info"].get(user_id) or {}).get("name")
+                            if _n:
+                                speaker_name = _n
                         asyncio.run_coroutine_threadsafe(
-                            inject_speech(room_id, user_id, transcript), loop
+                            inject_speech(room_id, user_id, transcript,
+                                          fallback_name=speaker_name,
+                                          fallback_language=language),
+                            loop,
                         )
                 logger.info("STT session %d ended cleanly", session_idx_local)
                 consecutive_errors = 0
