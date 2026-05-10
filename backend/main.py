@@ -666,9 +666,10 @@ async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
                         try:
                             async for raw in stt_ws:
                                 payload = json.loads(raw)
-                                logger.info("STT msg type=%s text=%r",
-                                            payload.get("type"), str(payload.get("text", ""))[:60])
                                 text, is_final = parse_transcript(payload)
+                                if text or is_final:
+                                    logger.info("STT parsed: text=%r is_final=%s type=%s",
+                                                text[:60], is_final, payload.get("type"))
                                 if text and is_final:
                                     now = asyncio.get_event_loop().time()
                                     if text == last_text and now - last_time < 3.0:
