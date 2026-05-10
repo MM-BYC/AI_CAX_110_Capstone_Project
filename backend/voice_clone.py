@@ -81,6 +81,7 @@ _LANG_MAP = {
 
 _model = None
 _model_lock = Lock()
+_synth_lock = Lock()
 _load_error: Optional[Exception] = None
 
 
@@ -307,15 +308,13 @@ def synthesize(text: str, language: str, reference_path: str) -> bytes:
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         out_path = tmp.name
     try:
-        # XTTS exposes tts_to_file synchronously — the caller should run this
-        # in a thread (asyncio.to_thread) when invoked from async code so the
-        # event loop isn't blocked for several seconds on CPU.
-        model.tts_to_file(
-            text=text.strip(),
-            speaker_wav=reference_path,
-            language=xtts_lang,
-            file_path=out_path,
-        )
+        with _synth_lock:
+            model.tts_to_file(
+                text=text.strip(),
+                speaker_wav=reference_path,
+                language=xtts_lang,
+                file_path=out_path,
+            )
         return Path(out_path).read_bytes()
     finally:
         try:

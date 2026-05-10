@@ -722,7 +722,7 @@ function convSpeakCancel() {
 let _voiceCloneEnrolled    = false;
 let _voiceCloneCapturing   = false;
 let _voiceCloneAvailable   = null;       // null = unprobed, true/false after probe
-const _VOICE_REF_SEC       = 10;
+const _VOICE_REF_SEC       = 5;
 const _VOICE_FALLBACK_MS   = 8000;
 const _voiceAwaiting       = new Map();  // from_id → setTimeout id
 
@@ -738,10 +738,28 @@ async function _voiceCloneProbe() {
   return _voiceCloneAvailable;
 }
 
+function _voiceCloneBadge(state) {
+  const badge = document.getElementById("voiceCloneBadge");
+  const text  = document.getElementById("voiceCloneBadgeText");
+  if (!badge || !text) return;
+  if (state === "building") {
+    text.textContent = "Building voice profile...";
+    text.style.cssText = "background:rgba(99,102,241,0.1);color:#6366f1;border:1px solid rgba(99,102,241,0.3)";
+    badge.style.display = "block";
+  } else if (state === "ready") {
+    text.textContent = "Voice cloning active";
+    text.style.cssText = "background:rgba(34,197,94,0.1);color:#16a34a;border:1px solid rgba(34,197,94,0.3)";
+    badge.style.display = "block";
+  } else {
+    badge.style.display = "none";
+  }
+}
+
 async function convVoiceCloneEnroll(stream) {
   if (_voiceCloneEnrolled || _voiceCloneCapturing || !convUserId || !stream) return;
   if (!(await _voiceCloneProbe())) return;
   _voiceCloneCapturing = true;
+  _voiceCloneBadge("building");
   try {
     const rec = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
     const chunks = [];
@@ -759,6 +777,7 @@ async function convVoiceCloneEnroll(stream) {
         );
         if (r.ok) {
           _voiceCloneEnrolled = true;
+          _voiceCloneBadge("ready");
           console.log("[VoiceClone] enrolled — translations will use cloned voice");
           if (convWs?.readyState === WebSocket.OPEN) {
             convWs.send(JSON.stringify({ type: "voice_enrolled" }));
@@ -1870,6 +1889,10 @@ function convReset() {
   convStopCamera();
   convSpeakCancel();
   _ttsUnlocked = false;
+  _voiceCloneEnrolled  = false;
+  _voiceCloneCapturing = false;
+  _voiceCloneAvailable = null;
+  _voiceCloneBadge("hidden");
   if (convWs) { convWs.close(); convWs = null; }
   convRoomId  = null;
   convUserId  = null;

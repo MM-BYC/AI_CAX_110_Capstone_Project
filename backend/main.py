@@ -164,7 +164,7 @@ async def _send_voice_clone_audio(ws, speaker_id: str, text: str, target_lang: s
             voice_clone.synthesize_for_user, text, target_lang, speaker_id,
         )
     except Exception as e:
-        logger.debug("voice clone synth skipped (%s)", e)
+        logger.warning("voice clone synth skipped (%s)", e)
         return
     if not wav:
         return
