@@ -807,9 +807,11 @@ async def deepgram_stream(
     )
 
     def parse_dg(payload):
-        alts     = payload.get("channel", {}).get("alternatives", [{}])
-        text     = (alts[0].get("transcript", "") if alts else "").strip()
-        is_final = payload.get("speech_final", False)
+        alts = payload.get("channel", {}).get("alternatives", [{}])
+        text = (alts[0].get("transcript", "") if alts else "").strip()
+        # Use is_final (segment finalized) — speech_final events arrive with
+        # empty transcripts when only the endpoint marker is in the segment.
+        is_final = payload.get("is_final", False)
         return text, is_final
 
     await _ws_relay(websocket, dg_url,
