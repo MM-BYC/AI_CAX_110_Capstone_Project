@@ -303,6 +303,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
             except Exception:
                 pass
 
+    explicit_leave = False
     try:
         while True:
             raw = await websocket.receive_text()
@@ -486,15 +487,21 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                     except Exception:
                         pass
 
+            elif msg_type == "leave":
+                explicit_leave = True
+                break
+
     except WebSocketDisconnect:
         pass
     finally:
         user_name = (room["info"].get(user_id) or {}).get("name", "Someone")
+        user_was_host = room.get("host_id") == user_id
+
         room["conns"].pop(user_id, None)
         room["info"].pop(user_id, None)
 
-        # Pass host role to next participant if host left
-        if room.get("host_id") == user_id:
+        if user_was_host and explicit_leave:
+            # Host clicked Leave: hand off to the next user or tear down.
             remaining = list(room["conns"].keys())
             if remaining:
                 new_host_id = remaining[0]
@@ -510,6 +517,9 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                     pass
             else:
                 room["host_id"] = None
+                room["host_left"] = True
+        # On incidental host disconnect, keep host_id reserved so the host
+        # can reclaim it on reconnect (their frontend sends is_creator=true).
 
         # Notify remaining participants
         for uid, ws in list(room["conns"].items()):
@@ -520,11 +530,11 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                     pass
 
         if not room["conns"]:
-            # Soft-delete: mark the room empty but keep it around for a grace
-            # period so brief disconnects (iOS Safari background, deploy
-            # rollovers) can rejoin without hitting room_not_found. The
-            # _cleanup_empty_rooms task removes rooms after 5 min.
-            room["empty_since"] = time.time()
+            # Keep the room alive unless the host has explicitly ended it.
+            # Brief WS drops (iOS Safari background, network blip) leave
+            # empty_since unset so reconnects always succeed.
+            if room.get("host_left", False):
+                room["empty_since"] = time.time()
 
 
 @app.post("/detect_language")

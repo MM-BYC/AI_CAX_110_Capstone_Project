@@ -1732,7 +1732,15 @@ convJoinBtn.addEventListener("click", () => {
 convRoomInput.addEventListener("keydown", e => { if (e.key === "Enter") convJoinBtn.click(); });
 convNameInput.addEventListener("keydown", e => { if (e.key === "Enter") convCreateBtn.click(); });
 
-convLeaveBtn.addEventListener("click", () => convReset());
+convLeaveBtn.addEventListener("click", () => {
+  // Explicit leave: tell the server so the room can be torn down (if host)
+  // or the user can be removed (if participant). Without this message a
+  // close is treated as a transient WS drop and the room stays alive.
+  if (convWs && convWs.readyState === WebSocket.OPEN) {
+    try { convWs.send(JSON.stringify({ type: "leave" })); } catch {}
+  }
+  convReset();
+});
 
 convCopyCodeBtn.addEventListener("click", () => {
   navigator.clipboard.writeText(convRoomCode.textContent).then(() => {
