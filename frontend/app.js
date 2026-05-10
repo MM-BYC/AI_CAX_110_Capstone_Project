@@ -1693,6 +1693,7 @@ function _buildIosSttWsUrl() {
 }
 
 function _onIosSttDrop() {
+  if (!_iosSttWs) return;  // onerror + onclose both call this; only handle once
   _iosSttWs = null;
   if (_iosMicActive) _scheduleIosSttReconnect();
 }
