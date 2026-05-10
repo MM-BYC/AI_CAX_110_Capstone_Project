@@ -189,8 +189,11 @@ app.add_middleware(
 _rooms: dict = {}
 
 
+_ROOM_ID_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # excludes I, L, O, 0, 1
+
+
 def _gen_room_id() -> str:
-    return "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    return "".join(random.choices(_ROOM_ID_ALPHABET, k=6))
 
 
 def _gen_user_id() -> str:
