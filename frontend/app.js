@@ -1902,11 +1902,14 @@ const WEBRTC_ICE = [
 
 // convVideoGrid removed — remote video shown inside carousel cards
 
-let rtcPeers        = {};   // userId → RTCPeerConnection
-let rtcAudioTrack   = null; // local mic audio track (for WebRTC)
-let rtcVideoTrack   = null; // local camera video track (for WebRTC)
-let rtcAudioContext = null; // created on user click so it's always activated
-let rtcAudioSources = {};   // userId → AudioContext source node
+let rtcPeers         = {};  // userId → RTCPeerConnection
+let rtcAudioTrack    = null; // local mic audio track (for WebRTC)
+let rtcVideoTrack    = null; // local camera video track (for WebRTC)
+let rtcAudioContext  = null; // created on user click so it's always activated
+let rtcAudioSources  = {};  // userId → AudioContext source node
+let rtcVideoSenders  = {};  // userId → RTCRtpSender (kept across pause/resume so
+                            // re-opening the camera reuses the same sender)
+let rtcAudioSenders  = {};  // userId → RTCRtpSender (same idea for audio)
 
 function rtcLocalTracks() {
   return [rtcAudioTrack, rtcVideoTrack].filter(Boolean);
@@ -1931,7 +1934,11 @@ function rtcCreatePeer(userId) {
   rtcPeers[userId] = pc;
   pc._makingOffer = false;
 
-  rtcLocalTracks().forEach(t => pc.addTrack(t));
+  rtcLocalTracks().forEach(t => {
+    const sender = pc.addTrack(t);
+    if (t.kind === "video") rtcVideoSenders[userId] = sender;
+    else if (t.kind === "audio") rtcAudioSenders[userId] = sender;
+  });
 
   // onnegotiationneeded fires automatically when tracks are added/removed —
   // no need to call rtcNegotiate manually anywhere.
@@ -2063,8 +2070,12 @@ async function webrtcStartAudio() {
     const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     rtcAudioTrack = s.getAudioTracks()[0];
     for (const [uid, pc] of Object.entries(rtcPeers)) {
-      if (!pc.getSenders().some(s => s.track?.kind === "audio")) {
-        pc.addTrack(rtcAudioTrack); // triggers onnegotiationneeded
+      let sender = rtcAudioSenders[uid];
+      if (sender) {
+        sender.replaceTrack(rtcAudioTrack);
+      } else {
+        sender = pc.addTrack(rtcAudioTrack);
+        rtcAudioSenders[uid] = sender;
       }
     }
     Object.keys(convUsers).filter(uid => uid !== convUserId && !rtcPeers[uid])
@@ -2088,9 +2099,10 @@ function webrtcStopAudio() {
   if (!rtcAudioTrack) return;
   rtcAudioTrack.stop();
   rtcAudioTrack = null;
-  for (const pc of Object.values(rtcPeers)) {
-    pc.getSenders().filter(s => s.track?.kind === "audio").forEach(s => pc.removeTrack(s));
-    // removeTrack triggers onnegotiationneeded automatically
+  // Same pause-by-replaceTrack pattern as video so re-enabling the mic
+  // doesn't accumulate duplicate senders.
+  for (const sender of Object.values(rtcAudioSenders)) {
+    try { sender.replaceTrack(null); } catch {}
   }
 }
 
@@ -2099,9 +2111,13 @@ function webrtcStartVideo(stream) {
   if (!vt) return;
   rtcVideoTrack = vt;
   for (const [uid, pc] of Object.entries(rtcPeers)) {
-    const sender = pc.getSenders().find(s => s.track?.kind === "video");
-    if (sender) { sender.replaceTrack(vt); } // replaceTrack: no renegotiation needed
-    else { pc.addTrack(vt); }                // addTrack triggers onnegotiationneeded
+    let sender = rtcVideoSenders[uid];
+    if (sender) {
+      sender.replaceTrack(vt); // resume: no renegotiation needed
+    } else {
+      sender = pc.addTrack(vt); // first time for this peer — triggers onnegotiationneeded
+      rtcVideoSenders[uid] = sender;
+    }
   }
   Object.keys(convUsers).filter(uid => uid !== convUserId && !rtcPeers[uid])
     .forEach(uid => rtcCreatePeer(uid));
@@ -2109,9 +2125,11 @@ function webrtcStartVideo(stream) {
 
 function webrtcStopVideo() {
   rtcVideoTrack = null;
-  for (const pc of Object.values(rtcPeers)) {
-    pc.getSenders().filter(s => s.track?.kind === "video").forEach(s => pc.removeTrack(s));
-    // removeTrack triggers onnegotiationneeded automatically
+  // Pause by clearing the track but keep the sender so re-opening the camera
+  // reuses the same m-line and doesn't add a duplicate sender. Without this,
+  // the second open created a phantom sender and remote peers saw blank video.
+  for (const sender of Object.values(rtcVideoSenders)) {
+    try { sender.replaceTrack(null); } catch {}
   }
 }
 
@@ -2122,6 +2140,8 @@ function webrtcOnUserJoined(userId) {
 function webrtcOnUserLeft(userId) {
   rtcPeers[userId]?.close();
   delete rtcPeers[userId];
+  delete rtcVideoSenders[userId];
+  delete rtcAudioSenders[userId];
   rtcRemoveRemote(userId);
 }
 
@@ -2135,4 +2155,6 @@ function webrtcCloseAll() {
   rtcAudioTrack = null;
   rtcVideoTrack = null;
   rtcAudioSources = {};
+  rtcVideoSenders = {};
+  rtcAudioSenders = {};
 }
