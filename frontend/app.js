@@ -1193,6 +1193,21 @@ function convHandleMessage(msg) {
       }
       break;
 
+    case "interrupted": {
+      const interruptedName = msg.interrupted_name;
+      const byName = msg.by_name || (convUsers[msg.interrupted_by_id]?.name ?? "Someone");
+      const el = document.createElement("div");
+      el.className = "conv-interrupted-banner";
+      el.innerHTML = `<svg data-lucide="zap"></svg><span>${byName} interrupted ${interruptedName}</span>`;
+      convMessages.querySelector(".conv-start-hint")?.remove();
+      convMessages.appendChild(el);
+      convMessages.scrollTop = convMessages.scrollHeight;
+      lucide.createIcons({ nodes: [el] });
+      // Auto-remove after 4 s so the feed stays clean
+      setTimeout(() => el.remove(), 4000);
+      break;
+    }
+
     case "error":
       alert(msg.message || "Could not join room.");
       convReset();
@@ -2217,3 +2232,260 @@ function webrtcCloseAll() {
   rtcVideoSenders = {};
   rtcAudioSenders = {};
 }
+
+// ── Enterprise Vocabulary Manager ─────────────────────────────────────────────
+// Provides CRUD on /api/v1/vocabulary and renders a management modal inside
+// the conversation view.  The backend applies vocabulary entries automatically
+// to every translation; this panel lets the host add/edit/remove terms live.
+
+let _vocabEditId = null;  // non-null when the form is in edit mode
+
+const vocabModal       = document.getElementById("vocabModal");
+const vocabClose       = document.getElementById("vocabClose");
+const vocabTerm        = document.getElementById("vocabTerm");
+const vocabLang        = document.getElementById("vocabLang");
+const vocabDef         = document.getElementById("vocabDef");
+const vocabVariants    = document.getElementById("vocabVariants");
+const vocabDomain      = document.getElementById("vocabDomain");
+const vocabSaveBtn     = document.getElementById("vocabSaveBtn");
+const vocabSaveBtnLabel = document.getElementById("vocabSaveBtnLabel");
+const vocabCancelEditBtn = document.getElementById("vocabCancelEditBtn");
+const vocabBulkBtn     = document.getElementById("vocabBulkBtn");
+const vocabBulkArea    = document.getElementById("vocabBulkArea");
+const vocabBulkJson    = document.getElementById("vocabBulkJson");
+const vocabBulkImportBtn = document.getElementById("vocabBulkImportBtn");
+const vocabBulkCancelBtn = document.getElementById("vocabBulkCancelBtn");
+const vocabList        = document.getElementById("vocabList");
+const vocabEmpty       = document.getElementById("vocabEmpty");
+const vocabCountBadge  = document.getElementById("vocabCountBadge");
+const convVocabBtn     = document.getElementById("convVocabBtn");
+const convVocabBadge   = document.getElementById("convVocabBadge");
+
+async function vocabFetchAll() {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/vocabulary`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.entries || [];
+  } catch { return []; }
+}
+
+function vocabUpdateBadge(count) {
+  if (vocabCountBadge) vocabCountBadge.textContent = count;
+  if (convVocabBadge) {
+    convVocabBadge.textContent = count;
+    convVocabBadge.style.display = count > 0 ? "flex" : "none";
+  }
+}
+
+function vocabRenderList(entries) {
+  if (!vocabList) return;
+  while (vocabList.firstChild) vocabList.removeChild(vocabList.firstChild);
+  if (!entries.length) {
+    const emp = document.createElement("div");
+    emp.className = "vocab-empty";
+    emp.textContent = "No terms yet. Add your first enterprise term above.";
+    vocabList.appendChild(emp);
+    vocabUpdateBadge(0);
+    return;
+  }
+  vocabUpdateBadge(entries.length);
+  entries.forEach(entry => {
+    const row = document.createElement("div");
+    row.className = "vocab-entry";
+    row.dataset.id = entry.id;
+
+    const body = document.createElement("div");
+    body.className = "vocab-entry-body";
+
+    const termLine = document.createElement("div");
+    termLine.className = "vocab-entry-term";
+    termLine.textContent = entry.term;
+
+    const langBadge = document.createElement("span");
+    langBadge.className = "vocab-entry-lang";
+    langBadge.textContent = entry.language.toUpperCase();
+    termLine.appendChild(langBadge);
+
+    if (entry.domain) {
+      const domBadge = document.createElement("span");
+      domBadge.className = "vocab-entry-domain";
+      domBadge.textContent = entry.domain;
+      termLine.appendChild(domBadge);
+    }
+
+    const def = document.createElement("div");
+    def.className = "vocab-entry-def";
+    def.textContent = entry.definition;
+
+    body.appendChild(termLine);
+    body.appendChild(def);
+
+    if (entry.variants?.length) {
+      const v = document.createElement("div");
+      v.className = "vocab-entry-variants";
+      v.textContent = "Also: " + entry.variants.join(", ");
+      body.appendChild(v);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "vocab-entry-actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "vocab-action-btn";
+    editBtn.title = "Edit";
+    editBtn.innerHTML = '<svg data-lucide="pencil"></svg>';
+    editBtn.addEventListener("click", () => vocabStartEdit(entry));
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "vocab-action-btn delete";
+    delBtn.title = "Delete";
+    delBtn.innerHTML = '<svg data-lucide="trash-2"></svg>';
+    delBtn.addEventListener("click", () => vocabDelete(entry.id));
+
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
+
+    row.appendChild(body);
+    row.appendChild(actions);
+    vocabList.appendChild(row);
+  });
+  lucide.createIcons({ nodes: Array.from(vocabList.querySelectorAll("[data-lucide]")) });
+}
+
+function vocabClearForm() {
+  _vocabEditId = null;
+  if (vocabTerm) vocabTerm.value = "";
+  if (vocabLang) vocabLang.value = "en";
+  if (vocabDef) vocabDef.value = "";
+  if (vocabVariants) vocabVariants.value = "";
+  if (vocabDomain) vocabDomain.value = "";
+  if (vocabSaveBtnLabel) vocabSaveBtnLabel.textContent = "Add Term";
+  if (vocabCancelEditBtn) vocabCancelEditBtn.style.display = "none";
+}
+
+function vocabStartEdit(entry) {
+  _vocabEditId = entry.id;
+  if (vocabTerm) vocabTerm.value = entry.term;
+  if (vocabLang) vocabLang.value = entry.language || "en";
+  if (vocabDef) vocabDef.value = entry.definition;
+  if (vocabVariants) vocabVariants.value = (entry.variants || []).join(", ");
+  if (vocabDomain) vocabDomain.value = entry.domain || "";
+  if (vocabSaveBtnLabel) vocabSaveBtnLabel.textContent = "Save Changes";
+  if (vocabCancelEditBtn) vocabCancelEditBtn.style.display = "inline-flex";
+  vocabTerm?.focus();
+}
+
+async function vocabSave() {
+  const term = vocabTerm?.value.trim();
+  const def  = vocabDef?.value.trim();
+  if (!term || !def) { alert("Term and definition are required."); return; }
+
+  const variants = (vocabVariants?.value || "")
+    .split(",").map(s => s.trim()).filter(Boolean);
+  const payload = {
+    term,
+    definition: def,
+    language: vocabLang?.value || "en",
+    variants,
+    domain: vocabDomain?.value.trim() || "",
+    translations: {},
+  };
+
+  try {
+    let res;
+    if (_vocabEditId) {
+      res = await fetch(`${API_BASE}/api/v1/vocabulary/${_vocabEditId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      res = await fetch(`${API_BASE}/api/v1/vocabulary`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    vocabClearForm();
+    await vocabRefresh();
+  } catch (e) {
+    alert("Save failed: " + e.message);
+  }
+}
+
+async function vocabDelete(id) {
+  if (!confirm("Delete this vocabulary entry?")) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/vocabulary/${id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await vocabRefresh();
+  } catch (e) {
+    alert("Delete failed: " + e.message);
+  }
+}
+
+async function vocabRefresh() {
+  const entries = await vocabFetchAll();
+  vocabRenderList(entries);
+}
+
+async function vocabBulkImport() {
+  const raw = vocabBulkJson?.value.trim();
+  if (!raw) return;
+  let rows;
+  try { rows = JSON.parse(raw); }
+  catch { alert("Invalid JSON. Expected an array of objects."); return; }
+  if (!Array.isArray(rows)) { alert("JSON must be an array."); return; }
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/vocabulary/bulk`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(rows),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (vocabBulkArea) vocabBulkArea.style.display = "none";
+    if (vocabBulkJson) vocabBulkJson.value = "";
+    await vocabRefresh();
+    alert(`Imported ${data.added} entries.`);
+  } catch (e) {
+    alert("Bulk import failed: " + e.message);
+  }
+}
+
+async function vocabOpen() {
+  if (!vocabModal) return;
+  vocabClearForm();
+  if (vocabBulkArea) vocabBulkArea.style.display = "none";
+  vocabModal.style.display = "flex";
+  await vocabRefresh();
+}
+
+// Wiring
+vocabClose?.addEventListener("click", () => {
+  if (vocabModal) vocabModal.style.display = "none";
+  vocabClearForm();
+});
+vocabModal?.addEventListener("click", e => {
+  if (e.target === vocabModal) {
+    vocabModal.style.display = "none";
+    vocabClearForm();
+  }
+});
+vocabSaveBtn?.addEventListener("click", vocabSave);
+vocabCancelEditBtn?.addEventListener("click", vocabClearForm);
+vocabBulkBtn?.addEventListener("click", () => {
+  if (vocabBulkArea) vocabBulkArea.style.display = vocabBulkArea.style.display === "none" ? "flex" : "none";
+});
+vocabBulkImportBtn?.addEventListener("click", vocabBulkImport);
+vocabBulkCancelBtn?.addEventListener("click", () => {
+  if (vocabBulkArea) vocabBulkArea.style.display = "none";
+  if (vocabBulkJson) vocabBulkJson.value = "";
+});
+convVocabBtn?.addEventListener("click", vocabOpen);
+
+// Allow Enter in term/def fields to submit
+vocabTerm?.addEventListener("keydown", e => { if (e.key === "Enter") vocabSave(); });
+vocabDef?.addEventListener("keydown",  e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); vocabSave(); } });

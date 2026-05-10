@@ -122,12 +122,14 @@ def _is_echo(room_id: str, text: str) -> bool:
 # Load environment variables BEFORE importing agents (they need GROQ_API_KEY)
 load_dotenv(override=False)
 
-from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect, HTTPException  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
 from agents.orchestrator import run_text_pipeline, run_audio_pipeline, run_conversation_pipeline  # noqa: E402
 from agents import language_detection_agent, transcription_agent  # noqa: E402
+import vocabulary_store  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -196,11 +198,33 @@ async def _no_cache_static(request, call_next):
     return response
 
 # Conversation rooms: room_id → {
-#   "conns":   {user_id: WebSocket},
-#   "info":    {user_id: {name, language, is_host, mic_on}},
-#   "host_id": str | None
+#   "conns":      {user_id: WebSocket},
+#   "info":       {user_id: {name, language, is_host, mic_on, camera_on}},
+#   "host_id":    str | None,
+#   "empty_since": float | None,
+#   "speaking":   {user_id: float}   ← monotonic ts; active utterance tracking
 # }
 _rooms: dict = {}
+
+
+# ── Vocabulary Pydantic schemas ────────────────────────────────────────────────
+
+class VocabEntry(BaseModel):
+    term: str
+    definition: str
+    language: str = "en"
+    variants: list[str] = []
+    domain: str = ""
+    translations: dict[str, str] = {}
+
+
+class VocabUpdate(BaseModel):
+    term: str | None = None
+    definition: str | None = None
+    language: str | None = None
+    variants: list[str] | None = None
+    domain: str | None = None
+    translations: dict[str, str] | None = None
 
 
 _ROOM_ID_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # excludes I, L, O, 0, 1
@@ -239,8 +263,68 @@ async def create_room():
     # joins can validate the ID exists. Without this, a participant typing
     # a wrong (or stale) room ID would silently create a brand-new room
     # and become its host.
-    _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None, "empty_since": time.time()}
+    _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None, "empty_since": time.time(), "speaking": {}}
     return {"room_id": room_id}
+
+
+# ── Enterprise Vocabulary API  (/api/v1/vocabulary) ───────────────────────────
+
+@app.get("/api/v1/vocabulary")
+async def vocab_list():
+    """List all enterprise vocabulary entries."""
+    return {"entries": vocabulary_store.list_all(), "version": vocabulary_store.get_version()}
+
+
+@app.post("/api/v1/vocabulary", status_code=201)
+async def vocab_add(body: VocabEntry):
+    """Add a new enterprise vocabulary entry."""
+    entry = vocabulary_store.add(
+        body.term, body.definition,
+        language=body.language,
+        variants=body.variants,
+        domain=body.domain,
+        translations=body.translations,
+    )
+    return entry
+
+
+@app.put("/api/v1/vocabulary/{entry_id}")
+async def vocab_update(entry_id: str, body: VocabUpdate):
+    """Update an existing vocabulary entry."""
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    updated = vocabulary_store.update(entry_id, **updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return updated
+
+
+@app.delete("/api/v1/vocabulary/{entry_id}")
+async def vocab_delete(entry_id: str):
+    """Delete a vocabulary entry."""
+    if not vocabulary_store.delete(entry_id):
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"deleted": entry_id}
+
+
+@app.post("/api/v1/vocabulary/bulk", status_code=201)
+async def vocab_bulk(rows: list[VocabEntry]):
+    """Bulk-import vocabulary entries."""
+    added = vocabulary_store.bulk_import([r.model_dump() for r in rows])
+    return {"added": added, "version": vocabulary_store.get_version()}
+
+
+# ── Translation cache stats (API-first observability) ─────────────────────────
+
+@app.get("/api/v1/stats")
+async def api_stats():
+    """Return live runtime counters for observability."""
+    from agents import translation_agent as _ta
+    return {
+        "rooms_active": len(_rooms),
+        "translation_cache_size": _ta.cache_size(),
+        "vocabulary_entries": len(vocabulary_store.list_all()),
+        "vocabulary_version": vocabulary_store.get_version(),
+    }
 
 
 @app.websocket("/ws/conversation/{room_id}")
@@ -274,7 +358,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
         if is_creator:
             # Host's frontend remembers it created this room (e.g. the server
             # restarted on a deploy). Recreate the room so they can keep going.
-            _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None, "empty_since": time.time()}
+            _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None, "empty_since": time.time(), "speaking": {}}
             logger.info("Re-created room on host reconnect: %s", room_id)
         else:
             try:
@@ -600,6 +684,29 @@ async def inject_speech(room_id: str, user_id: str, text: str):
                        user_id, room_id, list(room["info"].keys()))
         return
 
+    # ── Interruption detection ──────────────────────────────────────────────────
+    # If another participant's utterance is still being processed, broadcast an
+    # `interrupted` event so all clients can visually flag the overlap.
+    speaking = room.setdefault("speaking", {})
+    other_speakers = [uid for uid in list(speaking.keys()) if uid != user_id]
+    if other_speakers:
+        interrupted_id = other_speakers[0]
+        interrupted_name = (room["info"].get(interrupted_id) or {}).get("name", "")
+        if interrupted_name:
+            for ws in list(room["conns"].values()):
+                try:
+                    await ws.send_json({
+                        "type": "interrupted",
+                        "interrupted_user_id": interrupted_id,
+                        "interrupted_by_id": user_id,
+                        "interrupted_name": interrupted_name,
+                        "by_name": (room["info"].get(user_id) or {}).get("name", ""),
+                    })
+                except Exception:
+                    pass
+        speaking.pop(interrupted_id, None)
+    speaking[user_id] = time.monotonic()
+
     # Record the original now so any STT pickup of our own speech is detected.
     _record_broadcast(room_id, text)
 
@@ -645,6 +752,9 @@ async def inject_speech(room_id: str, user_id: str, text: str):
         tasks.append(_translate_and_send(other_id, other_ws, other_info))
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Clear speaking state now that all translations have been delivered
+    room.setdefault("speaking", {}).pop(user_id, None)
 
 
 @app.websocket("/ws/stt/{room_id}/{user_id}")
