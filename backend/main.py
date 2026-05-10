@@ -992,9 +992,14 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str,
         cfg = json.loads(raw)
         sample_rate = int(cfg.get("sample_rate", 16000))
         language = cfg.get("language", "en")
+    except WebSocketDisconnect:
+        return  # client disconnected before sending config — nothing to close
     except Exception as e:
         logger.error("STT config error: %s", e)
-        await websocket.close()
+        try:
+            await websocket.close()
+        except Exception:
+            pass
         return
 
     # Validate Google credentials early — fail fast with a clear close reason.

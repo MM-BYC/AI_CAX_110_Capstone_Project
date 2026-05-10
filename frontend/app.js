@@ -1576,6 +1576,9 @@ async function _convStartIosMicInner() {
   const actualRate = Math.round(_iosAudioCtx.sampleRate);
   _micTrace(`AudioContext ready (${actualRate} Hz), connecting to STT…`);
 
+  if (_iosSttWs && _iosSttWs.readyState < WebSocket.CLOSING) _iosSttWs.close();
+  _iosSttWs = null;
+
   const lang  = convUsers[convUserId]?.language || "en";
   const wsUrl = _buildIosSttWsUrl();
   console.log("[mic] WS URL:", wsUrl);
@@ -1729,7 +1732,6 @@ convMicBtn.addEventListener("click", () => {
     if (_iosMicActive) {
       convStopIosMic();
     } else {
-      _iosStarting = false; // clear any stale lock from a previous failed attempt
       convStartIosMic();
     }
   } else {
