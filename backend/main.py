@@ -713,6 +713,17 @@ async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
                     if browser_done:
                         break
 
+                    # If the browser never sent any audio, don't keep spamming
+                    # Deepgram with empty sessions. Close the browser WS and stop.
+                    if rx_bytes["frames"] == 0:
+                        logger.info("STT no audio from browser — closing WS to stop reconnect loop (room=%s user=%s)",
+                                    room_id, user_id)
+                        try:
+                            await websocket.close(code=1011, reason="no audio from browser")
+                        except Exception:
+                            pass
+                        break
+
                     # STT closed — reconnect after brief pause
                     logger.info("STT connection closed, reconnecting… (room=%s user=%s)", room_id, user_id)
                     await asyncio.sleep(0.5)
