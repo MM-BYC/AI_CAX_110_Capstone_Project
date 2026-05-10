@@ -529,6 +529,9 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
 
     lang_code = _GOOGLE_LANG.get(language, "en-US")
 
+    logger.info("STT session opening: room=%s user=%s lang=%s rate=%d",
+                room_id, user_id, lang_code, sample_rate)
+
     def run_stt():
         client = _make_speech_client()
         stt_cfg = _google_speech.RecognitionConfig(
@@ -544,7 +547,10 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
         consecutive_errors = 0
 
         while not stop_evt.is_set():
+            first_chunk_logged = False
+
             def _gen():
+                nonlocal first_chunk_logged
                 deadline = time.monotonic() + SESSION_SECS
                 while not stop_evt.is_set():
                     left = deadline - time.monotonic()
@@ -554,18 +560,30 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                         chunk = audio_q.get(timeout=min(0.1, left))
                         if chunk is None:
                             return
+                        if not first_chunk_logged:
+                            logger.info("STT first audio chunk (room=%s user=%s, %d bytes)",
+                                        room_id, user_id, len(chunk))
+                            first_chunk_logged = True
                         yield _google_speech.StreamingRecognizeRequest(audio_content=chunk)
                     except _queue.Empty:
                         continue
 
             try:
+                first_resp_logged = False
                 for resp in client.streaming_recognize(config=streaming_cfg, requests=_gen()):
+                    if not first_resp_logged:
+                        logger.info("STT first Google response (room=%s user=%s)", room_id, user_id)
+                        first_resp_logged = True
                     for result in resp.results:
                         if not result.is_final:
                             continue
-                        transcript = result.alternatives[0].transcript.strip()
+                        if not result.alternatives:
+                            continue
+                        transcript = (result.alternatives[0].transcript or "").strip()
                         if len(transcript) < 2:
                             continue
+                        logger.info("STT final: room=%s user=%s text=%r",
+                                    room_id, user_id, transcript[:100])
                         asyncio.run_coroutine_threadsafe(
                             inject_speech(room_id, user_id, transcript), loop
                         )
@@ -585,9 +603,16 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
 
     threading.Thread(target=run_stt, daemon=True).start()
 
+    rx_frames = 0
+    rx_bytes = 0
     try:
         while True:
             data = await websocket.receive_bytes()
+            rx_frames += 1
+            rx_bytes += len(data)
+            if rx_frames in (1, 25, 250):
+                logger.info("STT WS rx: room=%s user=%s frames=%d bytes=%d",
+                            room_id, user_id, rx_frames, rx_bytes)
             try:
                 audio_q.put_nowait(data)
             except _queue.Full:
@@ -597,6 +622,8 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
     except Exception as e:
         logger.error("STT WS error: %s", e)
     finally:
+        logger.info("STT WS closed: room=%s user=%s rx_frames=%d rx_bytes=%d",
+                    room_id, user_id, rx_frames, rx_bytes)
         stop_evt.set()
         audio_q.put(None)
 
