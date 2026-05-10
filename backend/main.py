@@ -443,11 +443,15 @@ async def inject_speech(room_id: str, user_id: str, text: str):
     """Inject a Google-STT transcript into a conversation room.
     Echoes the original to the speaker and runs the per-participant
     translation pipeline for every other participant."""
+    logger.info("inject_speech: room=%s user=%s text=%r", room_id, user_id, text[:60])
     room = _rooms.get(room_id)
     if not room:
+        logger.warning("inject_speech: room %s not found", room_id)
         return
     my_info = room["info"].get(user_id)
     if not my_info:
+        logger.warning("inject_speech: user %s not in room %s. known=%s",
+                       user_id, room_id, list(room["info"].keys()))
         return
 
     speaker_ws = room["conns"].get(user_id)
@@ -643,6 +647,8 @@ async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
 
             try:
                 async with _ws_connect(stt_url, extra_headers=stt_headers) as stt_ws:
+                    logger.info("STT connected: %s (room=%s user=%s)",
+                                stt_url.split("?")[0], room_id, user_id)
 
                     async def stt_sender():
                         while not browser_closed.is_set():
@@ -657,11 +663,14 @@ async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
                     async def relay_transcripts():
                         try:
                             async for raw in stt_ws:
-                                text, is_final = parse_transcript(json.loads(raw))
+                                payload = json.loads(raw)
+                                logger.info("STT msg type=%s text=%r",
+                                            payload.get("type"), str(payload.get("text", ""))[:60])
+                                text, is_final = parse_transcript(payload)
                                 if text and is_final:
                                     await inject_speech(room_id, user_id, text)
                         except Exception as e:
-                            logger.debug("STT transcript relay ended: %s", e)
+                            logger.info("STT transcript relay ended: %s", e)
 
                     sender_task     = asyncio.ensure_future(stt_sender())
                     transcript_task = asyncio.ensure_future(relay_transcripts())
@@ -683,7 +692,7 @@ async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
                         break
 
                     # STT closed — reconnect after brief pause
-                    logger.debug("STT connection closed, reconnecting…")
+                    logger.info("STT connection closed, reconnecting… (room=%s user=%s)", room_id, user_id)
                     await asyncio.sleep(0.5)
 
             except asyncio.CancelledError:
