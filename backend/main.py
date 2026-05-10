@@ -7,6 +7,7 @@ import string
 import logging
 import threading
 import time
+from collections import deque
 from pathlib import Path
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
@@ -86,6 +87,37 @@ def _is_likely_hallucination(text: str) -> bool:
     if len(norm) < 4:
         return True
     return norm in _STT_HALLUCINATIONS
+
+
+# Per-room ring buffer of recently broadcast originals + translations.
+# Used to suppress echo: when the iPhone mic picks up the Mac's TTS playback,
+# Google STT will transcribe the translated text — we drop it.
+_ECHO_WINDOW_SEC = 10.0
+_recent_broadcasts: dict = {}  # room_id → deque[(monotonic_ts, normalized_text)]
+
+
+def _normalize_for_echo(text: str) -> str:
+    return text.strip().lower().rstrip(".!?,").strip()
+
+
+def _record_broadcast(room_id: str, *texts: str) -> None:
+    bucket = _recent_broadcasts.setdefault(room_id, deque(maxlen=40))
+    now = time.monotonic()
+    for t in texts:
+        norm = _normalize_for_echo(t)
+        if norm:
+            bucket.append((now, norm))
+
+
+def _is_echo(room_id: str, text: str) -> bool:
+    bucket = _recent_broadcasts.get(room_id)
+    if not bucket:
+        return False
+    now = time.monotonic()
+    while bucket and now - bucket[0][0] > _ECHO_WINDOW_SEC:
+        bucket.popleft()
+    norm = _normalize_for_echo(text)
+    return any(b == norm for _, b in bucket)
 
 # Load environment variables BEFORE importing agents (they need GROQ_API_KEY)
 load_dotenv(override=False)
@@ -473,6 +505,10 @@ async def inject_speech(room_id: str, user_id: str, text: str):
     """Inject a Google-STT transcript into a conversation room.
     Echoes the original to the speaker and runs the per-participant
     translation pipeline for every other participant."""
+    if _is_echo(room_id, text):
+        logger.info("inject_speech: echo dropped room=%s user=%s text=%r",
+                    room_id, user_id, text[:60])
+        return
     logger.info("inject_speech: room=%s user=%s text=%r", room_id, user_id, text[:60])
     room = _rooms.get(room_id)
     if not room:
@@ -483,6 +519,9 @@ async def inject_speech(room_id: str, user_id: str, text: str):
         logger.warning("inject_speech: user %s not in room %s. known=%s",
                        user_id, room_id, list(room["info"].keys()))
         return
+
+    # Record the original now so any STT pickup of our own speech is detected.
+    _record_broadcast(room_id, text)
 
     speaker_ws = room["conns"].get(user_id)
     if speaker_ws:
@@ -510,6 +549,9 @@ async def inject_speech(room_id: str, user_id: str, text: str):
                     text, my_info["language"], other_info["language"],
                 )
                 translated = result.get("translation", text)
+            # Record translation as a recent broadcast — if any mic picks it up
+            # via TTS playback, that incoming transcript will be dropped as echo.
+            _record_broadcast(room_id, translated)
             await other_ws.send_json({
                 "type": "message", "from_id": user_id,
                 "from": my_info["name"], "original": text,
@@ -579,6 +621,7 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
         )
         SESSION_SECS = 270  # restart before Google's 5-min hard limit
         consecutive_errors = 0
+        last_emit = {"text": "", "ts": 0.0}
 
         while not stop_evt.is_set():
             first_chunk_logged = False
@@ -626,6 +669,15 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                             logger.info("STT dropped low-confidence %.2f: %r",
                                         confidence, transcript[:80])
                             continue
+                        # Suppress identical repeats within 5s — Google sometimes
+                        # emits the same final twice (e.g., on session restart/flush).
+                        norm = transcript.strip().lower()
+                        now_ts = time.monotonic()
+                        if norm == last_emit["text"] and now_ts - last_emit["ts"] < 5.0:
+                            logger.info("STT dedup duplicate within 5s: %r", transcript[:60])
+                            continue
+                        last_emit["text"] = norm
+                        last_emit["ts"] = now_ts
                         logger.info("STT final: room=%s user=%s conf=%.2f text=%r",
                                     room_id, user_id, confidence, transcript[:100])
                         asyncio.run_coroutine_threadsafe(
