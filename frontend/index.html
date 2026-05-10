@@ -388,10 +388,17 @@
                   <span>Invite</span>
                 </button>
               </div>
-              <button type="button" class="btn btn-secondary conv-leave-btn" id="convLeaveBtn">
-                <i data-lucide="log-out"></i>
-                <span>Leave</span>
-              </button>
+              <div class="conv-room-bar-right">
+                <button type="button" class="btn btn-secondary conv-vocab-btn" id="convVocabBtn" title="Enterprise Vocabulary">
+                  <i data-lucide="book-open"></i>
+                  <span>Vocab</span>
+                  <span class="conv-vocab-badge" id="convVocabBadge" style="display:none">0</span>
+                </button>
+                <button type="button" class="btn btn-secondary conv-leave-btn" id="convLeaveBtn">
+                  <i data-lucide="log-out"></i>
+                  <span>Leave</span>
+                </button>
+              </div>
             </div>
 
             <!-- Participant carousel: name + camera square, 3 rows max, paginated -->
@@ -460,6 +467,80 @@
             <textarea class="conv-invite-msg" id="convInviteMsg" readonly></textarea>
             <p class="conv-invite-share-label">Share via</p>
             <div class="conv-invite-grid" id="convInvitePlatforms"></div>
+          </div>
+        </div>
+
+        <!-- Vocabulary modal (host only) -->
+        <div id="vocabModal" class="vocab-modal" style="display:none" aria-modal="true" role="dialog">
+          <div class="vocab-card">
+            <div class="vocab-card-header">
+              <div class="vocab-card-title">
+                <i data-lucide="book-open"></i>
+                <span>Enterprise Vocabulary</span>
+                <span class="vocab-count-badge" id="vocabCountBadge">0</span>
+              </div>
+              <button type="button" class="vocab-close-btn" id="vocabClose">
+                <i data-lucide="x"></i>
+              </button>
+            </div>
+            <p class="vocab-subtitle">Terms are automatically injected into every translation to ensure consistent enterprise terminology.</p>
+
+            <!-- Add / edit form -->
+            <div class="vocab-form" id="vocabForm">
+              <div class="vocab-form-row">
+                <input type="text" id="vocabTerm" class="vocab-input" placeholder="Term (e.g. ROI, SLA, sprint)" maxlength="80" />
+                <select id="vocabLang" class="vocab-select">
+                  <option value="en">English</option>
+                  <option value="es">Spanish</option>
+                  <option value="fr">French</option>
+                  <option value="de">German</option>
+                  <option value="it">Italian</option>
+                  <option value="pt">Portuguese</option>
+                  <option value="zh">Chinese</option>
+                  <option value="ja">Japanese</option>
+                  <option value="ko">Korean</option>
+                  <option value="ar">Arabic</option>
+                  <option value="ru">Russian</option>
+                  <option value="hi">Hindi</option>
+                  <option value="nl">Dutch</option>
+                  <option value="pl">Polish</option>
+                  <option value="tr">Turkish</option>
+                  <option value="tl">Tagalog</option>
+                </select>
+              </div>
+              <textarea id="vocabDef" class="vocab-textarea" placeholder="Definition — what this term means in your organisation's context" rows="2" maxlength="400"></textarea>
+              <input type="text" id="vocabVariants" class="vocab-input" placeholder="Aliases (comma-separated, optional): Return on Investment, retorno" maxlength="200" />
+              <input type="text" id="vocabDomain" class="vocab-input" placeholder="Domain (optional): finance, engineering, HR…" maxlength="60" />
+              <div class="vocab-form-actions">
+                <button type="button" class="btn btn-primary" id="vocabSaveBtn">
+                  <i data-lucide="save"></i>
+                  <span id="vocabSaveBtnLabel">Add Term</span>
+                </button>
+                <button type="button" class="btn btn-secondary" id="vocabCancelEditBtn" style="display:none">Cancel</button>
+                <button type="button" class="btn btn-secondary" id="vocabBulkBtn">
+                  <i data-lucide="upload"></i>
+                  <span>Bulk Import</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Bulk import textarea -->
+            <div id="vocabBulkArea" style="display:none" class="vocab-bulk-area">
+              <p class="vocab-bulk-hint">Paste a JSON array of entries: <code>[{"term":"ROI","definition":"Return on Investment","language":"en"}]</code></p>
+              <textarea id="vocabBulkJson" class="vocab-textarea" rows="5" placeholder='[{"term":"...","definition":"...","language":"en"}]'></textarea>
+              <div class="vocab-form-actions">
+                <button type="button" class="btn btn-primary" id="vocabBulkImportBtn">
+                  <i data-lucide="download"></i>
+                  <span>Import</span>
+                </button>
+                <button type="button" class="btn btn-secondary" id="vocabBulkCancelBtn">Cancel</button>
+              </div>
+            </div>
+
+            <!-- Entry list -->
+            <div class="vocab-list" id="vocabList">
+              <div class="vocab-empty" id="vocabEmpty">No terms yet. Add your first enterprise term above.</div>
+            </div>
           </div>
         </div>
 

@@ -1,10 +1,12 @@
 import os
 import json
 import asyncio
+import base64
 import queue as _queue
 import random
 import string
 import logging
+import tempfile
 import threading
 import time
 from collections import deque
@@ -122,12 +124,17 @@ def _is_echo(room_id: str, text: str) -> bool:
 # Load environment variables BEFORE importing agents (they need GROQ_API_KEY)
 load_dotenv(override=False)
 
-from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi import FastAPI, Request, UploadFile, WebSocket, WebSocketDisconnect, HTTPException  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
 from agents.orchestrator import run_text_pipeline, run_audio_pipeline, run_conversation_pipeline  # noqa: E402
 from agents import language_detection_agent, transcription_agent  # noqa: E402
+import vocabulary_store  # noqa: E402
+import style_profiler  # noqa: E402
+import security  # noqa: E402
+import voice_clone  # noqa: E402  # standalone XTTS-v2 voice cloning module
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -143,6 +150,35 @@ else:
 _EMPTY_ROOM_TTL_SEC = 300
 
 
+async def _send_voice_clone_audio(ws, speaker_id: str, text: str, target_lang: str) -> None:
+    """Synthesise *text* in *speaker_id*'s cloned voice and push it to *ws*.
+
+    Best-effort: any failure is swallowed silently so the text path is never
+    affected.  Listener-side timeout (~1.5 s) decides whether to use this
+    audio or fall back to browser TTS.
+    """
+    if not text or not text.strip():
+        return
+    try:
+        wav = await asyncio.to_thread(
+            voice_clone.synthesize_for_user, text, target_lang, speaker_id,
+        )
+    except Exception as e:
+        logger.debug("voice clone synth skipped (%s)", e)
+        return
+    if not wav:
+        return
+    try:
+        await ws.send_json({
+            "type":      "voice_audio",
+            "from_id":   speaker_id,
+            "format":    "wav",
+            "audio_b64": base64.b64encode(wav).decode("ascii"),
+        })
+    except Exception:
+        pass
+
+
 async def _cleanup_empty_rooms():
     while True:
         try:
@@ -154,6 +190,8 @@ async def _cleanup_empty_rooms():
                     _rooms.pop(rid, None)
                     _recent_broadcasts.pop(rid, None)
                     logger.info("Cleaned up empty room: %s", rid)
+            # Prune idle rate-limit buckets to keep memory bounded
+            security._prune_rate_windows()
         except asyncio.CancelledError:
             return
         except Exception as e:
@@ -174,12 +212,20 @@ async def lifespan(app):
 
 app = FastAPI(title="AI Translate", version="2.0.0", lifespan=lifespan)
 
+# CORS — restricted to configured origins in production; open in dev
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=security.get_allowed_origins(),
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["X-Response-Time-Ms"],
 )
+
+# API key auth + rate limiting for /api/v1/ routes
+app.middleware("http")(security.api_guard)
+
+# Security headers on every response (must be added last = outermost wrapper)
+app.middleware("http")(security.security_headers_middleware)
 
 
 @app.middleware("http")
@@ -196,11 +242,33 @@ async def _no_cache_static(request, call_next):
     return response
 
 # Conversation rooms: room_id → {
-#   "conns":   {user_id: WebSocket},
-#   "info":    {user_id: {name, language, is_host, mic_on}},
-#   "host_id": str | None
+#   "conns":      {user_id: WebSocket},
+#   "info":       {user_id: {name, language, is_host, mic_on, camera_on}},
+#   "host_id":    str | None,
+#   "empty_since": float | None,
+#   "speaking":   {user_id: float}   ← monotonic ts; active utterance tracking
 # }
 _rooms: dict = {}
+
+
+# ── Vocabulary Pydantic schemas ────────────────────────────────────────────────
+
+class VocabEntry(BaseModel):
+    term: str
+    definition: str
+    language: str = "en"
+    variants: list[str] = []
+    domain: str = ""
+    translations: dict[str, str] = {}
+
+
+class VocabUpdate(BaseModel):
+    term: str | None = None
+    definition: str | None = None
+    language: str | None = None
+    variants: list[str] | None = None
+    domain: str | None = None
+    translations: dict[str, str] | None = None
 
 
 _ROOM_ID_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # excludes I, L, O, 0, 1
@@ -239,8 +307,197 @@ async def create_room():
     # joins can validate the ID exists. Without this, a participant typing
     # a wrong (or stale) room ID would silently create a brand-new room
     # and become its host.
-    _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None, "empty_since": time.time()}
+    _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None, "empty_since": time.time(), "speaking": {}}
     return {"room_id": room_id}
+
+
+# ── Enterprise Vocabulary API  (/api/v1/vocabulary) ───────────────────────────
+
+@app.get("/api/v1/vocabulary")
+async def vocab_list():
+    """List all enterprise vocabulary entries."""
+    return {"entries": vocabulary_store.list_all(), "version": vocabulary_store.get_version()}
+
+
+@app.post("/api/v1/vocabulary", status_code=201)
+async def vocab_add(body: VocabEntry):
+    """Add a new enterprise vocabulary entry."""
+    entry = vocabulary_store.add(
+        body.term, body.definition,
+        language=body.language,
+        variants=body.variants,
+        domain=body.domain,
+        translations=body.translations,
+    )
+    return entry
+
+
+@app.put("/api/v1/vocabulary/{entry_id}")
+async def vocab_update(entry_id: str, body: VocabUpdate):
+    """Update an existing vocabulary entry."""
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    updated = vocabulary_store.update(entry_id, **updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return updated
+
+
+@app.delete("/api/v1/vocabulary/{entry_id}")
+async def vocab_delete(entry_id: str):
+    """Delete a vocabulary entry."""
+    if not vocabulary_store.delete(entry_id):
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"deleted": entry_id}
+
+
+@app.post("/api/v1/vocabulary/bulk", status_code=201)
+async def vocab_bulk(rows: list[VocabEntry]):
+    """Bulk-import vocabulary entries."""
+    added = vocabulary_store.bulk_import([r.model_dump() for r in rows])
+    return {"added": added, "version": vocabulary_store.get_version()}
+
+
+# ── Translation cache stats (API-first observability) ─────────────────────────
+
+@app.get("/api/v1/stats")
+async def api_stats():
+    """Live runtime counters for observability / SLA dashboards."""
+    from agents import translation_agent as _ta
+    return {
+        "rooms_active": len(_rooms),
+        "translation_cache_size": _ta.cache_size(),
+        "vocabulary_entries": len(vocabulary_store.list_all()),
+        "vocabulary_version": vocabulary_store.get_version(),
+        "production_mode": security.is_production(),
+        "rate_limit_rpm": int(os.getenv("RATE_LIMIT_RPM", "120")),
+    }
+
+
+# ── /api/v1/ aliases for core translation endpoints ───────────────────────────
+# Versioned surface for SDK / enterprise API clients.
+# Legacy root-level routes kept for backward compatibility.
+
+@app.post("/api/v1/translate/text")
+async def api_translate_text(source: str, target: str, text: str, request: Request = None):
+    """Translate text (SDK/API-first endpoint)."""
+    if request:
+        security.audit("translate_text", request, source=source, target=target,
+                       chars=len(text))
+    result = run_text_pipeline(text, source, target)
+    return result
+
+
+@app.post("/api/v1/translate/audio")
+async def api_translate_audio(source: str, target: str, file: UploadFile,
+                               request: Request = None):
+    """Translate an uploaded audio file (SDK/API-first endpoint)."""
+    filepath = f"temp_api_{file.filename}"
+    with open(filepath, "wb") as f:
+        f.write(await file.read())
+    try:
+        result = run_audio_pipeline(filepath, source, target)
+    finally:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+    if request:
+        security.audit("translate_audio", request, source=source, target=target)
+    return result
+
+
+@app.post("/api/v1/detect")
+async def api_detect_language(text: str, request: Request = None):
+    """Detect language (SDK/API-first endpoint)."""
+    detected = language_detection_agent.run(text)
+    return {"detected_language": detected}
+
+
+# ── Voice Cloning API  (/api/v1/voices)  ──────────────────────────────────────
+# Backed by the standalone `voice_clone` module (Coqui XTTS-v2).
+# Gracefully reports 503 when the model can't load (e.g. on Render free tier
+# where torch+XTTS won't fit in 512 MB) so the frontend can fall back to the
+# browser's Web Speech API.
+
+@app.get("/api/v1/voices/status")
+async def voices_status():
+    """Whether voice cloning is available on this deployment."""
+    return {
+        "available":          voice_clone.is_available(),
+        "supported_languages": sorted(voice_clone.SUPPORTED_LANGUAGES),
+    }
+
+
+@app.post("/api/v1/voices/enroll", status_code=201)
+async def voices_enroll(user_id: str, file: UploadFile, request: Request = None):
+    """Enroll a reference voice clip for *user_id*.
+
+    Accepts a multipart audio upload (5-15 s of clean speech recommended).
+    The bytes are stored verbatim under VOICE_CLONE_REF_DIR.  The frontend
+    is responsible for sending a mono PCM WAV — the recorder pipeline does
+    a WebM→WAV decode before upload.
+    """
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="empty upload")
+    path = voice_clone.enroll(audio_bytes, user_id)
+    if request:
+        security.audit("voice_enroll", request, user_id=user_id, bytes=len(audio_bytes))
+    # Run the diagnostic analysis on the saved clip — useful for the UI to
+    # show the speaker their captured pitch/jitter/etc.
+    features = voice_clone.analyze_voice(path)
+    return {"user_id": user_id, "reference_path": path, "features": features}
+
+
+@app.post("/api/v1/voices/analyze")
+async def voices_analyze(file: UploadFile):
+    """Return acoustic attributes for an uploaded clip without enrolling it."""
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="empty upload")
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp.write(audio_bytes)
+        tmp_path = tmp.name
+    try:
+        return voice_clone.analyze_voice(tmp_path)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except FileNotFoundError:
+            pass
+
+
+class VoiceSynthesizeBody(BaseModel):
+    text:    str
+    language: str
+    user_id: str
+
+
+@app.post("/api/v1/voices/synthesize")
+async def voices_synthesize(body: VoiceSynthesizeBody, request: Request = None):
+    """Synthesise translated text in the cloned voice of *user_id*.
+
+    Returns the audio as a base64-encoded WAV in JSON so it can be embedded
+    directly into a `<audio>` element via a data: URL on the frontend.
+    """
+    if not voice_clone.is_available():
+        raise HTTPException(status_code=503, detail="voice cloning not available on this deployment")
+    if not voice_clone.has_enrollment(body.user_id):
+        raise HTTPException(status_code=404, detail=f"no enrollment for user {body.user_id!r}")
+    try:
+        wav = await asyncio.to_thread(
+            voice_clone.synthesize_for_user, body.text, body.language, body.user_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except (FileNotFoundError, RuntimeError) as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    if request:
+        security.audit("voice_synthesize", request,
+                       user_id=body.user_id, language=body.language, chars=len(body.text))
+    return {
+        "format":   "wav",
+        "audio_b64": base64.b64encode(wav).decode("ascii"),
+        "bytes":    len(wav),
+    }
 
 
 @app.websocket("/ws/conversation/{room_id}")
@@ -274,7 +531,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
         if is_creator:
             # Host's frontend remembers it created this room (e.g. the server
             # restarted on a deploy). Recreate the room so they can keep going.
-            _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None, "empty_since": time.time()}
+            _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None, "empty_since": time.time(), "speaking": {}}
             logger.info("Re-created room on host reconnect: %s", room_id)
         else:
             try:
@@ -336,6 +593,13 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                 if not my_info:
                     continue
 
+                # Voice preservation: update style profile from this utterance
+                _sample = style_profiler.analyze(text)
+                my_info["style_profile"] = style_profiler.accumulate(
+                    my_info.get("style_profile"), _sample
+                )
+                _style_hint = style_profiler.to_prompt_hint(my_info["style_profile"])
+
                 # Echo original back to speaker
                 await websocket.send_json({
                     "type": "message",
@@ -347,6 +611,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                 })
 
                 # Translate and deliver to every other participant
+                speaker_has_clone = voice_clone.has_enrollment(user_id) and voice_clone.is_available()
                 for other_id, other_ws in list(room["conns"].items()):
                     if other_id == user_id or not other_ws:
                         continue
@@ -362,6 +627,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                                 text,
                                 my_info["language"],
                                 other_info["language"],
+                                _style_hint,
                             )
                             translated = result.get("translation", text)
 
@@ -373,6 +639,14 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                             "translation": translated,
                             "is_self": False,
                         })
+
+                        # Voice clone broadcast — fire-and-forget so it never
+                        # blocks the text path.  Listener falls back to browser
+                        # TTS if the audio doesn't arrive within ~1.5 s.
+                        if speaker_has_clone:
+                            asyncio.create_task(_send_voice_clone_audio(
+                                other_ws, user_id, translated, other_info["language"],
+                            ))
                     except Exception as e:
                         logger.error(f"Translation error for {other_id}: {e}")
 
@@ -600,6 +874,36 @@ async def inject_speech(room_id: str, user_id: str, text: str):
                        user_id, room_id, list(room["info"].keys()))
         return
 
+    # ── Interruption detection ──────────────────────────────────────────────────
+    # If another participant's utterance is still being processed, broadcast an
+    # `interrupted` event so all clients can visually flag the overlap.
+    speaking = room.setdefault("speaking", {})
+    other_speakers = [uid for uid in list(speaking.keys()) if uid != user_id]
+    if other_speakers:
+        interrupted_id = other_speakers[0]
+        interrupted_name = (room["info"].get(interrupted_id) or {}).get("name", "")
+        if interrupted_name:
+            for ws in list(room["conns"].values()):
+                try:
+                    await ws.send_json({
+                        "type": "interrupted",
+                        "interrupted_user_id": interrupted_id,
+                        "interrupted_by_id": user_id,
+                        "interrupted_name": interrupted_name,
+                        "by_name": (room["info"].get(user_id) or {}).get("name", ""),
+                    })
+                except Exception:
+                    pass
+        speaking.pop(interrupted_id, None)
+    speaking[user_id] = time.monotonic()
+
+    # ── Voice preservation: update speaker style profile ──────────────────────
+    sample = style_profiler.analyze(text)
+    my_info["style_profile"] = style_profiler.accumulate(
+        my_info.get("style_profile"), sample
+    )
+    style_hint = style_profiler.to_prompt_hint(my_info["style_profile"])
+
     # Record the original now so any STT pickup of our own speech is detected.
     _record_broadcast(room_id, text)
 
@@ -624,6 +928,7 @@ async def inject_speech(room_id: str, user_id: str, text: str):
                 result = await asyncio.to_thread(
                     run_conversation_pipeline,
                     text, my_info["language"], other_info["language"],
+                    style_hint,
                 )
                 translated = result.get("translation", text)
             _record_broadcast(room_id, translated)
@@ -646,9 +951,13 @@ async def inject_speech(room_id: str, user_id: str, text: str):
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
 
+    # Clear speaking state now that all translations have been delivered
+    room.setdefault("speaking", {}).pop(user_id, None)
+
 
 @app.websocket("/ws/stt/{room_id}/{user_id}")
-async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
+async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str,
+                               api_key: str = ""):
     """Google Cloud STT streaming endpoint used by iOS clients.
 
     Binary frames arriving from the browser contain raw LINEAR16 PCM audio
@@ -660,6 +969,17 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
     if not _GOOGLE_STT_AVAILABLE:
         await websocket.close(code=1011, reason="google-cloud-speech not installed")
         return
+
+    # API key check for STT WebSocket (key passed as ?api_key= query param)
+    if security.is_production():
+        _stt_key = api_key or websocket.query_params.get("api_key", "")
+        import hmac as _hmac
+        if not _hmac.compare_digest(
+            _stt_key.encode("utf-8", errors="replace"),
+            security.get_api_key().encode("utf-8"),
+        ):
+            await websocket.close(code=4403, reason="Unauthorized")
+            return
 
     await websocket.accept()
     loop = asyncio.get_running_loop()

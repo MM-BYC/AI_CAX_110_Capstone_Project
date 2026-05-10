@@ -1,0 +1,23 @@
+# Optional voice-cloning dependencies for backend/voice_clone.py.
+#
+# These pull in PyTorch and XTTS-v2 (~1.8 GB model on first run) and need
+# ~3 GB RAM at inference time.  The Render free tier (512 MB) cannot run
+# them — leave VOICE_CLONE_ENABLED=0 there and the app falls back to the
+# browser's Web Speech API.
+#
+# Install on a dev machine or upgraded host:
+#   pip install -r backend/requirements-voice.txt
+#
+# License note: XTTS-v2 is licensed under Coqui Public Model License (CPML)
+# — non-commercial use only.  Set COQUI_TOS_AGREED=1 to auto-accept.
+coqui-tts[codec]>=0.27.5,<0.28
+torch>=2.10,<2.11
+torchaudio>=2.10,<2.11
+torchcodec>=0.10,<0.11
+# coqui-tts 0.27 imports transformers symbols added in 4.55 (is_torchcodec_available)
+# but removed in 5.x (isin_mps_friendly) — pin to the working band.
+transformers>=4.55,<5.0
+librosa>=0.10.1
+soundfile>=0.12.1
+scipy>=1.10
+numpy>=1.24

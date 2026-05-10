@@ -49,6 +49,15 @@ AI_CAX_110_Capstone_Project/
 ### Environment Variables (always required on Render)
 - `GROQ_API_KEY` — Groq LLM + Groq Whisper (uploaded audio files)
 - `GOOGLE_CREDENTIALS_JSON` — Google Cloud Speech (streaming STT for all 16 languages)
+- `VOICE_CLONE_ENABLED=0` — must be set on Render free tier; XTTS-v2 needs ~3 GB RAM and will OOM otherwise. The app falls back to the browser Web Speech API automatically.
+
+### Voice Cloning (optional, off on free tier)
+
+- Implementation: `backend/voice_clone.py` — standalone module wrapping Coqui XTTS-v2.
+- Extra deps: `pip install -r backend/requirements-voice.txt` (pulls torch + librosa + coqui-tts).
+- Endpoints: `GET /api/v1/voices/status`, `POST /api/v1/voices/enroll`, `POST /api/v1/voices/analyze`, `POST /api/v1/voices/synthesize`.
+- License: XTTS-v2 is CPML (non-commercial). Set `COQUI_TOS_AGREED=1` to auto-accept on first model download.
+- CLI: `python backend/voice_clone.py status | analyze | enroll | speak` for ad-hoc testing.
 
 ### Load Order in `main.py`
 - `load_dotenv()` **must** run before any agent import — Groq clients initialize at module level.
