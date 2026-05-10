@@ -181,6 +181,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def _no_cache_static(request, call_next):
+    """Force fresh fetches of frontend assets so iPhone Safari can't pin
+    a stale app.js / styles.css / index.html across deploys.
+    """
+    response = await call_next(request)
+    p = request.url.path
+    if p == "/" or p.endswith((".js", ".css", ".html")):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 # Conversation rooms: room_id → {
 #   "conns":   {user_id: WebSocket},
 #   "info":    {user_id: {name, language, is_host, mic_on}},
