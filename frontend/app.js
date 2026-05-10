@@ -723,7 +723,7 @@ let _voiceCloneEnrolled    = false;
 let _voiceCloneCapturing   = false;
 let _voiceCloneAvailable   = null;       // null = unprobed, true/false after probe
 const _VOICE_REF_SEC       = 10;
-const _VOICE_FALLBACK_MS   = 1500;
+const _VOICE_FALLBACK_MS   = 8000;
 const _voiceAwaiting       = new Map();  // from_id → setTimeout id
 
 async function _voiceCloneProbe() {
