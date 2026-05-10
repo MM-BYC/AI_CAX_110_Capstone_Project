@@ -57,6 +57,14 @@ _GOOGLE_LANG = {
     "nl": "nl-NL", "pl": "pl-PL", "tr": "tr-TR", "tl": "fil-PH",
 }
 
+# Languages that support the high-accuracy `latest_long` model.
+# fil-PH does not — Google rejects it with a 400.
+_LATEST_LONG_LANGS = {
+    "en-US", "es-ES", "fr-FR", "de-DE", "it-IT", "pt-BR",
+    "zh-CN", "ja-JP", "ko-KR", "ar-SA", "ru-RU", "hi-IN",
+    "nl-NL", "pl-PL", "tr-TR",
+}
+
 # Load environment variables BEFORE importing agents (they need GROQ_API_KEY)
 load_dotenv(override=False)
 
@@ -534,12 +542,16 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
 
     def run_stt():
         client = _make_speech_client()
-        stt_cfg = _google_speech.RecognitionConfig(
+        cfg_kwargs = dict(
             encoding=_google_speech.RecognitionConfig.AudioEncoding.LINEAR16,
             sample_rate_hertz=sample_rate,
             language_code=lang_code,
             enable_automatic_punctuation=True,
         )
+        if lang_code in _LATEST_LONG_LANGS:
+            cfg_kwargs["model"] = "latest_long"
+            cfg_kwargs["use_enhanced"] = True
+        stt_cfg = _google_speech.RecognitionConfig(**cfg_kwargs)
         streaming_cfg = _google_speech.StreamingRecognitionConfig(
             config=stt_cfg, interim_results=False,
         )
