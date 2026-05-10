@@ -610,49 +610,101 @@ async def transcribe_audio_only(source: str, file: UploadFile):
 async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
                     room_id: str, user_id: str, parse_transcript):
     """Generic PCM-relay helper: forwards audio to an STT WebSocket and injects
-    final transcripts. parse_transcript(payload) must return (text, is_final)."""
+    final transcripts. parse_transcript(payload) must return (text, is_final).
+
+    Keeps the browser WebSocket alive across STT reconnections — when the STT
+    provider closes the connection, audio is re-buffered and a new STT session
+    is opened without the browser ever seeing a disconnect."""
     from websockets.legacy.client import connect as _ws_connect
 
+    audio_q: asyncio.Queue = asyncio.Queue(maxsize=200)
+    browser_closed = asyncio.Event()
+
+    async def browser_reader():
+        try:
+            while True:
+                data = await websocket.receive_bytes()
+                try:
+                    audio_q.put_nowait(data)
+                except asyncio.QueueFull:
+                    pass  # drop frame — STT is reconnecting
+        except (WebSocketDisconnect, Exception):
+            pass
+        finally:
+            browser_closed.set()
+
+    reader_task = asyncio.ensure_future(browser_reader())
+
     try:
-        async with _ws_connect(stt_url, extra_headers=stt_headers) as stt_ws:
+        while not browser_closed.is_set():
+            # Drain stale frames accumulated during the previous STT session
+            while not audio_q.empty():
+                audio_q.get_nowait()
 
-            async def relay_audio():
-                try:
-                    while True:
-                        data = await websocket.receive_bytes()
-                        await stt_ws.send(data)
-                except (WebSocketDisconnect, Exception):
-                    pass
-                finally:
-                    await stt_ws.close()
+            try:
+                async with _ws_connect(stt_url, extra_headers=stt_headers) as stt_ws:
 
-            async def relay_transcripts():
-                try:
-                    async for raw in stt_ws:
-                        text, is_final = parse_transcript(json.loads(raw))
-                        if text and is_final:
-                            await inject_speech(room_id, user_id, text)
-                except Exception as e:
-                    logger.debug("STT transcript relay ended: %s", e)
+                    async def stt_sender():
+                        while not browser_closed.is_set():
+                            try:
+                                data = await asyncio.wait_for(audio_q.get(), timeout=0.5)
+                                await stt_ws.send(data)
+                            except asyncio.TimeoutError:
+                                continue
+                            except Exception:
+                                break
 
-            audio_task      = asyncio.ensure_future(relay_audio())
-            transcript_task = asyncio.ensure_future(relay_transcripts())
-            done, pending   = await asyncio.wait(
-                {audio_task, transcript_task},
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            for t in pending:
-                t.cancel()
-                try:
-                    await t
-                except (asyncio.CancelledError, Exception):
-                    pass
+                    async def relay_transcripts():
+                        try:
+                            async for raw in stt_ws:
+                                text, is_final = parse_transcript(json.loads(raw))
+                                if text and is_final:
+                                    await inject_speech(room_id, user_id, text)
+                        except Exception as e:
+                            logger.debug("STT transcript relay ended: %s", e)
+
+                    sender_task     = asyncio.ensure_future(stt_sender())
+                    transcript_task = asyncio.ensure_future(relay_transcripts())
+
+                    done, pending = await asyncio.wait(
+                        {reader_task, sender_task, transcript_task},
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+
+                    browser_done = reader_task in done or browser_closed.is_set()
+                    for t in pending - {reader_task}:
+                        t.cancel()
+                        try:
+                            await t
+                        except (asyncio.CancelledError, Exception):
+                            pass
+
+                    if browser_done:
+                        break
+
+                    # STT closed — reconnect after brief pause
+                    logger.debug("STT connection closed, reconnecting…")
+                    await asyncio.sleep(0.5)
+
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                if browser_closed.is_set():
+                    break
+                logger.warning("STT connect failed: %s — retry in 2s", e)
+                await asyncio.sleep(2.0)
 
     except Exception as e:
         logger.error("STT WS error: %s", e)
         try:
             await websocket.close(code=1011, reason=str(e)[:120])
         except Exception:
+            pass
+    finally:
+        reader_task.cancel()
+        try:
+            await reader_task
+        except (asyncio.CancelledError, Exception):
             pass
 
 

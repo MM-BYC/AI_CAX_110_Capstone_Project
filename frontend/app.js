@@ -1454,9 +1454,10 @@ function _reconnectIosDgWs() {
   ws.binaryType  = "arraybuffer";
   ws.onopen = () => {
     _iosDgWs = ws;
-    _iosDgReconnectCount = 0;
     _micTrace("Listening…");
     ws.onclose = ws.onerror = _onIosDgDrop;
+    // Only reset backoff counter after connection stays alive for 5 s
+    setTimeout(() => { if (_iosDgWs === ws) _iosDgReconnectCount = 0; }, 5000);
   };
   ws.onclose = ws.onerror = () => { if (_iosMicActive) _scheduleIosDgReconnect(); };
 }
