@@ -1289,12 +1289,14 @@ function convStopListening() {
 // Deepgram returns speech_final transcripts which the backend injects
 // directly into the translation pipeline — no chunked HTTP calls needed.
 
-let _iosMicStream   = null;
-let _iosAudioCtx    = null;
-let _iosProcessor   = null;
-let _iosDgWs        = null;
-let _iosMicActive   = false;
-let _iosStarting    = false;  // guard against double-tap race
+let _iosMicStream          = null;
+let _iosAudioCtx           = null;
+let _iosProcessor          = null;
+let _iosDgWs               = null;
+let _iosMicActive          = false;
+let _iosStarting           = false;  // guard against double-tap race
+let _iosDgReconnectCount   = 0;
+const _IOS_DG_MAX_RECONNECT = 6;
 
 async function convStartIosMic() {
   if (_iosStarting || _iosMicActive) return;
@@ -1336,10 +1338,8 @@ async function _convStartIosMicInner() {
   const actualRate = Math.round(_iosAudioCtx.sampleRate);
   _micTrace(`AudioContext ready (${actualRate} Hz), connecting to STT…`);
 
-  const lang    = convUsers[convUserId]?.language || "en";
-  const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
-  const wsBase  = (API_BASE || location.origin).replace(/^https?:/, wsProto);
-  const wsUrl   = `${wsBase}/ws/deepgram/${convRoomId}/${convUserId}?language=${lang}&sample_rate=${actualRate}`;
+  const lang  = convUsers[convUserId]?.language || "en";
+  const wsUrl = _buildIosDgWsUrl(lang, actualRate);
   console.log("[mic] WS URL:", wsUrl);
   _iosDgWs = new WebSocket(wsUrl);
   _iosDgWs.binaryType = "arraybuffer";
@@ -1381,8 +1381,8 @@ async function _convStartIosMicInner() {
   }
   _micTrace("STT stable, starting audio stream…");
 
-  // Connection is stable — set permanent handlers and start audio pipeline
-  _iosDgWs.onclose = _iosDgWs.onerror = () => { if (_iosMicActive) convStopIosMic(); };
+  // On unexpected drop, reconnect silently; only a user click stops the mic.
+  _iosDgWs.onclose = _iosDgWs.onerror = _onIosDgDrop;
 
   const source = _iosAudioCtx.createMediaStreamSource(_iosMicStream);
   _iosProcessor = _iosAudioCtx.createScriptProcessor(4096, 1, 1);
@@ -1398,6 +1398,7 @@ async function _convStartIosMicInner() {
   source.connect(_iosProcessor);
   _iosProcessor.connect(_iosAudioCtx.destination);
 
+  _iosDgReconnectCount = 0;
   _iosMicActive = true;
   convSetMicUI(true);
   convMicLabel.textContent = "Listening…";
@@ -1408,6 +1409,7 @@ async function _convStartIosMicInner() {
 function convStopIosMic() {
   if (!_iosMicActive) return;
   _iosMicActive = false;
+  _iosDgReconnectCount = 0;  // reset so next mic-on starts fresh
   if (_iosProcessor) { _iosProcessor.disconnect(); _iosProcessor = null; }
   if (_iosAudioCtx)  { _iosAudioCtx.close();       _iosAudioCtx  = null; }
   if (_iosDgWs && _iosDgWs.readyState < WebSocket.CLOSING) _iosDgWs.close();
@@ -1418,6 +1420,45 @@ function convStopIosMic() {
   convMicLabel.textContent = "Tap to speak";
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "mic_status", is_on: false }));
+}
+
+function _buildIosDgWsUrl(lang, sampleRate) {
+  const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+  const wsBase  = (API_BASE || location.origin).replace(/^https?:/, wsProto);
+  return `${wsBase}/ws/deepgram/${convRoomId}/${convUserId}?language=${lang}&sample_rate=${sampleRate}`;
+}
+
+function _onIosDgDrop() {
+  _iosDgWs = null;
+  if (_iosMicActive) _scheduleIosDgReconnect();
+}
+
+// Reconnect only the STT WebSocket — mic stays on, audio pipeline keeps running.
+function _scheduleIosDgReconnect() {
+  if (!_iosMicActive) return;
+  if (_iosDgReconnectCount >= _IOS_DG_MAX_RECONNECT) {
+    _micTrace("STT unavailable — tap mic to stop");
+    return;
+  }
+  _iosDgReconnectCount++;
+  const delay = Math.min(1000 * _iosDgReconnectCount, 8000);
+  _micTrace(`Reconnecting STT (${_iosDgReconnectCount})…`);
+  setTimeout(_reconnectIosDgWs, delay);
+}
+
+function _reconnectIosDgWs() {
+  if (!_iosMicActive || !_iosAudioCtx) return;
+  const lang     = convUsers[convUserId]?.language || "en";
+  const wsUrl    = _buildIosDgWsUrl(lang, Math.round(_iosAudioCtx.sampleRate));
+  const ws       = new WebSocket(wsUrl);
+  ws.binaryType  = "arraybuffer";
+  ws.onopen = () => {
+    _iosDgWs = ws;
+    _iosDgReconnectCount = 0;
+    _micTrace("Listening…");
+    ws.onclose = ws.onerror = _onIosDgDrop;
+  };
+  ws.onclose = ws.onerror = () => { if (_iosMicActive) _scheduleIosDgReconnect(); };
 }
 
 convMicBtn.addEventListener("click", () => {

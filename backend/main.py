@@ -690,11 +690,17 @@ async def deepgram_stream(
             await websocket.close(code=1011, reason="ASSEMBLYAI_API_KEY not configured on server")
             return
 
-        aai_url = f"wss://streaming.assemblyai.com/v3/ws?sample_rate={sample_rate}"
+        # pcm_s16le = raw LINEAR16 — required by v3 or it rejects the stream.
+        aai_url = (
+            f"wss://streaming.assemblyai.com/v3/ws"
+            f"?sample_rate={sample_rate}&encoding=pcm_s16le"
+        )
 
         def parse_aai(payload):
             text     = payload.get("text", "").strip()
-            is_final = payload.get("message_type") == "FinalTranscript"
+            # v2 used message_type:"FinalTranscript"; v3 uses type:"final_transcript"
+            msg_type = payload.get("type") or payload.get("message_type") or ""
+            is_final = msg_type in ("FinalTranscript", "final_transcript")
             return text, is_final
 
         await _ws_relay(websocket, aai_url, {"Authorization": aai_key}, room_id, user_id, parse_aai)
