@@ -703,11 +703,12 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
 
         while not stop_evt.is_set():
             first_chunk_logged = False
+            session_done = [False]  # list so generator's closure can read updates
 
             def _gen():
                 nonlocal first_chunk_logged
                 deadline = time.monotonic() + SESSION_SECS
-                while not stop_evt.is_set():
+                while not stop_evt.is_set() and not session_done[0]:
                     left = deadline - time.monotonic()
                     if left <= 0:
                         return
@@ -732,7 +733,6 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                     if not first_resp_logged:
                         logger.info("STT session %d first Google response", session_idx_local)
                         first_resp_logged = True
-                    # Log speech events (END_OF_SINGLE_UTTERANCE, etc.)
                     sev = getattr(resp, "speech_event_type", None)
                     if sev:
                         logger.info("STT session %d speech_event=%s", session_idx_local, sev)
@@ -747,17 +747,18 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                         if _is_likely_hallucination(transcript):
                             logger.info("STT dropped hallucination (sess=%d): %r",
                                         session_idx_local, transcript[:80])
+                            session_done[0] = True
                             continue
                         if confidence and confidence < 0.6:
                             logger.info("STT dropped low-confidence (sess=%d) %.2f: %r",
                                         session_idx_local, confidence, transcript[:80])
+                            session_done[0] = True
                             continue
-                        # Suppress identical repeats within 5s — Google sometimes
-                        # emits the same final twice (e.g., on session restart/flush).
                         norm = transcript.strip().lower()
                         now_ts = time.monotonic()
                         if norm == last_emit["text"] and now_ts - last_emit["ts"] < 5.0:
                             logger.info("STT dedup duplicate within 5s: %r", transcript[:60])
+                            session_done[0] = True
                             continue
                         last_emit["text"] = norm
                         last_emit["ts"] = now_ts
@@ -766,6 +767,13 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                         asyncio.run_coroutine_threadsafe(
                             inject_speech(room_id, user_id, transcript), loop
                         )
+                        # Force a fresh session so the next utterance gets the
+                        # same ~1s endpointing the FIRST one got — Google does
+                        # not actually close the stream after END_OF_SINGLE_UTTERANCE,
+                        # so subsequent utterances on the same session lag.
+                        session_done[0] = True
+                    if session_done[0]:
+                        break
                 logger.info("STT session %d ended cleanly", session_idx_local)
                 consecutive_errors = 0
             except Exception as e:
