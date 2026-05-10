@@ -688,13 +688,13 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
             cfg_kwargs["model"] = "latest_long"
             cfg_kwargs["use_enhanced"] = True
         stt_cfg = _google_speech.RecognitionConfig(**cfg_kwargs)
-        # single_utterance=True forces Google to finalize as soon as it
-        # detects end-of-speech (typically ~800ms of silence), instead of
-        # holding the stream open waiting for more audio. Each utterance
-        # ends the inner streaming_recognize loop; the outer while-loop
-        # immediately starts a fresh stream so subsequent speech is captured.
+        # Zoom-style continuous streaming: keep one Google session open for
+        # the full mic-on duration. Google emits is_final at every natural
+        # utterance boundary while the stream stays alive — no per-utterance
+        # restart, no session_done dance. The 270 s deadline below restarts
+        # the stream before Google's 5-minute hard limit kicks in.
         streaming_cfg = _google_speech.StreamingRecognitionConfig(
-            config=stt_cfg, interim_results=False, single_utterance=True,
+            config=stt_cfg, interim_results=False,
         )
         SESSION_SECS = 270  # restart before Google's 5-min hard limit
         consecutive_errors = 0
@@ -703,19 +703,11 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
 
         while not stop_evt.is_set():
             first_chunk_logged = False
-            session_done = [False]   # list so generator's closure can read updates
-            speech_event_ts = [0.0]  # set when END_OF_SINGLE_UTTERANCE fires
 
             def _gen():
                 nonlocal first_chunk_logged
                 deadline = time.monotonic() + SESSION_SECS
-                while not stop_evt.is_set() and not session_done[0]:
-                    # Safety: if Google sent END_OF_SINGLE_UTTERANCE but never
-                    # followed it with a final transcript, end the session so
-                    # the outer loop can spin up a fresh recognizer instead of
-                    # hanging indefinitely on stale audio.
-                    if speech_event_ts[0] and time.monotonic() - speech_event_ts[0] > 1.5:
-                        return
+                while not stop_evt.is_set():
                     left = deadline - time.monotonic()
                     if left <= 0:
                         return
@@ -740,11 +732,6 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                     if not first_resp_logged:
                         logger.info("STT session %d first Google response", session_idx_local)
                         first_resp_logged = True
-                    sev = getattr(resp, "speech_event_type", None)
-                    if sev:
-                        logger.info("STT session %d speech_event=%s", session_idx_local, sev)
-                        if not speech_event_ts[0]:
-                            speech_event_ts[0] = time.monotonic()
                     for result in resp.results:
                         if not result.is_final:
                             continue
@@ -756,18 +743,15 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                         if _is_likely_hallucination(transcript):
                             logger.info("STT dropped hallucination (sess=%d): %r",
                                         session_idx_local, transcript[:80])
-                            session_done[0] = True
                             continue
                         if confidence and confidence < 0.6:
                             logger.info("STT dropped low-confidence (sess=%d) %.2f: %r",
                                         session_idx_local, confidence, transcript[:80])
-                            session_done[0] = True
                             continue
                         norm = transcript.strip().lower()
                         now_ts = time.monotonic()
                         if norm == last_emit["text"] and now_ts - last_emit["ts"] < 5.0:
                             logger.info("STT dedup duplicate within 5s: %r", transcript[:60])
-                            session_done[0] = True
                             continue
                         last_emit["text"] = norm
                         last_emit["ts"] = now_ts
@@ -776,13 +760,6 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                         asyncio.run_coroutine_threadsafe(
                             inject_speech(room_id, user_id, transcript), loop
                         )
-                        # Force a fresh session so the next utterance gets the
-                        # same ~1s endpointing the FIRST one got — Google does
-                        # not actually close the stream after END_OF_SINGLE_UTTERANCE,
-                        # so subsequent utterances on the same session lag.
-                        session_done[0] = True
-                    if session_done[0]:
-                        break
                 logger.info("STT session %d ended cleanly", session_idx_local)
                 consecutive_errors = 0
             except Exception as e:
