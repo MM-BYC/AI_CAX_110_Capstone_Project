@@ -140,9 +140,37 @@ else:
     FRONTEND_DIR = _current_file.parent / "frontend"
 
 
+_EMPTY_ROOM_TTL_SEC = 300
+
+
+async def _cleanup_empty_rooms():
+    while True:
+        try:
+            await asyncio.sleep(60)
+            now = time.time()
+            for rid in list(_rooms.keys()):
+                empty_since = _rooms[rid].get("empty_since")
+                if empty_since and now - empty_since > _EMPTY_ROOM_TTL_SEC:
+                    _rooms.pop(rid, None)
+                    _recent_broadcasts.pop(rid, None)
+                    logger.info("Cleaned up empty room: %s", rid)
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            logger.warning("_cleanup_empty_rooms iteration failed: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app):
-    yield
+    cleanup_task = asyncio.create_task(_cleanup_empty_rooms())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except (asyncio.CancelledError, Exception):
+            pass
 
 app = FastAPI(title="AI Translate", version="2.0.0", lifespan=lifespan)
 
@@ -194,7 +222,7 @@ async def create_room():
     # joins can validate the ID exists. Without this, a participant typing
     # a wrong (or stale) room ID would silently create a brand-new room
     # and become its host.
-    _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None}
+    _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None, "empty_since": time.time()}
     return {"room_id": room_id}
 
 
@@ -203,20 +231,8 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
     """WebSocket endpoint for live multi-user conversation."""
     await websocket.accept()
 
-    if room_id not in _rooms:
-        # Reject — no auto-creation. The host must use /create_room first;
-        # everyone else must type the exact existing room code.
-        try:
-            await websocket.send_json({"type": "error", "code": "room_not_found",
-                                       "message": f"Room {room_id} does not exist."})
-            await websocket.close()
-        except Exception:
-            pass
-        return
-
-    room = _rooms[room_id]
-
-    # Wait for join message
+    # Read the join message FIRST so we can honour `is_creator` before deciding
+    # whether to allocate / reject for an unknown room.
     try:
         raw = await asyncio.wait_for(websocket.receive_text(), timeout=15)
         data = json.loads(raw)
@@ -234,6 +250,26 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
         except Exception:
             pass
         return
+
+    is_creator = bool(data.get("is_creator", False))
+
+    if room_id not in _rooms:
+        if is_creator:
+            # Host's frontend remembers it created this room (e.g. the server
+            # restarted on a deploy). Recreate the room so they can keep going.
+            _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None, "empty_since": time.time()}
+            logger.info("Re-created room on host reconnect: %s", room_id)
+        else:
+            try:
+                await websocket.send_json({"type": "error", "code": "room_not_found",
+                                           "message": f"Room {room_id} does not exist."})
+                await websocket.close()
+            except Exception:
+                pass
+            return
+
+    room = _rooms[room_id]
+    room["empty_since"] = None
 
     user_id = _gen_user_id()
     is_host = room["host_id"] is None
@@ -484,7 +520,11 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                     pass
 
         if not room["conns"]:
-            _rooms.pop(room_id, None)
+            # Soft-delete: mark the room empty but keep it around for a grace
+            # period so brief disconnects (iOS Safari background, deploy
+            # rollovers) can rejoin without hitting room_not_found. The
+            # _cleanup_empty_rooms task removes rooms after 5 min.
+            room["empty_since"] = time.time()
 
 
 @app.post("/detect_language")

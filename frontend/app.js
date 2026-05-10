@@ -603,6 +603,7 @@ let _recognitionRestartCount = 0;
 let convCamStream    = null;
 let convCamOn        = false;
 let _convReconnectAttempts = 0;
+let _convWasCreator        = false;
 const _CONV_MAX_RECONNECTS = 3;
 
 // Persistent colour palette — one colour per participant (8 distinct)
@@ -1020,8 +1021,9 @@ function convSetMicUI(isOn) {
 }
 
 // ── WebSocket ──────────────────────────────────────────────────────────────
-async function convConnect(roomId) {
+async function convConnect(roomId, isCreator = false) {
   convRoomId = roomId;
+  _convWasCreator = !!isCreator;
   const name = convNameInput.value.trim();
   const lang = convLangSelect.value;
 
@@ -1030,7 +1032,9 @@ async function convConnect(roomId) {
 
   convWs.onopen = () => {
     _convReconnectAttempts = 0;
-    convWs.send(JSON.stringify({ type: "join", name, language: lang }));
+    convWs.send(JSON.stringify({
+      type: "join", name, language: lang, is_creator: _convWasCreator,
+    }));
   };
 
   convWs.onmessage = e => {
@@ -1042,7 +1046,7 @@ async function convConnect(roomId) {
       if (_convReconnectAttempts < _CONV_MAX_RECONNECTS) {
         _convReconnectAttempts++;
         convAddSystemMsg(`Connection lost. Reconnecting…`);
-        setTimeout(() => convConnect(roomId), _convReconnectAttempts * 2000);
+        setTimeout(() => convConnect(roomId, _convWasCreator), _convReconnectAttempts * 2000);
       } else {
         convHandleDisconnect("Connection lost. Please rejoin.");
       }
@@ -1708,7 +1712,7 @@ convCreateBtn.addEventListener("click", async () => {
       alert("Invalid response from server.");
       return;
     }
-    await convConnect(data.room_id);
+    await convConnect(data.room_id, true);
   } catch (e) {
     convCreateBtn.disabled = false;
     convCreateBtn.querySelector("span").textContent = "Create Room";
@@ -1722,7 +1726,7 @@ convJoinBtn.addEventListener("click", () => {
   if (!roomId) { convRoomInput.focus(); return; }
   const name   = convNameInput.value.trim();
   if (!name)   { convNameInput.focus(); return; }
-  convConnect(roomId);
+  convConnect(roomId, false);
 });
 
 convRoomInput.addEventListener("keydown", e => { if (e.key === "Enter") convJoinBtn.click(); });
