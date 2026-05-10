@@ -547,12 +547,9 @@ async def inject_speech(room_id: str, user_id: str, text: str):
         except Exception:
             pass
 
-    for other_id, other_ws in list(room["conns"].items()):
-        if other_id == user_id or not other_ws:
-            continue
-        other_info = room["info"].get(other_id)
-        if not other_info:
-            continue
+    # Translate to every other participant's language in parallel — sequential
+    # awaits on Groq calls add up fast (each ~200-400 ms).
+    async def _translate_and_send(other_id: str, other_ws, other_info):
         try:
             if other_info["language"] == my_info["language"]:
                 translated = text
@@ -562,8 +559,6 @@ async def inject_speech(room_id: str, user_id: str, text: str):
                     text, my_info["language"], other_info["language"],
                 )
                 translated = result.get("translation", text)
-            # Record translation as a recent broadcast — if any mic picks it up
-            # via TTS playback, that incoming transcript will be dropped as echo.
             _record_broadcast(room_id, translated)
             await other_ws.send_json({
                 "type": "message", "from_id": user_id,
@@ -572,6 +567,17 @@ async def inject_speech(room_id: str, user_id: str, text: str):
             })
         except Exception as e:
             logger.error("Translation error for %s: %s", other_id, e)
+
+    tasks = []
+    for other_id, other_ws in list(room["conns"].items()):
+        if other_id == user_id or not other_ws:
+            continue
+        other_info = room["info"].get(other_id)
+        if not other_info:
+            continue
+        tasks.append(_translate_and_send(other_id, other_ws, other_info))
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 @app.websocket("/ws/stt/{room_id}/{user_id}")
@@ -629,8 +635,13 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
             cfg_kwargs["model"] = "latest_long"
             cfg_kwargs["use_enhanced"] = True
         stt_cfg = _google_speech.RecognitionConfig(**cfg_kwargs)
+        # single_utterance=True forces Google to finalize as soon as it
+        # detects end-of-speech (typically ~800ms of silence), instead of
+        # holding the stream open waiting for more audio. Each utterance
+        # ends the inner streaming_recognize loop; the outer while-loop
+        # immediately starts a fresh stream so subsequent speech is captured.
         streaming_cfg = _google_speech.StreamingRecognitionConfig(
-            config=stt_cfg, interim_results=False,
+            config=stt_cfg, interim_results=False, single_utterance=True,
         )
         SESSION_SECS = 270  # restart before Google's 5-min hard limit
         consecutive_errors = 0

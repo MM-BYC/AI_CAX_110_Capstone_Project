@@ -38,21 +38,17 @@ def run_text_pipeline(text: str, source: str, target: str) -> dict:
 
 def run_conversation_pipeline(text: str, source: str, target: str) -> dict:
     """
-    Per-participant conversation pipeline with full anti-hallucination guardrails.
+    Per-participant conversation pipeline tuned for ≤1 s end-to-end latency.
 
     Conversation Agent (clean fillers) → Language Detection Agent
     → Strict Translation Agent (system prompt + temperature=0)
-    → Quality Review Agent → Retry with critique (if flagged)
 
-    Every external call is wrapped with a failsafe so a transient API error
-    never silently drops a message — the pipeline always returns a translation.
+    Quality review is intentionally omitted in the live path — it doubles
+    LLM round-trips. Hallucination defenses already run upstream
+    (client noise gate + server blocklist + echo suppression).
     """
-    # Conversation Agent — remove fillers, normalise whitespace
     cleaned = conversation_agent.run(text, source_lang=source)
 
-    # Language Detection Agent — only override the user's chosen language when
-    # the text is long enough for reliable detection; short phrases fall back
-    # to the claimed source to avoid mis-routing (e.g. "Oo" detected as "en").
     detected = language_detection_agent.run(cleaned)
     effective_source = (
         detected
@@ -60,40 +56,18 @@ def run_conversation_pipeline(text: str, source: str, target: str) -> dict:
         else source
     )
 
-    # Strict Translation Agent — failsafe: return original text on API error
     try:
         translation = translation_agent.run(cleaned, effective_source, target, strict=True)
     except Exception as e:
         logger.error("Translation agent failed: %s", e)
         translation = cleaned  # pass-through so the message is still delivered
 
-    # Quality Review Agent → retry once with critique if hallucination detected.
-    # Failsafe: any API error is treated as a pass so delivery is never blocked.
-    review = {"passed": True, "critique": ""}
-    for _ in range(MAX_RETRIES):
-        try:
-            review = quality_review_agent.run(cleaned, translation, effective_source, target)
-        except Exception as e:
-            logger.warning("Quality review failed (treating as pass): %s", e)
-            review = {"passed": True, "critique": ""}
-            break
-        if review["passed"]:
-            break
-        try:
-            translation = translation_agent.run(
-                cleaned, effective_source, target,
-                critique=review["critique"], strict=True,
-            )
-        except Exception as e:
-            logger.error("Retry translation failed: %s", e)
-            break
-
     return {
         "original_text": text,
         "cleaned_text": cleaned,
         "detected_language": detected,
         "translation": translation,
-        "quality": review,
+        "quality": {"passed": True, "critique": ""},
     }
 
 
