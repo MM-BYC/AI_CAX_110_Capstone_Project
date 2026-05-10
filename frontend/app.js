@@ -775,7 +775,9 @@ function _buildCard(uid, user) {
   box.className = "conv-card-box";
   box.style.borderColor = color;
 
-  // Initials placeholder (shown when camera is off)
+  // Initials placeholder (shown when camera is off). Uniform Space Gray
+  // background for all participants — the per-participant palette color is
+  // still used elsewhere (card border, name chip) for identification.
   const ph = document.createElement("div");
   ph.className   = "conv-card-placeholder";
   ph.id          = `conv-card-ph-${uid}`;
@@ -783,7 +785,7 @@ function _buildCard(uid, user) {
   ph.textContent = _nameParts.length >= 2
     ? (_nameParts[0][0] + _nameParts[_nameParts.length - 1][0]).toUpperCase()
     : _nameParts[0][0].toUpperCase();
-  ph.style.background = color;
+  ph.style.background = "#4A4D52"; // Space Gray
 
   // Video element (hidden until camera opens)
   const vid = document.createElement("video");
