@@ -122,7 +122,7 @@ def _is_echo(room_id: str, text: str) -> bool:
 # Load environment variables BEFORE importing agents (they need GROQ_API_KEY)
 load_dotenv(override=False)
 
-from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect, HTTPException  # noqa: E402
+from fastapi import FastAPI, Request, UploadFile, WebSocket, WebSocketDisconnect, HTTPException  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
@@ -130,6 +130,8 @@ from pydantic import BaseModel  # noqa: E402
 from agents.orchestrator import run_text_pipeline, run_audio_pipeline, run_conversation_pipeline  # noqa: E402
 from agents import language_detection_agent, transcription_agent  # noqa: E402
 import vocabulary_store  # noqa: E402
+import style_profiler  # noqa: E402
+import security  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -156,6 +158,8 @@ async def _cleanup_empty_rooms():
                     _rooms.pop(rid, None)
                     _recent_broadcasts.pop(rid, None)
                     logger.info("Cleaned up empty room: %s", rid)
+            # Prune idle rate-limit buckets to keep memory bounded
+            security._prune_rate_windows()
         except asyncio.CancelledError:
             return
         except Exception as e:
@@ -176,12 +180,20 @@ async def lifespan(app):
 
 app = FastAPI(title="AI Translate", version="2.0.0", lifespan=lifespan)
 
+# CORS — restricted to configured origins in production; open in dev
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=security.get_allowed_origins(),
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["X-Response-Time-Ms"],
 )
+
+# API key auth + rate limiting for /api/v1/ routes
+app.middleware("http")(security.api_guard)
+
+# Security headers on every response (must be added last = outermost wrapper)
+app.middleware("http")(security.security_headers_middleware)
 
 
 @app.middleware("http")
@@ -317,14 +329,54 @@ async def vocab_bulk(rows: list[VocabEntry]):
 
 @app.get("/api/v1/stats")
 async def api_stats():
-    """Return live runtime counters for observability."""
+    """Live runtime counters for observability / SLA dashboards."""
     from agents import translation_agent as _ta
     return {
         "rooms_active": len(_rooms),
         "translation_cache_size": _ta.cache_size(),
         "vocabulary_entries": len(vocabulary_store.list_all()),
         "vocabulary_version": vocabulary_store.get_version(),
+        "production_mode": security.is_production(),
+        "rate_limit_rpm": int(os.getenv("RATE_LIMIT_RPM", "120")),
     }
+
+
+# ── /api/v1/ aliases for core translation endpoints ───────────────────────────
+# Versioned surface for SDK / enterprise API clients.
+# Legacy root-level routes kept for backward compatibility.
+
+@app.post("/api/v1/translate/text")
+async def api_translate_text(source: str, target: str, text: str, request: Request = None):
+    """Translate text (SDK/API-first endpoint)."""
+    if request:
+        security.audit("translate_text", request, source=source, target=target,
+                       chars=len(text))
+    result = run_text_pipeline(text, source, target)
+    return result
+
+
+@app.post("/api/v1/translate/audio")
+async def api_translate_audio(source: str, target: str, file: UploadFile,
+                               request: Request = None):
+    """Translate an uploaded audio file (SDK/API-first endpoint)."""
+    filepath = f"temp_api_{file.filename}"
+    with open(filepath, "wb") as f:
+        f.write(await file.read())
+    try:
+        result = run_audio_pipeline(filepath, source, target)
+    finally:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+    if request:
+        security.audit("translate_audio", request, source=source, target=target)
+    return result
+
+
+@app.post("/api/v1/detect")
+async def api_detect_language(text: str, request: Request = None):
+    """Detect language (SDK/API-first endpoint)."""
+    detected = language_detection_agent.run(text)
+    return {"detected_language": detected}
 
 
 @app.websocket("/ws/conversation/{room_id}")
@@ -420,6 +472,13 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                 if not my_info:
                     continue
 
+                # Voice preservation: update style profile from this utterance
+                _sample = style_profiler.analyze(text)
+                my_info["style_profile"] = style_profiler.accumulate(
+                    my_info.get("style_profile"), _sample
+                )
+                _style_hint = style_profiler.to_prompt_hint(my_info["style_profile"])
+
                 # Echo original back to speaker
                 await websocket.send_json({
                     "type": "message",
@@ -446,6 +505,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                                 text,
                                 my_info["language"],
                                 other_info["language"],
+                                _style_hint,
                             )
                             translated = result.get("translation", text)
 
@@ -707,6 +767,13 @@ async def inject_speech(room_id: str, user_id: str, text: str):
         speaking.pop(interrupted_id, None)
     speaking[user_id] = time.monotonic()
 
+    # ── Voice preservation: update speaker style profile ──────────────────────
+    sample = style_profiler.analyze(text)
+    my_info["style_profile"] = style_profiler.accumulate(
+        my_info.get("style_profile"), sample
+    )
+    style_hint = style_profiler.to_prompt_hint(my_info["style_profile"])
+
     # Record the original now so any STT pickup of our own speech is detected.
     _record_broadcast(room_id, text)
 
@@ -731,6 +798,7 @@ async def inject_speech(room_id: str, user_id: str, text: str):
                 result = await asyncio.to_thread(
                     run_conversation_pipeline,
                     text, my_info["language"], other_info["language"],
+                    style_hint,
                 )
                 translated = result.get("translation", text)
             _record_broadcast(room_id, translated)
@@ -758,7 +826,8 @@ async def inject_speech(room_id: str, user_id: str, text: str):
 
 
 @app.websocket("/ws/stt/{room_id}/{user_id}")
-async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
+async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str,
+                               api_key: str = ""):
     """Google Cloud STT streaming endpoint used by iOS clients.
 
     Binary frames arriving from the browser contain raw LINEAR16 PCM audio
@@ -770,6 +839,17 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
     if not _GOOGLE_STT_AVAILABLE:
         await websocket.close(code=1011, reason="google-cloud-speech not installed")
         return
+
+    # API key check for STT WebSocket (key passed as ?api_key= query param)
+    if security.is_production():
+        _stt_key = api_key or websocket.query_params.get("api_key", "")
+        import hmac as _hmac
+        if not _hmac.compare_digest(
+            _stt_key.encode("utf-8", errors="replace"),
+            security.get_api_key().encode("utf-8"),
+        ):
+            await websocket.close(code=4403, reason="Unauthorized")
+            return
 
     await websocket.accept()
     loop = asyncio.get_running_loop()

@@ -108,6 +108,7 @@ def run(
     strict: bool = False,
     vocab_context: str = "",
     vocab_version: int = 0,
+    style_context: str = "",
 ) -> str:
     """Translate *text* from *source* language to *target* language.
 
@@ -119,6 +120,7 @@ def run(
         strict:        Use temp=0 for maximum determinism (conversation pipeline).
         vocab_context: Enterprise terminology block from vocabulary_store.to_context().
         vocab_version: Vocabulary store version at call time (cache key component).
+        style_context: Speaker voice-style hint from style_profiler.to_prompt_hint().
     """
     if not text.strip():
         return text
@@ -126,9 +128,12 @@ def run(
     if source == target:
         return text
 
-    # Cache lookup (skip on retry — critique implies the first result was bad)
+    # Cache key incorporates style fingerprint so profile changes invalidate it.
+    # Style context is short enough to hash cheaply by identity.
+    style_key = hash(style_context) if style_context else 0
+
     if not critique:
-        key = _cache_key(text, source, target, vocab_version)
+        key = _cache_key(text, source, target, vocab_version) + (style_key,)
         cached = _cache_get(key)
         if cached:
             return cached
@@ -137,11 +142,14 @@ def run(
     source_name = LANG_NAMES.get(source, source)
     target_name = LANG_NAMES.get(target, target)
 
-    # Build the user prompt
-    parts = [
-        f"Translate the following text from {source_name} to {target_name}.",
-        "Preserve the speaker's formality, tone, and sentence rhythm.",
-    ]
+    parts = [f"Translate the following text from {source_name} to {target_name}."]
+
+    # Voice preservation — inject style hint when available
+    if style_context:
+        parts.append(style_context)
+    else:
+        parts.append("Preserve the speaker's formality, tone, and sentence rhythm.")
+
     if vocab_context:
         parts.append("")
         parts.append(vocab_context)
@@ -158,9 +166,10 @@ def run(
         {"role": "user", "content": prompt},
     ]
 
-    # Adaptive model: skip 70B for very short phrases with no vocabulary context
+    # Adaptive model routing: fast 8B for short/simple, accurate 70B otherwise
     use_fast = (
         not vocab_context
+        and not style_context
         and not critique
         and len(text.strip()) <= _SHORT_TEXT_THRESHOLD
     )
@@ -177,8 +186,8 @@ def run(
     )
     result = response.choices[0].message.content.strip()
 
-    # Cache successful (non-retry) results
     if not critique:
-        _cache_set(_cache_key(text, source, target, vocab_version), result)
+        full_key = _cache_key(text, source, target, vocab_version) + (style_key,)
+        _cache_set(full_key, result)
 
     return result
