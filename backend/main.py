@@ -736,6 +736,13 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str):
                     sev = getattr(resp, "speech_event_type", None)
                     if sev:
                         logger.info("STT session %d speech_event=%s", session_idx_local, sev)
+                    # Google sometimes sends END_OF_SINGLE_UTTERANCE without
+                    # an accompanying is_final AND without closing the stream
+                    # (seen on the 5th utterance of a session). Treat any
+                    # non-zero speech event as a hard end-of-session signal so
+                    # the outer loop spins up a fresh recognizer.
+                    if sev:
+                        session_done[0] = True
                     for result in resp.results:
                         if not result.is_final:
                             continue
