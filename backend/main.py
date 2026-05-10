@@ -676,21 +676,31 @@ async def _ws_relay(websocket: WebSocket, stt_url: str, stt_headers: dict,
                     async def relay_transcripts():
                         last_text = ""
                         last_time = 0.0
+                        last_interim = ""  # most recent non-empty interim transcript
                         try:
                             async for raw in stt_ws:
                                 payload = json.loads(raw)
                                 text, is_final = parse_transcript(payload)
-                                if text or is_final:
-                                    logger.info("STT parsed: text=%r is_final=%s type=%s",
-                                                text[:60], is_final, payload.get("type"))
-                                if text and is_final:
-                                    now = asyncio.get_event_loop().time()
-                                    if text == last_text and now - last_time < 3.0:
-                                        logger.info("STT dedup skipped: %r", text[:40])
-                                        continue
-                                    last_text = text
-                                    last_time = now
-                                    await inject_speech(room_id, user_id, text)
+                                sf = payload.get("speech_final", False)
+                                if text or is_final or sf:
+                                    logger.info("STT parsed: text=%r is_final=%s sf=%s type=%s",
+                                                text[:60], is_final, sf, payload.get("type"))
+                                # Cache the latest interim transcript — for languages Deepgram
+                                # can't fully transcribe (e.g. tl), the final event arrives empty
+                                # and the interim guess is the best we have.
+                                if text and not is_final:
+                                    last_interim = text
+                                if is_final or sf:
+                                    inject_text = text or last_interim
+                                    last_interim = ""
+                                    if inject_text:
+                                        now = asyncio.get_event_loop().time()
+                                        if inject_text == last_text and now - last_time < 3.0:
+                                            logger.info("STT dedup skipped: %r", inject_text[:40])
+                                            continue
+                                        last_text = inject_text
+                                        last_time = now
+                                        await inject_speech(room_id, user_id, inject_text)
                         except Exception as e:
                             logger.info("STT transcript relay ended: %s", e)
 
