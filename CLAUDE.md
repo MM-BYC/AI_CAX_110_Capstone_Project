@@ -47,10 +47,8 @@ AI_CAX_110_Capstone_Project/
 - **Never use `openai-whisper`** — pulls PyTorch (~2 GB), OOMs at 512 MB. Use Groq's hosted `whisper-large-v3`.
 
 ### Environment Variables (always required on Render)
-- `GROQ_API_KEY` — Groq LLM + Whisper STT
-- `DEEPGRAM_API_KEY` — primary streaming STT for all non-Tagalog languages
-- `ASSEMBLYAI_API_KEY` — streaming STT for Tagalog (`tl`)
-- `GOOGLE_CREDENTIALS_JSON` — Google Cloud Speech STT (JSON string, paste ADC file content)
+- `GROQ_API_KEY` — Groq LLM + Groq Whisper (uploaded audio files)
+- `GOOGLE_CREDENTIALS_JSON` — Google Cloud Speech (streaming STT for all 16 languages)
 
 ### Load Order in `main.py`
 - `load_dotenv()` **must** run before any agent import — Groq clients initialize at module level.
@@ -68,9 +66,7 @@ Do not revert to dark theme. Use these tokens for all CSS:
 
 The app supports **16 languages**: `en es fr de it pt zh ja ko ar ru hi nl pl tr tl`
 
-STT routing:
-- `tl` → AssemblyAI real-time (Deepgram lacks native Tagalog)
-- All others → Deepgram Nova-2 (`language=<code>` or `detect_language=true` for unknowns)
+All 16 languages stream through **Google Cloud Speech** via `/ws/stt/{room}/{user}`. The mapping from app code to Google's BCP-47 lives in `_GOOGLE_LANG` in `backend/main.py` (e.g. `tl → fil-PH`).
 
 ---
 
@@ -89,8 +85,8 @@ uvicorn main:app --reload --port 8000
 
 | File | Read before touching |
 | ---- | ------------------- |
-| `backend/main.py` lines 659–746 | Any STT routing or WebSocket change |
+| `backend/main.py` `/ws/stt/` route | Any STT or WebSocket change |
 | `backend/agents/orchestrator.py` | Any pipeline change |
 | `DECISIONS.md` | Before adding a new dependency or service |
-| `TROUBLESHOOTING.md` | Before writing Groq, Deepgram, or AssemblyAI code |
+| `TROUBLESHOOTING.md` | Before writing Groq or Google Cloud Speech code |
 | `API_CONTRACTS.md` | Before adding or modifying any endpoint |

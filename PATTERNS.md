@@ -62,29 +62,28 @@ except Exception as e:
 
 ---
 
-## 4. STT WebSocket Relay
+## 4. Streaming STT Endpoint
 
-All STT streaming (Deepgram, AssemblyAI) goes through `_ws_relay()` in `main.py`. To add a new STT provider, implement a `parse_fn(payload) -> (text, is_final)` and call:
+All real-time speech-to-text streams through `/ws/stt/{room_id}/{user_id}` in `main.py`, which uses Google Cloud Speech for all 16 supported languages. The protocol:
 
-```python
-await _ws_relay(websocket, stt_url, headers, room_id, user_id, parse_fn)
-```
+1. Client opens WebSocket to `/ws/stt/{room_id}/{user_id}` (no URL params).
+2. Client sends a single JSON message: `{"sample_rate": 16000, "language": "tl"}`.
+3. Client streams raw LINEAR16 PCM as binary frames.
+4. Server feeds frames into Google's `streaming_recognize` and calls `inject_speech()` on every final transcript.
 
-Never duplicate the audio-relay + transcript-inject logic — extend `_ws_relay` instead.
+The `language` field is an ISO 639-1 code; `_GOOGLE_LANG` maps it to BCP-47 (e.g. `tl → fil-PH`).
 
-**Where defined:** `backend/main.py` lines 610–656.
+**Where defined:** `backend/main.py` `stt_stream_endpoint`.
 
 ---
 
 ## 5. Language Routing Guard
 
-When adding a new language code, update all three places in sequence:
+When adding a new language code, update each place in sequence:
 
-1. `_AAI_LANGS` set in `main.py` line 660 — if AssemblyAI handles it
-2. `_NOVA2_LANGS` set in `main.py` lines 663–667 — if Deepgram supports it natively (if not in this set, language param is omitted and Nova-2 handles it as multilingual)
-3. `_SUPPORTED` dict in `language_detection_agent.py` lines 5–22 — so lingua can detect it
-4. `LANG_NAMES` dict in `translation_agent.py` and `quality_review_agent.py` — for LLM prompts
-5. `_GOOGLE_LANG` dict in `main.py` lines 53–58 — for Google Cloud STT BCP-47 mapping
+1. `_GOOGLE_LANG` dict in `main.py` — map ISO 639-1 to Google's BCP-47 code (e.g. `"de": "de-DE"`).
+2. `_SUPPORTED` dict in `language_detection_agent.py` — so lingua can detect it.
+3. `LANG_NAMES` dict in `translation_agent.py` and `quality_review_agent.py` — for LLM prompts.
 
 Missing any one of these causes silent mis-routing or fallback to English.
 

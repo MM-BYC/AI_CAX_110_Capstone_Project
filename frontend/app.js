@@ -1284,19 +1284,19 @@ function convStopListening() {
   if (!_isSafari) webrtcStopAudio();
 }
 
-// ── iOS mic — AudioContext → ScriptProcessorNode → Deepgram streaming ─────
-// Raw LINEAR16 PCM is streamed continuously to the backend Deepgram proxy.
-// Deepgram returns speech_final transcripts which the backend injects
-// directly into the translation pipeline — no chunked HTTP calls needed.
+// ── iOS mic — AudioContext → ScriptProcessorNode → Google STT streaming ─────
+// Raw LINEAR16 PCM is streamed continuously to /ws/stt/. Final transcripts
+// from Google Cloud Speech are injected directly into the translation
+// pipeline — no chunked HTTP calls needed.
 
 let _iosMicStream          = null;
 let _iosAudioCtx           = null;
 let _iosProcessor          = null;
-let _iosDgWs               = null;
+let _iosSttWs              = null;
 let _iosMicActive          = false;
 let _iosStarting           = false;  // guard against double-tap race
-let _iosDgReconnectCount   = 0;
-const _IOS_DG_MAX_RECONNECT = 6;
+let _iosSttReconnectCount  = 0;
+const _IOS_STT_MAX_RECONNECT = 6;
 
 async function convStartIosMic() {
   if (_iosStarting || _iosMicActive) return;
@@ -1307,8 +1307,8 @@ async function convStartIosMic() {
     console.error("[iOS mic] unexpected error during startup:", err);
     _iosMicStream?.getTracks().forEach(t => t.stop()); _iosMicStream = null;
     _iosAudioCtx?.close(); _iosAudioCtx = null;
-    if (_iosDgWs && _iosDgWs.readyState < WebSocket.CLOSING) _iosDgWs.close();
-    _iosDgWs = null;
+    if (_iosSttWs && _iosSttWs.readyState < WebSocket.CLOSING) _iosSttWs.close();
+    _iosSttWs = null;
     _iosProcessor = null;
   } finally {
     _iosStarting = false;  // always reset — never leave the button locked
@@ -1339,16 +1339,16 @@ async function _convStartIosMicInner() {
   _micTrace(`AudioContext ready (${actualRate} Hz), connecting to STT…`);
 
   const lang  = convUsers[convUserId]?.language || "en";
-  const wsUrl = _buildIosDgWsUrl(lang, actualRate);
+  const wsUrl = _buildIosSttWsUrl();
   console.log("[mic] WS URL:", wsUrl);
-  _iosDgWs = new WebSocket(wsUrl);
-  _iosDgWs.binaryType = "arraybuffer";
+  _iosSttWs = new WebSocket(wsUrl);
+  _iosSttWs.binaryType = "arraybuffer";
 
   // Wait for WS to open (or fail)
   const opened = await new Promise(resolve => {
-    _iosDgWs.onopen  = () => resolve(true);
-    _iosDgWs.onerror = () => resolve(false);
-    _iosDgWs.onclose = () => resolve(false);
+    _iosSttWs.onopen  = () => resolve(true);
+    _iosSttWs.onerror = () => resolve(false);
+    _iosSttWs.onclose = () => resolve(false);
   });
 
   if (!opened) {
@@ -1357,23 +1357,26 @@ async function _convStartIosMicInner() {
     alert("Could not connect to transcription service.\n\nCheck that API keys are set on Render.");
     _iosMicStream?.getTracks().forEach(t => t.stop()); _iosMicStream = null;
     _iosAudioCtx?.close(); _iosAudioCtx = null;
-    _iosDgWs = null;
+    _iosSttWs = null;
     _iosStarting = false;
     return;
   }
+
+  // /ws/stt/ requires a JSON config message before any audio bytes.
+  _iosSttWs.send(JSON.stringify({ sample_rate: actualRate, language: lang }));
   _micTrace("STT connected, checking stability…");
 
   // Yield one event-loop turn so any immediate server-close fires onclose first
-  let _dgCloseReason = "";
-  _iosDgWs.onclose = (e) => { _dgCloseReason = e.reason || ""; _iosDgWs = null; };
-  _iosDgWs.onerror = ()  => { _iosDgWs = null; };
+  let _sttCloseReason = "";
+  _iosSttWs.onclose = (e) => { _sttCloseReason = e.reason || ""; _iosSttWs = null; };
+  _iosSttWs.onerror = ()  => { _iosSttWs = null; };
   await new Promise(r => setTimeout(r, 50));
 
-  if (!_iosDgWs || _iosDgWs.readyState !== WebSocket.OPEN) {
+  if (!_iosSttWs || _iosSttWs.readyState !== WebSocket.OPEN) {
     _micTrace("Tap to speak");
-    console.error("[iOS mic] STT WS closed immediately:", _dgCloseReason);
+    console.error("[iOS mic] STT WS closed immediately:", _sttCloseReason);
     alert("Mic connection failed — server closed immediately.\n\n" +
-          (_dgCloseReason ? `Reason: ${_dgCloseReason}` : "Check Render logs for details."));
+          (_sttCloseReason ? `Reason: ${_sttCloseReason}` : "Check Render logs for details."));
     _iosMicStream?.getTracks().forEach(t => t.stop()); _iosMicStream = null;
     _iosAudioCtx?.close(); _iosAudioCtx = null;
     _iosStarting = false;
@@ -1382,23 +1385,23 @@ async function _convStartIosMicInner() {
   _micTrace("STT stable, starting audio stream…");
 
   // On unexpected drop, reconnect silently; only a user click stops the mic.
-  _iosDgWs.onclose = _iosDgWs.onerror = _onIosDgDrop;
+  _iosSttWs.onclose = _iosSttWs.onerror = _onIosSttDrop;
 
   const source = _iosAudioCtx.createMediaStreamSource(_iosMicStream);
   _iosProcessor = _iosAudioCtx.createScriptProcessor(4096, 1, 1);
   _iosProcessor.onaudioprocess = e => {
-    if (_iosDgWs?.readyState !== WebSocket.OPEN) return;
+    if (_iosSttWs?.readyState !== WebSocket.OPEN) return;
     const f32 = e.inputBuffer.getChannelData(0);
     const i16 = new Int16Array(f32.length);
     for (let i = 0; i < f32.length; i++) {
       i16[i] = Math.max(-32768, Math.min(32767, Math.round(f32[i] * 32767)));
     }
-    _iosDgWs.send(i16.buffer);
+    _iosSttWs.send(i16.buffer);
   };
   source.connect(_iosProcessor);
   _iosProcessor.connect(_iosAudioCtx.destination);
 
-  _iosDgReconnectCount = 0;
+  _iosSttReconnectCount = 0;
   _iosMicActive = true;
   convSetMicUI(true);
   convMicLabel.textContent = "Listening…";
@@ -1409,11 +1412,11 @@ async function _convStartIosMicInner() {
 function convStopIosMic() {
   if (!_iosMicActive) return;
   _iosMicActive = false;
-  _iosDgReconnectCount = 0;  // reset so next mic-on starts fresh
+  _iosSttReconnectCount = 0;  // reset so next mic-on starts fresh
   if (_iosProcessor) { _iosProcessor.disconnect(); _iosProcessor = null; }
   if (_iosAudioCtx)  { _iosAudioCtx.close();       _iosAudioCtx  = null; }
-  if (_iosDgWs && _iosDgWs.readyState < WebSocket.CLOSING) _iosDgWs.close();
-  _iosDgWs = null;
+  if (_iosSttWs && _iosSttWs.readyState < WebSocket.CLOSING) _iosSttWs.close();
+  _iosSttWs = null;
   _iosMicStream?.getTracks().forEach(t => t.stop());
   _iosMicStream = null;
   convSetMicUI(false);
@@ -1422,44 +1425,45 @@ function convStopIosMic() {
     convWs.send(JSON.stringify({ type: "mic_status", is_on: false }));
 }
 
-function _buildIosDgWsUrl(lang, sampleRate) {
+function _buildIosSttWsUrl() {
   const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
   const wsBase  = (API_BASE || location.origin).replace(/^https?:/, wsProto);
-  return `${wsBase}/ws/deepgram/${convRoomId}/${convUserId}?language=${lang}&sample_rate=${sampleRate}`;
+  return `${wsBase}/ws/stt/${convRoomId}/${convUserId}`;
 }
 
-function _onIosDgDrop() {
-  _iosDgWs = null;
-  if (_iosMicActive) _scheduleIosDgReconnect();
+function _onIosSttDrop() {
+  _iosSttWs = null;
+  if (_iosMicActive) _scheduleIosSttReconnect();
 }
 
 // Reconnect only the STT WebSocket — mic stays on, audio pipeline keeps running.
-function _scheduleIosDgReconnect() {
+function _scheduleIosSttReconnect() {
   if (!_iosMicActive) return;
-  if (_iosDgReconnectCount >= _IOS_DG_MAX_RECONNECT) {
+  if (_iosSttReconnectCount >= _IOS_STT_MAX_RECONNECT) {
     _micTrace("STT unavailable — tap mic to stop");
     return;
   }
-  _iosDgReconnectCount++;
-  const delay = Math.min(1000 * _iosDgReconnectCount, 8000);
-  _micTrace(`Reconnecting STT (${_iosDgReconnectCount})…`);
-  setTimeout(_reconnectIosDgWs, delay);
+  _iosSttReconnectCount++;
+  const delay = Math.min(1000 * _iosSttReconnectCount, 8000);
+  _micTrace(`Reconnecting STT (${_iosSttReconnectCount})…`);
+  setTimeout(_reconnectIosSttWs, delay);
 }
 
-function _reconnectIosDgWs() {
+function _reconnectIosSttWs() {
   if (!_iosMicActive || !_iosAudioCtx) return;
-  const lang     = convUsers[convUserId]?.language || "en";
-  const wsUrl    = _buildIosDgWsUrl(lang, Math.round(_iosAudioCtx.sampleRate));
-  const ws       = new WebSocket(wsUrl);
-  ws.binaryType  = "arraybuffer";
+  const lang       = convUsers[convUserId]?.language || "en";
+  const sampleRate = Math.round(_iosAudioCtx.sampleRate);
+  const ws         = new WebSocket(_buildIosSttWsUrl());
+  ws.binaryType    = "arraybuffer";
   ws.onopen = () => {
-    _iosDgWs = ws;
+    ws.send(JSON.stringify({ sample_rate: sampleRate, language: lang }));
+    _iosSttWs = ws;
     _micTrace("Listening…");
-    ws.onclose = ws.onerror = _onIosDgDrop;
+    ws.onclose = ws.onerror = _onIosSttDrop;
     // Only reset backoff counter after connection stays alive for 5 s
-    setTimeout(() => { if (_iosDgWs === ws) _iosDgReconnectCount = 0; }, 5000);
+    setTimeout(() => { if (_iosSttWs === ws) _iosSttReconnectCount = 0; }, 5000);
   };
-  ws.onclose = ws.onerror = () => { if (_iosMicActive) _scheduleIosDgReconnect(); };
+  ws.onclose = ws.onerror = () => { if (_iosMicActive) _scheduleIosSttReconnect(); };
 }
 
 convMicBtn.addEventListener("click", () => {

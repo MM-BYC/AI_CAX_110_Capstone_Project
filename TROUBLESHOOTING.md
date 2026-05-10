@@ -1,6 +1,6 @@
 # TROUBLESHOOTING.md — Known Bugs and Fixes
 
-Every entry here was a real production failure. Read before writing Groq, Deepgram, AssemblyAI, or Render code.
+Every entry here was a real production failure. Read before writing Groq, Google Cloud Speech, or Render code.
 
 ---
 
@@ -79,87 +79,35 @@ except Exception:
 
 ---
 
-## Deepgram
+## Google Cloud Speech (Streaming STT)
 
-### Bug: HTTP 405 Method Not Allowed on WebSocket connect
+### Bug: WebSocket closes with `google-cloud-speech not installed`
 
-**Symptom:** Deepgram WebSocket handshake fails with 405.
+**Symptom:** `/ws/stt/` closes immediately with code 1011 and reason "google-cloud-speech not installed".
 
-**Root cause:** `model=whisper-large` was passed — Deepgram does not accept Whisper model names on the Nova-2 endpoint.
+**Root cause:** The `google-cloud-speech` package is missing from `backend/requirements.txt`, or the build did not install it.
 
-**Fix:** Use `model=nova-2-general`. Never pass `whisper-*` to Deepgram.
-
----
-
-### Bug: HTTP 400 Bad Request for unsupported language codes
-
-**Symptom:** Deepgram rejects `language=tl` (Tagalog) or other unsupported codes with 400.
-
-**Root cause:** Deepgram Nova-2 does not support all ISO 639-1 codes natively.
-
-**Fix:** Route `tl` to AssemblyAI. For all other unsupported codes, fall back to `detect_language=true`.
-
-**Where fixed:** `backend/main.py` lines 659–667, 729
+**Fix:** Ensure `google-cloud-speech` is pinned in `requirements.txt` and the Render build command runs `pip install -r backend/requirements.txt`.
 
 ---
 
-## AssemblyAI
+### Bug: WebSocket closes with `Google STT credentials not configured`
 
-### Bug: HTTP 404 on temp-token endpoint
+**Symptom:** `/ws/stt/` closes immediately with code 1011 and reason "Google STT credentials not configured".
 
-**Symptom:** `POST https://api.assemblyai.com/v2/realtime/token` returns 404.
+**Root cause:** `GOOGLE_CREDENTIALS_JSON` env var is missing or contains invalid JSON.
 
-**Root cause:** AssemblyAI deprecated their entire `/v2/realtime/` API including the token endpoint.
-
-**Fix:** Upgraded to AssemblyAI v3 streaming. API key goes directly in the `Authorization` header, no token fetch needed.
-
-**Where fixed:** `backend/main.py` AssemblyAI block (~line 684)
+**Fix:** Paste the full ADC service-account JSON (the entire `{...}` blob, no surrounding quotes) into the Render env var. `_make_speech_client()` parses it on every WebSocket connect.
 
 ---
 
-### Bug: AssemblyAI v3 closes connection immediately; mic auto-closes without a click
+### Bug: 5-minute hard cap on streaming sessions
 
-**Symptom:** `connection open` then `connection closed` in server logs within the same second for `language=tl`. Mic button turns off without user interaction.
+**Symptom:** Streaming silently stops after ~5 minutes of continuous use. No transcripts fire.
 
-**Root cause 1:** AssemblyAI v3 requires `encoding=pcm_s16le` in the URL query string. Without it the stream is rejected immediately.
+**Root cause:** Google's `streaming_recognize` enforces a 5-minute hard limit per session.
 
-**Root cause 2:** `parse_aai` checked `message_type == "FinalTranscript"` (v2 field name). AssemblyAI v3 sends `type == "final_transcript"` (lowercase, different key). Connection stayed open but no transcripts were injected.
-
-**Root cause 3:** The permanent `onclose` handler in `app.js` called `convStopIosMic()` whenever the STT WebSocket dropped — this turned off the mic button without a user click.
-
-**Fix (backend):** Add `encoding=pcm_s16le` to the AssemblyAI v3 URL. Update `parse_aai` to accept both `message_type:"FinalTranscript"` (v2) and `type:"final_transcript"` (v3).
-
-**Fix (frontend):** Replace the `convStopIosMic()` call in the permanent onclose handler with `_scheduleIosDgReconnect()`. Mic state now only changes on user clicks. STT WebSocket auto-reconnects up to 6 times with exponential backoff (1 s, 2 s … 8 s cap) before giving up.
-
-**Where fixed:** `backend/main.py` lines 693–703; `frontend/app.js` iOS mic section
-
----
-
-### Bug: AssemblyAI closes every connection with 3006
-
-**Symptom:** `STT msg type=Error text=''` followed by `received 3006 (registered) See Error message for details` immediately after every connect. Infinite reconnect loop, no transcripts.
-
-**Root cause:** WebSocket close code 3006 = "Not Authorized". The `ASSEMBLYAI_API_KEY` is invalid, expired, or the account does not have real-time streaming access (paid feature).
-
-**Fix:** Set `_AAI_LANGS = set()` in `main.py`. All languages including Tagalog route to Deepgram with `detect_language=true`. Deepgram auto-detects the language from audio — no explicit code needed.
-
-**Where fixed:** `backend/main.py` `_AAI_LANGS` definition.
-
----
-
-### Bug: HTTP 400 using `detect_language=true` on Deepgram WebSocket
-
-**Symptom:** Deepgram rejects the WebSocket handshake with HTTP 400 for any language not in `_NOVA2_LANGS` (e.g., `tl`).
-
-**Root cause:** `detect_language=true` is a pre-recorded REST API parameter — it is **not** valid for the WebSocket streaming endpoint (`wss://api.deepgram.com/v1/listen`). Sending it causes an immediate 400.
-
-**Fix:** Omit the `language` param entirely for unsupported codes. Nova-2 is a multilingual model and will attempt transcription without an explicit language hint.
-
-```python
-lang_param = f"&language={language}" if language in _NOVA2_LANGS else ""
-```
-
-**Where fixed:** `backend/main.py` Deepgram URL construction inside `deepgram_stream`.
+**Fix:** Already handled. The `run_stt` thread restarts the session every 270 seconds; clients see no interruption.
 
 ---
 

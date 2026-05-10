@@ -241,35 +241,19 @@ Server runs keyboard pipeline (keyboard agent → language detection → transla
 
 ---
 
-### `WS /ws/deepgram/{room_id}/{user_id}`
-Streaming STT proxy. Routes to Deepgram (all languages) or AssemblyAI (Tagalog).
-
-**Query params:**
-| Param | Type | Default | Notes |
-| ----- | ---- | ------- | ----- |
-| `language` | string | `"en"` | ISO 639-1 code |
-| `sample_rate` | int | `16000` | PCM sample rate in Hz |
-
-**Binary frames:** Raw LINEAR16 PCM at `sample_rate` Hz.
-
-**Behavior:** Every `speech_final` event from the STT provider calls `inject_speech()`, which delivers translated messages to all room participants via `/ws/conversation/`.
-
-**Close codes:**
-- `1011` — `DEEPGRAM_API_KEY` not set, or `ASSEMBLYAI_API_KEY` not set, or AssemblyAI token fetch failed.
-
----
-
 ### `WS /ws/stt/{room_id}/{user_id}`
-Google Cloud Speech streaming STT. Used by iOS clients.
+Google Cloud Speech streaming STT — the only streaming STT path. Handles all 16 languages.
 
 **First message (JSON, required within 5 seconds):**
 ```json
-{ "sample_rate": 44100, "language": "tl" }
+{ "sample_rate": 16000, "language": "tl" }
 ```
+
+`language` is an ISO 639-1 code; the server maps it to BCP-47 via `_GOOGLE_LANG` (e.g. `tl → fil-PH`). `sample_rate` must match the PCM rate the client sends (typically 16000).
 
 **Binary frames:** Raw LINEAR16 PCM at the declared `sample_rate`.
 
-**Behavior:** Final transcripts call `inject_speech()`. Sessions restart automatically every 270 seconds (before Google's 5-minute hard limit).
+**Behavior:** Every final transcript from Google calls `inject_speech()`, which delivers translated messages to all room participants via `/ws/conversation/`. Sessions restart automatically every 270 seconds (before Google's 5-minute hard limit).
 
 **Close codes:**
 - `1011` — `google-cloud-speech` not installed, or credentials not configured.
@@ -280,8 +264,6 @@ Google Cloud Speech streaming STT. Used by iOS clients.
 
 | Variable | Required | Used by |
 | -------- | -------- | ------- |
-| `GROQ_API_KEY` | yes | All agents (LLM + Whisper STT) |
-| `DEEPGRAM_API_KEY` | yes | `/ws/deepgram/` — all non-Tagalog STT |
-| `ASSEMBLYAI_API_KEY` | yes (for `tl`) | `/ws/deepgram/` — Tagalog STT path |
-| `GOOGLE_CREDENTIALS_JSON` | yes (for iOS) | `/ws/stt/` — Google Cloud Speech |
+| `GROQ_API_KEY` | yes | All agents (LLM + Groq Whisper for uploaded audio) |
+| `GOOGLE_CREDENTIALS_JSON` | yes | `/ws/stt/` — Google Cloud Speech (all 16 languages) |
 | `GROQ_MODEL` | no | LLM model override (default: `llama-3.3-70b-versatile`) |

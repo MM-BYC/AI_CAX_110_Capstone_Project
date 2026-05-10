@@ -4,17 +4,20 @@ Each entry records a choice, the alternatives considered, and the reason. Read b
 
 ---
 
-## STT Service Split: Deepgram (primary) + AssemblyAI (Tagalog)
+## Streaming STT: Google Cloud Speech (single provider)
 
-**Decision:** Use Deepgram Nova-2 for all languages except Tagalog; use AssemblyAI real-time for Tagalog.
+**Decision:** Use Google Cloud Speech for all 16 languages via `/ws/stt/{room}/{user}`. No second STT vendor.
 
-**Why not Deepgram for Tagalog:** Deepgram Nova-2 does not support `language=tl`. Passing it returns HTTP 400. `detect_language=true` may identify Tagalog audio, but accuracy is lower than a dedicated model.
+**Why Google Cloud Speech:**
+- Native support for every language the app supports, including Tagalog (`tl → fil-PH`). Deepgram Nova-2 does not support `tl`, and dropping `language=` falls back to garbage English guesses for Tagalog audio.
+- Streaming via gRPC is low-latency (~300–500 ms) and reliable.
+- Auto-restart of streaming sessions every 270 s avoids Google's 5-minute hard cap.
 
-**Why not AssemblyAI for everything:** Deepgram Nova-2 has lower latency (~300 ms) and explicit language-code support for 35 languages. AssemblyAI requires a REST round-trip to fetch a temp token before opening the WebSocket, adding ~200 ms overhead on every session start.
+**Why not Deepgram Nova-2:** Lower per-stream cost and ~200 ms latency, but no Tagalog. Maintaining Deepgram for 15 languages plus a separate provider for `tl` doubled the operational surface and forced a brittle routing table that broke whenever Deepgram changed an accepted language code.
 
-**Why not Google Cloud Speech for all:** GCS requires a service account JSON credential (`GOOGLE_CREDENTIALS_JSON`), which adds operational complexity. Deepgram key-based auth is simpler. GCS is retained as a third STT path for iOS clients via `/ws/stt/` because it handles the iOS audio format cleanly.
+**Why not AssemblyAI:** Their real-time API is paid-tier only; the project's account returned `3006 Not Authorized` on every connect. Even with a paid account, this would re-introduce the two-vendor split.
 
-**Trade-off accepted:** Two STT vendors in production increases operational surface. Mitigated by the single WebSocket endpoint (`/ws/deepgram/`) that routes internally — the frontend does not know which vendor is used.
+**Trade-off accepted:** Slightly higher per-second cost than Deepgram, and a service-account JSON credential (`GOOGLE_CREDENTIALS_JSON`) is more operational overhead than a flat API key. Worth it for one provider that covers every language with consistent quality.
 
 ---
 
@@ -36,7 +39,7 @@ Each entry records a choice, the alternatives considered, and the reason. Read b
 
 **Why:** The `openai-whisper` package installs PyTorch (~2 GB). Render free tier has 512 MB RAM — it OOMs during startup. Groq's hosted Whisper has no local dependencies and costs less per call.
 
-**Trade-off accepted:** Groq Whisper is a network call (adds ~50–100 ms). Acceptable because the Deepgram streaming path handles real-time STT; Groq Whisper is only used for uploaded audio files.
+**Trade-off accepted:** Groq Whisper is a network call (adds ~50–100 ms). Acceptable because real-time STT goes through Google Cloud Speech (`/ws/stt/`); Groq Whisper is only used for uploaded audio files.
 
 ---
 

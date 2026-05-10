@@ -12,49 +12,31 @@ Four core capabilities that drive the voice-to-voice translation pipeline.
 
 | Path | Code |
 | ---- | ---- |
-| iOS / Chrome | `AudioContext` → `ScriptProcessorNode` (4 096-sample buffer) → raw PCM Int16 → WebSocket `/ws/deepgram/{room}/{user}` |
+| iOS / Safari / Chrome | `AudioContext` → `ScriptProcessorNode` (4 096-sample buffer) → raw PCM Int16 → WebSocket `/ws/stt/{room}/{user}` |
 | Firefox / Android | Web Speech API `SpeechRecognition` (continuous mode) |
-| Backend relay | `_ws_relay()` in `backend/main.py` proxies PCM to Deepgram or AssemblyAI and calls `inject_speech()` on every `speech_final` event |
+| Backend | `stt_stream_endpoint` in `backend/main.py` feeds PCM into Google Cloud Speech `streaming_recognize` and calls `inject_speech()` on every final transcript |
 
 **Known gap:** `ScriptProcessorNode` is deprecated; the modern replacement is `AudioWorkletNode`. It does not affect correctness today but is the upgrade path.
 
 ---
 
-### Deepgram — Primary STT Engine
+### Google Cloud Speech — Single STT Engine
 
-**Role:** Deepgram Nova-2 is the default real-time Speech-to-Text engine for the entire application. It is not a fallback or a detection-only service — it handles every language except Tagalog.
+**Role:** Google Cloud Speech is the only real-time Speech-to-Text engine. It handles all 16 supported languages, including Tagalog.
 
-**Why Deepgram:** Nova-2 delivers ~300 ms streaming latency with `interim_results` and `endpointing`, making it the fastest path to a `speech_final` event that triggers the translation pipeline.
+**Why Google Cloud Speech:** Native support for every supported language (e.g. `tl → fil-PH`), gRPC streaming with ~300–500 ms latency, and automatic 270-second session restarts to dodge Google's 5-minute hard cap.
 
-**WebSocket endpoint:** `GET /ws/deepgram/{room_id}/{user_id}?language=<code>&sample_rate=16000`
-This single endpoint routes internally to Deepgram or AssemblyAI based on the language code.
+**WebSocket endpoint:** `GET /ws/stt/{room_id}/{user_id}` (no URL params).
 
-**Deepgram connection parameters (`backend/main.py` line 731):**
+**Connect protocol:**
 
-```text
-wss://api.deepgram.com/v1/listen
-  ?encoding=linear16
-  &sample_rate=<rate>
-  &channels=1
-  &model=nova-2-general
-  &language=<code>          ← explicit code when language ∈ _NOVA2_LANGS
-  OR &detect_language=true  ← fallback for any unsupported / unknown language
-  &interim_results=true
-  &endpointing=300
-  &smart_format=true
-```
+1. Open WebSocket.
+2. Send a single JSON config message: `{"sample_rate": 16000, "language": "tl"}`.
+3. Stream raw LINEAR16 PCM as binary frames.
 
-**Language routing (`backend/main.py` lines 659–667):**
+The backend reads `_GOOGLE_LANG[language]` for the BCP-47 code and feeds the audio queue into `client.streaming_recognize()`.
 
-| Language | STT service | Param |
-| -------- | ----------- | ----- |
-| `tl` (Tagalog) | AssemblyAI real-time | — (Deepgram Nova-2 lacks native `tl`) |
-| Any code in `_NOVA2_LANGS` (35 languages) | Deepgram Nova-2 | `language=<code>` |
-| Anything else | Deepgram Nova-2 | `detect_language=true` |
-
-`_NOVA2_LANGS` covers: `bg ca cs da de el en es et fi fr hi hr hu id it ja ko lt lv ms nl no pl pt ro ru sk sl sv th tr uk vi zh`
-
-**env var required:** `DEEPGRAM_API_KEY`
+**env var required:** `GOOGLE_CREDENTIALS_JSON` (the full service-account JSON, parsed by `_make_speech_client()` on every connect).
 
 ---
 
@@ -65,28 +47,22 @@ wss://api.deepgram.com/v1/listen
 **How it is implemented today:**
 
 ```text
-STT (Deepgram / AssemblyAI)  ← streaming, ~300 ms
+Google Cloud Speech            ← streaming, ~300–500 ms
         ↓  inject_speech()
-Conversation Agent            ← removes fillers, normalises text
+Conversation Agent             ← removes fillers, normalises text
         ↓
-Language Detection Agent      ← confirms / overrides source language
+Language Detection Agent       ← confirms / overrides source language
         ↓
-Translation Agent (Groq LLM)  ← llama-3.3-70b-versatile, temp=0, ~200 ms
+Translation Agent (Groq LLM)   ← llama-3.3-70b-versatile, temp=0, ~200 ms
         ↓
-Quality Review Agent          ← flags hallucinations; retries once if needed
+Quality Review Agent           ← flags hallucinations; retries once if needed
         ↓
-TTS Agent                     ← returns audio bytes to each listener
+TTS Agent                      ← returns audio bytes to each listener
 ```
 
-End-to-end latency target: **≤ 700 ms** (Deepgram 300 ms + Groq LLM 200 ms + TTS 200 ms).
+End-to-end latency target: **≤ 900 ms** (Google STT 400 ms + Groq LLM 200 ms + TTS 200 ms).
 
-**Language routing:**
-
-| Language | STT service | Why |
-| -------- | ----------- | --- |
-| Tagalog (`tl`) | AssemblyAI real-time | Deepgram Nova-2 does not support `tl` natively |
-| All others in `_NOVA2_LANGS` | Deepgram Nova-2 with `language=` param | Best accuracy + lowest latency |
-| Unsupported / unknown | Deepgram Nova-2 with `detect_language=true` | Graceful fallback |
+All 16 languages route through the same `/ws/stt/` endpoint — no per-language routing logic. `_GOOGLE_LANG` in `backend/main.py` maps the app's ISO 639-1 codes (e.g. `tl`) to Google's BCP-47 codes (e.g. `fil-PH`).
 
 ---
 
