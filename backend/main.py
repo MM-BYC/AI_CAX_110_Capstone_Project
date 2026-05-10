@@ -271,7 +271,7 @@ class VocabUpdate(BaseModel):
     translations: dict[str, str] | None = None
 
 
-_ROOM_ID_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # excludes I, L, O, 0, 1
+_ROOM_ID_ALPHABET = "0123456789"
 
 
 def _gen_room_id() -> str:

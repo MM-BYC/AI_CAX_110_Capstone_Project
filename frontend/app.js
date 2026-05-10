@@ -1951,7 +1951,7 @@ convCreateBtn.addEventListener("click", async () => {
 
 convJoinBtn.addEventListener("click", () => {
   _unlockTts(); // synchronous — user-gesture context
-  const roomId = convRoomInput.value.trim().toUpperCase();
+  const roomId = convRoomInput.value.trim();
   if (!roomId) { convRoomInput.focus(); return; }
   const name   = convNameInput.value.trim();
   if (!name)   { convNameInput.focus(); return; }
