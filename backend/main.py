@@ -132,6 +132,7 @@ from pydantic import BaseModel  # noqa: E402
 from agents.orchestrator import run_text_pipeline, run_audio_pipeline, run_conversation_pipeline  # noqa: E402
 from agents import language_detection_agent, transcription_agent  # noqa: E402
 import vocabulary_store  # noqa: E402
+import users_store  # noqa: E402
 import style_profiler  # noqa: E402
 import security  # noqa: E402
 import voice_clone  # noqa: E402  # standalone XTTS-v2 voice cloning module
@@ -198,6 +199,35 @@ async def _cleanup_empty_rooms():
             logger.warning("_cleanup_empty_rooms iteration failed: %s", e)
 
 
+def _get_pricing():
+    p_path = Path(__file__).parent / "pricing.json"
+    if p_path.exists():
+        return json.loads(p_path.read_text())
+    return {"monthly_price": 29.0, "yearly_price": 290.0, "trial_days": 3}
+
+class SignupRequest(BaseModel):
+    email: str
+    phone: str
+    password: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+def _check_trial_access(email: str):
+    """Middleware helper to block access if trial expired."""
+    allowed, reason = users_store.check_access(email)
+    if not allowed:
+        pricing = _get_pricing()
+        raise HTTPException(
+            status_code=402, 
+            detail={
+                "message": reason,
+                "pricing": pricing
+            }
+        )
+    return True
+
 @asynccontextmanager
 async def lifespan(app):
     cleanup_task = asyncio.create_task(_cleanup_empty_rooms())
@@ -251,6 +281,43 @@ async def _no_cache_static(request, call_next):
 _rooms: dict = {}
 
 
+# ── Authentication API ────────────────────────────────────────────────────────
+
+@app.post("/api/v1/auth/signup")
+async def signup(body: SignupRequest):
+    import hashlib
+    pricing = _get_pricing()
+    h = hashlib.sha256(body.password.encode()).hexdigest()
+    user = users_store.create_user(body.email, body.phone, h, trial_days=pricing["trial_days"])
+    if not user:
+        raise HTTPException(status_code=400, detail="User already exists")
+    return {"status": "success", "email": user["email"]}
+
+@app.post("/api/v1/auth/login")
+async def login(body: LoginRequest):
+    import hashlib
+    user = users_store.get_user(body.email)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    h = hashlib.sha256(body.password.encode()).hexdigest()
+    if user["password_hash"] != h:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    allowed, reason = users_store.check_access(body.email)
+    return {
+        "status": "success", 
+        "email": user["email"], 
+        "access": {"allowed": allowed, "reason": reason}
+    }
+
+@app.post("/api/v1/auth/forgot-password")
+async def forgot_password(email: str):
+    # Mock password reset
+    user = users_store.get_user(email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": "If this email exists, a reset link has been sent."}
+
 # ── Vocabulary Pydantic schemas ────────────────────────────────────────────────
 
 class VocabEntry(BaseModel):
@@ -269,6 +336,14 @@ class VocabUpdate(BaseModel):
     variants: list[str] | None = None
     domain: str | None = None
     translations: dict[str, str] | None = None
+
+
+class TranslationCorrection(BaseModel):
+    source_text: str
+    source_lang: str
+    target_lang: str
+    correct_translation: str
+    bad_translation: str = ""
 
 
 _ROOM_ID_ALPHABET = "0123456789"
@@ -357,6 +432,30 @@ async def vocab_bulk(rows: list[VocabEntry]):
     return {"added": added, "version": vocabulary_store.get_version()}
 
 
+@app.post("/api/v1/translation/correction", status_code=201)
+async def translation_correction(body: TranslationCorrection):
+    """Record a user-supplied correction so future translations of the same
+    source phrase get the right rendering injected as authoritative context.
+
+    Stored as a vocabulary entry with domain='correction' so corrections
+    can be audited/managed separately from curated terminology.
+    """
+    source_text = body.source_text.strip()
+    correct = body.correct_translation.strip()
+    if not source_text or not correct:
+        raise HTTPException(status_code=400, detail="source_text and correct_translation required")
+    entry = vocabulary_store.add(
+        term=source_text,
+        definition=f"User correction (was: {body.bad_translation[:120]})" if body.bad_translation else "User correction",
+        language=body.source_lang,
+        domain="correction",
+        translations={body.target_lang: correct},
+    )
+    logger.info("Translation correction saved: %r [%s→%s] = %r",
+                source_text[:60], body.source_lang, body.target_lang, correct[:60])
+    return entry
+
+
 # ── Translation cache stats (API-first observability) ─────────────────────────
 
 @app.get("/api/v1/stats")
@@ -378,7 +477,8 @@ async def api_stats():
 # Legacy root-level routes kept for backward compatibility.
 
 @app.post("/api/v1/translate/text")
-async def api_translate_text(source: str, target: str, text: str, request: Request = None):
+async def api_translate_text(source: str, target: str, text: str, email: str = "guest", request: Request = None):
+    _check_trial_access(email)
     """Translate text (SDK/API-first endpoint)."""
     if request:
         security.audit("translate_text", request, source=source, target=target,

@@ -15,7 +15,15 @@
       "Bash(pkill -f \"uvicorn main:app\")",
       "Bash(../.venv/bin/uvicorn main:app --reload --port 8000)",
       "Bash(curl -s http://localhost:8000/health)",
-      "Bash(curl -s http://localhost:8000/)"
+      "Bash(curl -s http://localhost:8000/)",
+      "Bash(curl -s http://localhost:8000/create_room)",
+      "Bash(python3 -c ' *)",
+      "Bash(lsof -iTCP:8000 -sTCP:LISTEN)",
+      "Bash(ipconfig getifaddr *)",
+      "Bash(../.venv/bin/uvicorn main:app --reload --host 0.0.0.0 --port 8000 --ssl-keyfile ../certs/server.key --ssl-certfile ../certs/server.crt)",
+      "Bash(curl -sk https://localhost:8000/)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/main.py'\\).read\\(\\)\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/agents/translation_agent.py'\\).read\\(\\)\\)\")"
     ]
   }
 }

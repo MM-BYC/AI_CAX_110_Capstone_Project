@@ -59,6 +59,90 @@ _SYSTEM_BASE = (
 
 _SYSTEM_STRICT = _SYSTEM_BASE  # same quality bar; strictness controlled by temp=0
 
+# ── Few-shot reference pairs ──────────────────────────────────────────────────
+# Hand-curated source→target examples per language direction, injected verbatim
+# into the user prompt as anchor cases. Targets common false-friends, idioms,
+# and lower-resource-language failures (e.g. Tagalog "papasyal" → "hallucinate").
+# Add more pairs over time; the dict is keyed by (source, target).
+_FEW_SHOT: dict[tuple[str, str], list[tuple[str, str]]] = {
+    ("tl", "en"): [
+        ("Kailan ka papasyal?", "When will you visit?"),
+        ("Magkano ang pamasahe?", "How much is the fare?"),
+        ("Ano na ang pangalan mo?", "What's your name now?"),
+        ("Tapos na akong pinagpupulungan.", "I'm done being talked about."),
+        ("Saan ka pupunta?", "Where are you going?"),
+    ],
+    ("en", "tl"): [
+        ("When will you visit?", "Kailan ka papasyal?"),
+        ("How much is the fare?", "Magkano ang pamasahe?"),
+        ("Where are you going?", "Saan ka pupunta?"),
+        ("Please wait a moment.", "Pakihintay ng sandali."),
+    ],
+    ("ja", "en"): [
+        ("お元気ですか？", "How are you?"),
+        ("申し訳ありません。", "I'm sorry."),
+        ("もう一度お願いします。", "Could you say that again, please?"),
+    ],
+    ("en", "ja"): [
+        ("Could you say that again, please?", "もう一度お願いします。"),
+        ("Nice to meet you.", "はじめまして。"),
+        ("I don't understand.", "わかりません。"),
+    ],
+    ("ko", "en"): [
+        ("안녕하세요.", "Hello."),
+        ("다시 말씀해 주세요.", "Please say that again."),
+        ("잘 모르겠어요.", "I'm not sure."),
+    ],
+    ("en", "ko"): [
+        ("Please say that again.", "다시 말씀해 주세요."),
+        ("I don't understand.", "이해가 안 돼요."),
+    ],
+    ("ar", "en"): [
+        ("كيف حالك؟", "How are you?"),
+        ("من فضلك أعد ما قلت.", "Please repeat what you said."),
+    ],
+    ("en", "ar"): [
+        ("Please repeat what you said.", "من فضلك أعد ما قلت."),
+        ("Nice to meet you.", "تشرفت بلقائك."),
+    ],
+    ("hi", "en"): [
+        ("आप कैसे हैं?", "How are you?"),
+        ("कृपया दोबारा कहें।", "Please say that again."),
+    ],
+    ("en", "hi"): [
+        ("Please say that again.", "कृपया दोबारा कहें।"),
+        ("I don't understand.", "मुझे समझ नहीं आया।"),
+    ],
+    ("zh", "en"): [
+        ("你好吗？", "How are you?"),
+        ("请再说一遍。", "Please say that again."),
+    ],
+    ("en", "zh"): [
+        ("Please say that again.", "请再说一遍。"),
+        ("Nice to meet you.", "很高兴认识你。"),
+    ],
+    ("tr", "en"): [
+        ("Nasılsın?", "How are you?"),
+        ("Tekrar söyler misin?", "Could you say that again?"),
+    ],
+    ("en", "tr"): [
+        ("Could you say that again?", "Tekrar söyler misin?"),
+    ],
+}
+
+
+def _few_shot_block(source: str, target: str) -> str:
+    pairs = _FEW_SHOT.get((source, target))
+    if not pairs:
+        return ""
+    src_name = LANG_NAMES.get(source, source)
+    tgt_name = LANG_NAMES.get(target, target)
+    lines = [f"Reference {src_name} → {tgt_name} translations (anchor cases):"]
+    for src, tgt in pairs:
+        lines.append(f'  • "{src}" → "{tgt}"')
+    return "\n".join(lines)
+
+
 # ── Translation cache ─────────────────────────────────────────────────────────
 # Key: (text_norm, source, target, vocab_version)
 # Value: (translated_text, monotonic_timestamp)
@@ -150,6 +234,11 @@ def run(
     else:
         parts.append("Preserve the speaker's formality, tone, and sentence rhythm.")
 
+    few_shot = _few_shot_block(source, target)
+    if few_shot:
+        parts.append("")
+        parts.append(few_shot)
+        parts.append("")
     if vocab_context:
         parts.append("")
         parts.append(vocab_context)
