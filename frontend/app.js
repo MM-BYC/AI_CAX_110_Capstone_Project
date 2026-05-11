@@ -185,35 +185,31 @@ let currentUserEmail = localStorage.getItem("auth_email") || null;
 let currentUserToken = localStorage.getItem("auth_token") || null;
 
 function logout() {
+  if (convWs && convWs.readyState === WebSocket.OPEN) {
+    try {
+      convWs.send(JSON.stringify({ type: "leave" }));
+    } catch {}
+  }
   localStorage.removeItem("auth_email");
   localStorage.removeItem("auth_token");
   currentUserEmail = null;
   currentUserToken = null;
   // Reset conversation state if active
   if (typeof convReset === "function") convReset();
-  // Reload the page to reset the app state and show login
-  location.reload();
+  updateAuthHeader();
+  showAuthModal("login");
 }
 
 function updateAuthHeader() {
-  const header = document.querySelector("header");
-  if (!header) return;
+  document.querySelectorAll(".conv-logout-btn").forEach((btn) => {
+    btn.style.display = currentUserToken ? "inline-flex" : "none";
+    btn.onclick = logout;
+  });
+}
 
-  let logoutBtn = document.getElementById("logoutBtn");
-  if (currentUserToken) {
-    if (!logoutBtn) {
-      logoutBtn = document.createElement("button");
-      logoutBtn.id = "logoutBtn";
-      logoutBtn.className = "btn btn-secondary";
-      logoutBtn.style.marginLeft = "auto";
-      logoutBtn.innerHTML = '<i data-lucide="log-out"></i> <span>Logout</span>';
-      logoutBtn.onclick = logout;
-      header.appendChild(logoutBtn);
-      lucide.createIcons({ nodes: [logoutBtn] });
-    }
-  } else {
-    logoutBtn?.remove();
-  }
+function routeToConversation() {
+  showTab({ btn: tabConv, panel: convTab });
+  setMenuOpen(false);
 }
 
 window.selectPlan = (card) => {
@@ -251,7 +247,7 @@ function showAuthModal(mode = "login") {
 
   const pricingHtml = `
     <div class="pricing-plans">
-      <div class="plan-card trial" onclick="selectPlan(this)">
+      <div class="plan-card trial selected" onclick="selectPlan(this)">
         ${checkmarkSvg}
         <div class="plan-badge">Most Popular</div>
         <h3>Free Trial</h3>
@@ -278,53 +274,76 @@ function showAuthModal(mode = "login") {
   `;
 
   overlay.innerHTML = `
-    <div class="auth-card landing-view">
-      <div class="auth-header">
-        <div class="auth-logo"><i data-lucide="languages"></i> AI Translate</div>
-        <h2>${isLogin ? "Welcome Back" : isSignup ? "Start 3-Day Trial" : "Reset Password"}</h2>
-        <p>${isLogin ? "Login to continue translating" : isSignup ? "No credit card required" : "Enter your email to receive a reset link"}</p>
-      </div>
-      ${isSignup ? pricingHtml : ""}
-      <div class="auth-form">
-        <div class="auth-input-group">
-          <label>Email Address</label>
-          <input type="email" id="authEmail" class="conv-field input" placeholder="name@company.com">
+    <div class="landing-shell">
+      <section class="landing-hero" aria-label="AI Translate overview">
+        <div class="landing-brand">
+          <span class="landing-brand-mark"><i data-lucide="languages"></i></span>
+          <span>AI Translate</span>
         </div>
-        ${
-          isSignup
-            ? `
-        <div class="auth-input-group">
-          <label>Phone Number</label>
-          <input type="tel" id="authPhone" class="conv-field input" placeholder="+1 (555) 000-0000">
-        </div>`
-            : ""
-        }
-        ${
-          !isForgot
-            ? `
-        <div class="auth-input-group">
-          <label>Password</label>
-          <input type="password" id="authPass" class="conv-field input" placeholder="••••••••">
-        </div>`
-            : ""
-        }
-        <button id="authSubmit" class="btn btn-primary ${isSignup ? "plan-trial" : ""}" style="justify-content:center; padding:0.8rem;">
-          ${isLogin ? "Sign In" : isSignup ? "Create Account" : "Send Reset Link"}
-        </button>
+        <h1>Real-time translation for live conversations.</h1>
+        <p class="landing-copy">Create secure rooms, invite participants, and keep multilingual discussions moving with speech, text, and media translation in one workspace.</p>
+        <div class="landing-proof">
+          <div><strong>16</strong><span>Languages</span></div>
+          <div><strong>Live</strong><span>Rooms</span></div>
+          <div><strong>AI</strong><span>Speech + Text</span></div>
+        </div>
+        <div class="landing-feature-list">
+          <span><i data-lucide="video"></i> Video conversation rooms</span>
+          <span><i data-lucide="mic"></i> Push-to-talk translation</span>
+          <span><i data-lucide="book-open"></i> Enterprise vocabulary</span>
+        </div>
+      </section>
+
+      <section class="auth-card landing-auth-card" aria-label="${isLogin ? "Login" : isSignup ? "Create account" : "Reset password"}">
+        <div class="auth-header">
+          <div class="auth-mode-switch">
+            <button type="button" class="${isLogin ? "active" : ""}" onclick="showAuthModal('login')">Login</button>
+            <button type="button" class="${isSignup ? "active" : ""}" onclick="showAuthModal('signup')">Create account</button>
+          </div>
+          <h2>${isLogin ? "Welcome back" : isSignup ? "Choose a plan" : "Reset password"}</h2>
+          <p>${isLogin ? "Sign in to open your conversation workspace." : isSignup ? "Start with a trial or select a paid plan." : "Enter your email to receive a reset link."}</p>
+        </div>
+        ${isSignup ? pricingHtml : ""}
+        <div class="auth-form">
+          <div class="auth-input-group">
+            <label>Email Address</label>
+            <input type="email" id="authEmail" class="auth-input" placeholder="name@company.com" autocomplete="email">
+          </div>
+          ${
+            isSignup
+              ? `
+          <div class="auth-input-group">
+            <label>Phone Number</label>
+            <input type="tel" id="authPhone" class="auth-input" placeholder="+1 (555) 000-0000" autocomplete="tel">
+          </div>`
+              : ""
+          }
+          ${
+            !isForgot
+              ? `
+          <div class="auth-input-group">
+            <label>Password</label>
+            <input type="password" id="authPass" class="auth-input" placeholder="Password" autocomplete="${isLogin ? "current-password" : "new-password"}">
+          </div>`
+              : ""
+          }
+          <button id="authSubmit" class="btn btn-primary auth-submit ${isSignup ? "plan-trial" : ""}">
+            ${isLogin ? "Sign In" : isSignup ? "Create Account" : "Send Reset Link"}
+          </button>
+        </div>
+        <div class="auth-footer">
+          ${
+            isLogin
+              ? `
+            <span class="auth-link" onclick="showAuthModal('forgot')">Forgot password?</span>
+          `
+              : `
+            Already have an account? <span class="auth-link" onclick="showAuthModal('login')">Sign in</span>
+          `
+          }
+        </div>
+      </section>
       </div>
-      <div class="auth-footer">
-        ${
-          isLogin
-            ? `
-          New here? <span class="auth-link" onclick="showAuthModal('signup')">Sign up for trial</span><br><br>
-          <span class="auth-link" style="font-size:0.8rem" onclick="showAuthModal('forgot')">Forgot password?</span>
-        `
-            : `
-          Already have an account? <span class="auth-link" onclick="showAuthModal('login')">Sign in</span>
-        `
-        }
-      </div>
-    </div>
   `;
 
   // Re-initialize icons for the new HTML
@@ -373,6 +392,7 @@ function showAuthModal(mode = "login") {
       localStorage.setItem("auth_token", data.access_token);
       updateAuthHeader();
       overlay.remove();
+      routeToConversation();
 
       if (data.access && !data.access.allowed) {
         showPricingModal(data.access.reason);

@@ -69,7 +69,7 @@ header {
 header h1 {
   font-size: 1rem;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: #232333;
 }
 
@@ -127,7 +127,7 @@ header .badge {
 header h1 {
   font-size: 1.75rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   color: #111827;
 }
 
@@ -135,7 +135,7 @@ header h1 {
   font-size: 0.875rem;
   color: #6b7280;
   margin-top: 0.25rem;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
 }
 
 .badge {
@@ -147,7 +147,7 @@ header h1 {
   font-size: 0.7rem;
   font-weight: 600;
   color: #6366f1;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
   text-transform: uppercase;
   background: rgba(99, 102, 241, 0.08);
 }
@@ -233,7 +233,7 @@ header h1 {
   font-weight: 600;
   color: #6b7280;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0;
 }
 
 select {
@@ -381,7 +381,7 @@ select option {
   font-weight: 600;
   color: #6b7280;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0;
 }
 
 .panel label svg {
@@ -633,7 +633,7 @@ footer p {
   border-radius: 999px;
   font-size: 0.7rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -732,7 +732,7 @@ footer p {
   font-size: 0.8rem;
   color: #6b7280;
   font-weight: 500;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
 }
 
 .live-transcript-box .interim {
@@ -765,10 +765,23 @@ footer p {
   margin: 0;
 }
 
-.conv-setup-card > p {
+.conv-setup-card > p,
+.conv-setup-header p {
   font-size: 0.85rem;
   color: #6b7280;
-  margin: 0 0 -0.75rem;
+  margin: 0;
+}
+
+.conv-setup-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: -0.5rem;
+}
+
+.conv-logout-btn {
+  flex-shrink: 0;
 }
 
 .conv-field {
@@ -782,7 +795,7 @@ footer p {
   font-weight: 600;
   color: #6b7280;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0;
 }
 
 .conv-field input[type="text"],
@@ -832,7 +845,7 @@ footer p {
   color: #9ca3af;
   font-size: 0.75rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
   font-weight: 600;
 }
 
@@ -852,7 +865,7 @@ footer p {
 .conv-join-row input {
   flex: 1;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0;
 }
 
 /* ── Room header bar ── */
@@ -880,14 +893,14 @@ footer p {
   font-weight: 600;
   color: #9ca3af;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0;
 }
 
 .conv-room-code-inline {
   font-family: monospace;
   font-size: 1.05rem;
   font-weight: 700;
-  letter-spacing: 0.15em;
+  letter-spacing: 0;
   color: #6366f1;
 }
 
@@ -1028,7 +1041,7 @@ footer p {
   font-size: 2rem;
   font-weight: 700;
   color: #fff;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 /* Video element inside box */
@@ -1049,7 +1062,7 @@ footer p {
   font-size: 0.5rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
   color: #d97706;
   background: rgba(0, 0, 0, 0.55);
   border: 1px solid rgba(217, 119, 6, 0.5);
@@ -1084,7 +1097,7 @@ footer p {
 .conv-card-lang-badge {
   font-size: 0.48rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
   color: #fff;
   border-radius: 3px;
   padding: 1px 3px;
@@ -1176,7 +1189,7 @@ footer p {
   font-weight: 600;
   color: #9ca3af;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
 }
 
 .conv-bubble-main {
@@ -1252,7 +1265,7 @@ footer p {
   display: inline-block;
   font-size: 0.52rem;
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
   color: #fff;
   background: #6366f1;
   border-radius: 3px;
@@ -1595,7 +1608,7 @@ footer p {
   font-weight: 700;
   color: #9ca3af;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   margin: 0;
 }
 .conv-invite-grid {
@@ -2183,13 +2196,15 @@ footer p {
 .auth-overlay {
   position: fixed;
   inset: 0;
-  background: #f5f7fa;
+  background:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 64, 175, 0.72)),
+    #eef2f7;
   z-index: 9999;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow-y: auto;
-  padding: 2rem;
+  padding: 2.5rem;
 }
 
 .auth-card {
@@ -2205,17 +2220,148 @@ footer p {
   gap: 1.5rem;
 }
 
+.landing-shell {
+  width: min(1120px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(380px, 0.78fr);
+  align-items: stretch;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+}
+
+.landing-hero {
+  color: #ffffff;
+  padding: clamp(2rem, 5vw, 4.5rem);
+  background:
+    linear-gradient(160deg, rgba(9, 19, 39, 0.88), rgba(28, 77, 112, 0.84)),
+    url("https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1400&q=80") center / cover;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 680px;
+}
+
+.landing-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin-bottom: 2.2rem;
+}
+
+.landing-brand-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
+}
+
+.landing-brand-mark svg {
+  width: 24px;
+  height: 24px;
+}
+
+.landing-hero h1 {
+  max-width: 620px;
+  font-size: 4.35rem;
+  line-height: 0.98;
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.landing-copy {
+  max-width: 580px;
+  margin: 1.3rem 0 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 1.05rem;
+  line-height: 1.75;
+}
+
+.landing-proof {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 2.2rem;
+  max-width: 560px;
+}
+
+.landing-proof div {
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0.9rem;
+  backdrop-filter: blur(10px);
+}
+
+.landing-proof strong,
+.landing-proof span {
+  display: block;
+}
+
+.landing-proof strong {
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.landing-proof span {
+  margin-top: 0.25rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.landing-feature-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 1.4rem;
+}
+
+.landing-feature-list span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.86rem;
+}
+
+.landing-feature-list svg {
+  width: 16px;
+  height: 16px;
+  color: #67e8f9;
+}
+
 .landing-view {
   max-width: 800px !important;
   width: 100%;
 }
 
+.landing-auth-card {
+  max-width: none;
+  min-height: 680px;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: clamp(1.5rem, 4vw, 3rem);
+  justify-content: center;
+}
+
 .auth-header {
-  text-align: center;
+  text-align: left;
 }
 
 .auth-header h2 {
-  font-size: 1.5rem;
+  font-size: 1.7rem;
   font-weight: 800;
   color: #111827;
   margin-bottom: 0.5rem;
@@ -2224,6 +2370,35 @@ footer p {
 .auth-header p {
   font-size: 0.9rem;
   color: #6b7280;
+}
+
+.auth-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: #eef2f7;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 1.4rem;
+}
+
+.auth-mode-switch button {
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 0.62rem 0.75rem;
+}
+
+.auth-mode-switch button.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
 }
 
 .auth-form {
@@ -2241,9 +2416,38 @@ footer p {
 .auth-input-group label {
   font-size: 0.75rem;
   font-weight: 700;
-  color: #374151;
+  color: #475569;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
+}
+
+.auth-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.72rem 0.85rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #0f172a;
+  font: inherit;
+  font-size: 0.92rem;
+  outline: none;
+  background: #ffffff;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.auth-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.auth-submit {
+  width: 100%;
+  justify-content: center;
+  min-height: 46px;
+  margin-top: 0.25rem;
+  font-weight: 800;
 }
 
 .auth-footer {
@@ -2253,7 +2457,7 @@ footer p {
 }
 
 .auth-link {
-  color: #6366f1;
+  color: #2563eb;
   font-weight: 600;
   cursor: pointer;
   text-decoration: none;
@@ -2276,73 +2480,65 @@ footer p {
 
 .pricing-plans {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin: 0.25rem 0 0.25rem;
   text-align: left;
 }
 
 .plan-card {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 1.5rem;
+  background: #f8fafc;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  padding: 1rem;
   position: relative;
   transition:
-    transform 0.3s ease,
+    background 0.18s ease,
     border-color 0.3s ease,
     box-shadow 0.3s ease;
-  animation: float 6s ease-in-out infinite;
   cursor: pointer;
 }
 
-.plan-card:nth-child(2) {
-  animation-delay: 1s;
-}
-
-.plan-card:nth-child(3) {
-  animation-delay: 2s;
-}
-
 .plan-card:hover {
-  transform: translateY(-12px) scale(1.02);
-  border-color: #6366f1;
+  background: #ffffff;
+  border-color: #2563eb;
 }
 
 .plan-card.selected {
-  border-color: #6366f1;
-  background: #fdfcff;
-  transform: scale(1.02);
-  animation: none;
+  border-color: #2563eb;
+  background: #eff6ff;
+  transform: none;
   box-shadow:
-    0 0 0 2px #6366f1,
-    0 10px 25px rgba(99, 102, 241, 0.2);
+    0 0 0 2px rgba(37, 99, 235, 0.18),
+    0 10px 25px rgba(37, 99, 235, 0.1);
+}
+
+.plan-card.selected h3 {
+  padding-left: 2rem;
 }
 
 .plan-card.trial {
-  border-color: #6366f1;
-  box-shadow: 0 10px 25px rgba(99, 102, 241, 0.1);
+  border-color: #93c5fd;
 }
 
 .plan-badge {
   position: absolute;
-  top: -12px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #6366f1;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: #0f766e;
   color: white;
   font-size: 0.7rem;
-  padding: 0.25rem 0.75rem;
-  border-radius: 20px;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
   font-weight: 700;
   white-space: nowrap;
 }
 
 .price {
-  font-size: 1.75rem;
+  font-size: 1.45rem;
   font-weight: 800;
   color: #111827;
-  margin: 0.75rem 0;
+  margin: 0.45rem 0;
 }
 
 .price span {
@@ -2366,6 +2562,68 @@ footer p {
   margin-bottom: 0.4rem;
 }
 
+.plan-card li svg {
+  width: 14px;
+  height: 14px;
+  color: #0f766e;
+}
+
+@media (max-width: 900px) {
+  .auth-overlay {
+    align-items: flex-start;
+    padding: 1rem;
+  }
+
+  .landing-shell {
+    grid-template-columns: 1fr;
+    border-radius: 8px;
+  }
+
+  .landing-hero,
+  .landing-auth-card {
+    min-height: auto;
+  }
+
+  .landing-hero {
+    padding: 2rem;
+  }
+
+  .landing-hero h1 {
+    font-size: 3.2rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .auth-overlay {
+    padding: 0;
+  }
+
+  .landing-shell {
+    min-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .landing-hero {
+    padding: 1.5rem;
+  }
+
+  .landing-hero h1 {
+    font-size: 2.2rem;
+  }
+
+  .landing-proof {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-auth-card {
+    padding: 1.25rem;
+  }
+
+  .conv-setup-header {
+    flex-direction: column;
+  }
+}
+
 @keyframes float {
   0% {
     transform: translateY(0px);
@@ -2386,8 +2644,8 @@ footer p {
 
 .checkmark-overlay {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 0.75rem;
+  left: 0.75rem;
   width: 24px;
   height: 24px;
   display: none;
@@ -2402,7 +2660,7 @@ footer p {
   stroke-dasharray: 166;
   stroke-dashoffset: 166;
   stroke-width: 5;
-  stroke: #6366f1;
+  stroke: #2563eb;
   fill: none;
   animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
 }
@@ -2410,7 +2668,7 @@ footer p {
 .checkmark-check {
   stroke-dasharray: 48;
   stroke-dashoffset: 48;
-  stroke: #6366f1;
+  stroke: #2563eb;
   stroke-width: 5;
   stroke-linecap: round;
   stroke-linejoin: round;

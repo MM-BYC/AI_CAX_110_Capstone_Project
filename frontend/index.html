@@ -323,8 +323,16 @@
           <!-- Setup screen -->
           <div id="convSetup" class="conv-screen">
             <div class="conv-setup-card">
-              <h2>Live Conversation</h2>
-              <p>Talk with anyone in any language — real-time AI translation</p>
+              <div class="conv-setup-header">
+                <div>
+                  <h2>Live Conversation</h2>
+                  <p>Talk with anyone in any language — real-time AI translation</p>
+                </div>
+                <button type="button" class="btn btn-secondary conv-logout-btn" id="convLogoutBtnSetup">
+                  <i data-lucide="log-out"></i>
+                  <span>Logout</span>
+                </button>
+              </div>
 
               <div class="conv-field">
                 <label>Your Name</label>
@@ -397,6 +405,10 @@
                 <button type="button" class="btn btn-secondary conv-leave-btn" id="convLeaveBtn">
                   <i data-lucide="log-out"></i>
                   <span>Leave</span>
+                </button>
+                <button type="button" class="btn btn-secondary conv-logout-btn" id="convLogoutBtnActive">
+                  <i data-lucide="log-out"></i>
+                  <span>Logout</span>
                 </button>
               </div>
             </div>
