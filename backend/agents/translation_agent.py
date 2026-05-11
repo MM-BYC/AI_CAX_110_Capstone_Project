@@ -166,9 +166,13 @@ def run(
         {"role": "user", "content": prompt},
     ]
 
-    # Adaptive model routing: fast 8B for short/simple, accurate 70B otherwise
+    # Adaptive model routing: fast 8B for short/simple, accurate 70B otherwise.
+    # strict=True (conversation pipeline) always forces the accurate model —
+    # the 8B model mistranslates lower-resource languages like Tagalog
+    # ("papasyal" → "hallucinate" instead of "visit").
     use_fast = (
-        not vocab_context
+        not strict
+        and not vocab_context
         and not style_context
         and not critique
         and len(text.strip()) <= _SHORT_TEXT_THRESHOLD
