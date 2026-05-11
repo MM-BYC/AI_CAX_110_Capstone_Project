@@ -520,61 +520,63 @@ function showAuthModal(mode = "login") {
           <h2>${isLogin ? "Welcome back" : isPricing ? "Pricing plans" : isCancel ? "Cancel subscription" : "Reset password"}</h2>
           <p>${isLogin ? "Sign in to open your conversation workspace." : isPricing ? "Select a plan, create your account, and continue to billing." : isCancel ? "Refunds are available within 10 days after your first paid charge." : "Enter your email to receive a reset link."}</p>
         </div>
-        ${isPricing ? pricingHtml : ""}
-        <div class="auth-form" ${isPricing ? 'style="display:none"' : ""}>
-          <div class="auth-input-group">
-            <label>Email Address</label>
-            <input type="email" id="authEmail" class="auth-input" placeholder="name@company.com" autocomplete="email">
-          </div>
-          ${
-            isPricing
-              ? `
-          <div class="auth-input-group">
-            <label>Phone Number</label>
-            <input type="tel" id="authPhone" class="auth-input" placeholder="+1 (555) 000-0000" autocomplete="tel">
-          </div>`
-              : ""
-          }
-          ${
-            !isForgot && !isCancel
-              ? `
-          <div class="auth-input-group">
-            <label>Password</label>
-            <input type="password" id="authPass" class="auth-input" placeholder="Password" autocomplete="${isLogin ? "current-password" : "new-password"}">
-          </div>`
-              : ""
-          }
-          ${
-            isCancel
-              ? `
-          <div class="auth-input-group">
-            <label>Reason</label>
-            <textarea id="cancelReason" class="auth-textarea" placeholder="Tell us why you are cancelling" rows="3"></textarea>
-          </div>
-          <label class="billing-terms compact">
-            <input type="checkbox" id="cancelTerms">
-            <span>I understand that refunds are only available within 10 days after the first paid charge. Beyond that period, no refund will be made.</span>
-          </label>`
-              : ""
-          }
-          <button id="authSubmit" class="btn btn-primary auth-submit ${isPricing ? "plan-trial" : ""}">
-            ${isLogin ? "Sign In" : isPricing ? "Create Account" : isCancel ? "Submit Cancellation" : "Send Reset Link"}
-          </button>
-        </div>
-        <div class="auth-footer">
-          ${
-            isLogin
-              ? `
-            <span class="auth-link" onclick="showAuthModal('forgot')">Forgot password?</span>
-          `
-              : isCancel
+        <div class="auth-tab-body">
+          ${isPricing ? pricingHtml : ""}
+          <div class="auth-form" ${isPricing ? 'style="display:none"' : ""}>
+            <div class="auth-input-group">
+              <label>Email Address</label>
+              <input type="email" id="authEmail" class="auth-input" placeholder="name@company.com" autocomplete="email">
+            </div>
+            ${
+              isPricing
                 ? `
-            Need access? <span class="auth-link" onclick="showAuthModal('login')">Sign in</span>
-          `
-              : `
-            Already have an account? <span class="auth-link" onclick="showAuthModal('login')">Sign in</span>
-          `
-          }
+            <div class="auth-input-group">
+              <label>Phone Number</label>
+              <input type="tel" id="authPhone" class="auth-input" placeholder="+1 (555) 000-0000" autocomplete="tel">
+            </div>`
+                : ""
+            }
+            ${
+              !isForgot && !isCancel
+                ? `
+            <div class="auth-input-group">
+              <label>Password</label>
+              <input type="password" id="authPass" class="auth-input" placeholder="Password" autocomplete="${isLogin ? "current-password" : "new-password"}">
+            </div>`
+                : ""
+            }
+            ${
+              isCancel
+                ? `
+            <div class="auth-input-group">
+              <label>Reason</label>
+              <textarea id="cancelReason" class="auth-textarea" placeholder="Tell us why you are cancelling" rows="3"></textarea>
+            </div>
+            <label class="billing-terms compact">
+              <input type="checkbox" id="cancelTerms">
+              <span>I understand that refunds are only available within 10 days after the first paid charge. Beyond that period, no refund will be made.</span>
+            </label>`
+                : ""
+            }
+            <button id="authSubmit" class="btn btn-primary auth-submit ${isPricing ? "plan-trial" : ""}">
+              ${isLogin ? "Sign In" : isPricing ? "Create Account" : isCancel ? "Submit Cancellation" : "Send Reset Link"}
+            </button>
+          </div>
+          <div class="auth-footer">
+            ${
+              isLogin
+                ? `
+              <span class="auth-link" onclick="showAuthModal('forgot')">Forgot password?</span>
+            `
+                : isCancel
+                  ? `
+              Need access? <span class="auth-link" onclick="showAuthModal('login')">Sign in</span>
+            `
+                  : `
+              Already have an account? <span class="auth-link" onclick="showAuthModal('login')">Sign in</span>
+            `
+            }
+          </div>
         </div>
       </section>
       </div>
