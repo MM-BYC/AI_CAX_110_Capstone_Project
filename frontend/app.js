@@ -513,9 +513,9 @@ function showAuthModal(mode = "login") {
       <section class="auth-card landing-auth-card" aria-label="${isLogin ? "Login" : isPricing ? "Pricing and account creation" : "Reset password"}">
         <div class="auth-header">
           <div class="auth-mode-switch">
-            <button type="button" class="${isLogin ? "active" : ""}" onclick="showAuthModal('login')">Login</button>
             <button type="button" class="${isPricing ? "active" : ""}" onclick="showAuthModal('pricing')">Pricing</button>
             <button type="button" class="${isCancel ? "active" : ""}" onclick="showAuthModal('cancel')">Cancel</button>
+            <button type="button" class="${isLogin ? "active" : ""}" onclick="showAuthModal('login')">Login</button>
           </div>
           <h2>${isLogin ? "Welcome back" : isPricing ? "Pricing plans" : isCancel ? "Cancel subscription" : "Reset password"}</h2>
           <p>${isLogin ? "Sign in to open your conversation workspace." : isPricing ? "Select a plan, create your account, and continue to billing." : isCancel ? "Refunds are available within 10 days after your first paid charge." : "Enter your email to receive a reset link."}</p>
