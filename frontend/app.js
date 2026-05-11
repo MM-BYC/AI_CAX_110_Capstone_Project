@@ -230,6 +230,139 @@ window.selectPlan = (card) => {
   }
 };
 
+function getSelectedPlan() {
+  const selected = document.querySelector(".plan-card.selected");
+  if (!selected) return "trial";
+  if (selected.classList.contains("annual")) return "annual";
+  if (selected.classList.contains("monthly")) return "monthly";
+  return "trial";
+}
+
+function makePaymentToken(cardNumber) {
+  const digits = cardNumber.replace(/\D/g, "");
+  return `pm_mock_${btoa(`${digits.slice(-4)}:${Date.now()}`).replace(/=+$/, "")}`;
+}
+
+function showBillingModal(signupData) {
+  const overlay = document.getElementById("authOverlay");
+  if (!overlay) return;
+
+  overlay.innerHTML = `
+    <div class="billing-shell">
+      <section class="auth-card billing-card" aria-label="Billing information">
+        <div class="auth-header">
+          <button type="button" class="billing-back-btn" id="billingBackBtn">
+            <i data-lucide="arrow-left"></i>
+            <span>Back</span>
+          </button>
+          <h2>Billing information</h2>
+          <p>Your trial starts today. Your card will be charged after the three-day trial unless you cancel first.</p>
+        </div>
+
+        <div class="billing-grid">
+          <div class="auth-input-group">
+            <label>Billing Name</label>
+            <input type="text" id="billingName" class="auth-input" placeholder="Name on card" autocomplete="cc-name">
+          </div>
+          <div class="auth-input-group">
+            <label>Address</label>
+            <input type="text" id="billingAddress1" class="auth-input" placeholder="Street address" autocomplete="billing address-line1">
+          </div>
+          <div class="auth-input-group">
+            <label>City</label>
+            <input type="text" id="billingCity" class="auth-input" placeholder="City" autocomplete="billing address-level2">
+          </div>
+          <div class="billing-row">
+            <div class="auth-input-group">
+              <label>State</label>
+              <input type="text" id="billingState" class="auth-input" placeholder="State" autocomplete="billing address-level1">
+            </div>
+            <div class="auth-input-group">
+              <label>ZIP</label>
+              <input type="text" id="billingZip" class="auth-input" placeholder="ZIP" autocomplete="billing postal-code">
+            </div>
+          </div>
+          <div class="auth-input-group">
+            <label>Card Number</label>
+            <input type="text" id="cardNumber" class="auth-input" placeholder="4242 4242 4242 4242" inputmode="numeric" autocomplete="cc-number">
+          </div>
+          <div class="billing-row">
+            <div class="auth-input-group">
+              <label>Expiration</label>
+              <input type="text" id="cardExpiry" class="auth-input" placeholder="MM/YY" autocomplete="cc-exp">
+            </div>
+            <div class="auth-input-group">
+              <label>CVC</label>
+              <input type="password" id="cardCvc" class="auth-input" placeholder="CVC" inputmode="numeric" autocomplete="cc-csc">
+            </div>
+          </div>
+        </div>
+
+        <label class="billing-terms">
+          <input type="checkbox" id="billingTerms">
+          <span>I agree that I may cancel within 10 days after my first paid charge if I am not satisfied and receive a refund. After that 10-day period, no refund will be made. I authorize AI Translate to charge my card after the three-day trial period ends.</span>
+        </label>
+
+        <button id="billingSubmit" class="btn btn-primary auth-submit">Submit Payment</button>
+      </section>
+    </div>
+  `;
+
+  lucide.createIcons({ nodes: [overlay] });
+
+  document.getElementById("billingBackBtn").onclick = () => showAuthModal("signup");
+  document.getElementById("billingSubmit").onclick = async () => {
+    const cardNumber = document.getElementById("cardNumber").value;
+    const cardDigits = cardNumber.replace(/\D/g, "");
+    if (cardDigits.length < 12) {
+      alert("Please enter a valid card number");
+      return;
+    }
+    if (!document.getElementById("billingTerms").checked) {
+      alert("Please agree to the billing and refund terms");
+      return;
+    }
+
+    const body = {
+      ...signupData,
+      accepted_terms: true,
+      billing_address: {
+        name: document.getElementById("billingName").value.trim(),
+        line1: document.getElementById("billingAddress1").value.trim(),
+        city: document.getElementById("billingCity").value.trim(),
+        state: document.getElementById("billingState").value.trim(),
+        postal_code: document.getElementById("billingZip").value.trim(),
+      },
+      payment_method: {
+        token: makePaymentToken(cardNumber),
+        brand: "card",
+        last4: cardDigits.slice(-4),
+        exp: document.getElementById("cardExpiry").value.trim(),
+      },
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/auth/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.json()).detail || "Signup failed");
+
+      const data = await res.json();
+      currentUserEmail = data.email;
+      currentUserToken = data.access_token;
+      localStorage.setItem("auth_email", data.email);
+      localStorage.setItem("auth_token", data.access_token);
+      updateAuthHeader();
+      overlay.remove();
+      routeToConversation();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+
 function showAuthModal(mode = "login") {
   let overlay = document.getElementById("authOverlay");
   if (!overlay) {
@@ -242,6 +375,7 @@ function showAuthModal(mode = "login") {
   const isLogin = mode === "login";
   const isSignup = mode === "signup";
   const isForgot = mode === "forgot";
+  const isCancel = mode === "cancel";
 
   const checkmarkSvg = `<div class="checkmark-overlay"><svg class="checkmark-svg" viewBox="0 0 52 52"><circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/><path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg></div>`;
 
@@ -299,9 +433,10 @@ function showAuthModal(mode = "login") {
           <div class="auth-mode-switch">
             <button type="button" class="${isLogin ? "active" : ""}" onclick="showAuthModal('login')">Login</button>
             <button type="button" class="${isSignup ? "active" : ""}" onclick="showAuthModal('signup')">Create account</button>
+            <button type="button" class="${isCancel ? "active" : ""}" onclick="showAuthModal('cancel')">Cancel</button>
           </div>
-          <h2>${isLogin ? "Welcome back" : isSignup ? "Choose a plan" : "Reset password"}</h2>
-          <p>${isLogin ? "Sign in to open your conversation workspace." : isSignup ? "Start with a trial or select a paid plan." : "Enter your email to receive a reset link."}</p>
+          <h2>${isLogin ? "Welcome back" : isSignup ? "Choose a plan" : isCancel ? "Cancel subscription" : "Reset password"}</h2>
+          <p>${isLogin ? "Sign in to open your conversation workspace." : isSignup ? "Start with a trial or select a paid plan." : isCancel ? "Refunds are available within 10 days after your first paid charge." : "Enter your email to receive a reset link."}</p>
         </div>
         ${isSignup ? pricingHtml : ""}
         <div class="auth-form">
@@ -319,7 +454,7 @@ function showAuthModal(mode = "login") {
               : ""
           }
           ${
-            !isForgot
+            !isForgot && !isCancel
               ? `
           <div class="auth-input-group">
             <label>Password</label>
@@ -327,8 +462,21 @@ function showAuthModal(mode = "login") {
           </div>`
               : ""
           }
+          ${
+            isCancel
+              ? `
+          <div class="auth-input-group">
+            <label>Reason</label>
+            <textarea id="cancelReason" class="auth-textarea" placeholder="Tell us why you are cancelling" rows="3"></textarea>
+          </div>
+          <label class="billing-terms compact">
+            <input type="checkbox" id="cancelTerms">
+            <span>I understand that refunds are only available within 10 days after the first paid charge. Beyond that period, no refund will be made.</span>
+          </label>`
+              : ""
+          }
           <button id="authSubmit" class="btn btn-primary auth-submit ${isSignup ? "plan-trial" : ""}">
-            ${isLogin ? "Sign In" : isSignup ? "Create Account" : "Send Reset Link"}
+            ${isLogin ? "Sign In" : isSignup ? "Create Account" : isCancel ? "Submit Cancellation" : "Send Reset Link"}
           </button>
         </div>
         <div class="auth-footer">
@@ -336,6 +484,10 @@ function showAuthModal(mode = "login") {
             isLogin
               ? `
             <span class="auth-link" onclick="showAuthModal('forgot')">Forgot password?</span>
+          `
+              : isCancel
+                ? `
+            Need access? <span class="auth-link" onclick="showAuthModal('login')">Sign in</span>
           `
               : `
             Already have an account? <span class="auth-link" onclick="showAuthModal('login')">Sign in</span>
@@ -360,12 +512,48 @@ function showAuthModal(mode = "login") {
       : "";
     const phone = isSignup ? document.getElementById("authPhone").value : "";
 
+    if (isSignup) {
+      if (!pass) {
+        alert("Please enter a password");
+        return;
+      }
+      showBillingModal({
+        email,
+        password: pass,
+        phone,
+        plan: getSelectedPlan(),
+      });
+      return;
+    }
+
+    if (isCancel) {
+      if (!document.getElementById("cancelTerms").checked) {
+        alert("Please acknowledge the refund policy");
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/billing/cancel`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            reason: document.getElementById("cancelReason").value.trim(),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Cancellation failed");
+        alert(data.message);
+        showAuthModal("login");
+      } catch (e) {
+        alert(e.message);
+      }
+      return;
+    }
+
     try {
       let endpoint = isLogin
         ? "/api/v1/auth/login"
-        : isSignup
-          ? "/api/v1/auth/signup"
-          : "/api/v1/auth/forgot-password";
+        : "/api/v1/auth/forgot-password";
       let body = isForgot ? { email } : { email, password: pass, phone };
 
       const res = await fetch(

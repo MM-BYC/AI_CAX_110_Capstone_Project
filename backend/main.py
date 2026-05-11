@@ -133,6 +133,7 @@ from agents.orchestrator import run_text_pipeline, run_audio_pipeline, run_conve
 from agents import language_detection_agent, transcription_agent  # noqa: E402
 import vocabulary_store  # noqa: E402
 import users_store  # noqa: E402
+import email_service  # noqa: E402
 import style_profiler  # noqa: E402
 import security  # noqa: E402
 import voice_clone  # noqa: E402  # standalone XTTS-v2 voice cloning module
@@ -209,10 +210,18 @@ class SignupRequest(BaseModel):
     email: str
     phone: str
     password: str
+    plan: str = "trial"
+    billing_address: dict = {}
+    payment_method: dict = {}
+    accepted_terms: bool = False
 
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+class CancelSubscriptionRequest(BaseModel):
+    email: str
+    reason: str = ""
 
 def _check_trial_access(email: str):
     """Middleware helper to block access if trial expired."""
@@ -228,15 +237,89 @@ def _check_trial_access(email: str):
         )
     return True
 
+def _format_trial_charge_date(trial_ends_at: float) -> str:
+    return time.strftime("%Y-%m-%d", time.localtime(trial_ends_at))
+
+def _plan_amount(plan: str, pricing: dict) -> float:
+    return pricing["yearly_price"] if plan == "annual" else pricing["monthly_price"]
+
+def _send_account_emails(user: dict, pricing: dict) -> None:
+    charge_date = _format_trial_charge_date(user["trial_ends_at"])
+    amount = _plan_amount(user.get("plan", "trial"), pricing)
+    email_service.send_email(
+        user["email"],
+        "AI Translate account confirmation",
+        (
+            "Your AI Translate account has been created.\n\n"
+            f"Trial length: {pricing['trial_days']} days\n"
+            f"Plan: {user.get('plan', 'trial')}\n"
+            f"Refund policy: You may cancel within 10 days after your first charge "
+            "if you are not satisfied. After that period, no refund will be made.\n"
+        ),
+    )
+    email_service.send_email(
+        user["email"],
+        "AI Translate trial and billing notice",
+        (
+            f"Your card on file will be charged ${amount:.2f} {pricing['currency']} "
+            f"on {charge_date}, after your three-day trial period ends.\n\n"
+            "You can cancel before the charge date to avoid billing."
+        ),
+    )
+
+def _send_invoice_email(user: dict, pricing: dict) -> None:
+    amount = _plan_amount(user.get("plan", "trial"), pricing)
+    email_service.send_email(
+        user["email"],
+        f"AI Translate invoice {user['invoice_number']}",
+        (
+            f"Invoice: {user['invoice_number']}\n"
+            f"Amount charged: ${amount:.2f} {pricing['currency']}\n"
+            f"Plan: {user.get('plan', 'trial')}\n"
+            "Payment status: Paid\n"
+        ),
+    )
+    users_store.update_user(user["email"], {"invoice_sent_at": time.time()})
+
+async def _process_trial_charges():
+    while True:
+        try:
+            await asyncio.sleep(60)
+            pricing = _get_pricing()
+            now = time.time()
+            for email, user in users_store.list_users().items():
+                if user.get("cancelled_at") or user.get("charged_at"):
+                    continue
+                if now < user.get("trial_ends_at", 0):
+                    continue
+                # Payment is represented by a processor token in this scaffold.
+                # Never store raw card numbers in this app.
+                if not user.get("payment_method", {}).get("token"):
+                    continue
+                charged = users_store.mark_charged(email)
+                if charged:
+                    _send_invoice_email(charged, pricing)
+                    logger.info("Processed trial charge for %s", email)
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            logger.warning("_process_trial_charges iteration failed: %s", e)
+
 @asynccontextmanager
 async def lifespan(app):
     cleanup_task = asyncio.create_task(_cleanup_empty_rooms())
+    billing_task = asyncio.create_task(_process_trial_charges())
     try:
         yield
     finally:
         cleanup_task.cancel()
+        billing_task.cancel()
         try:
             await cleanup_task
+        except (asyncio.CancelledError, Exception):
+            pass
+        try:
+            await billing_task
         except (asyncio.CancelledError, Exception):
             pass
 
@@ -287,11 +370,30 @@ _rooms: dict = {}
 async def signup(body: SignupRequest):
     import hashlib
     pricing = _get_pricing()
+    if not body.accepted_terms:
+        raise HTTPException(status_code=400, detail="Billing and refund terms must be accepted")
+    if not body.payment_method.get("token"):
+        raise HTTPException(status_code=400, detail="Payment method is required")
     h = hashlib.sha256(body.password.encode()).hexdigest()
-    user = users_store.create_user(body.email, body.phone, h, trial_days=pricing["trial_days"])
+    user = users_store.create_user(
+        body.email,
+        body.phone,
+        h,
+        trial_days=pricing["trial_days"],
+        plan=body.plan,
+        billing_address=body.billing_address,
+        payment_method=body.payment_method,
+        accepted_terms_at=time.time(),
+    )
     if not user:
         raise HTTPException(status_code=400, detail="User already exists")
-    return {"status": "success", "email": user["email"]}
+    _send_account_emails(user, pricing)
+    return {
+        "status": "success",
+        "email": user["email"],
+        "access_token": user["email"],
+        "trial_ends_at": user["trial_ends_at"],
+    }
 
 @app.post("/api/v1/auth/login")
 async def login(body: LoginRequest):
@@ -307,6 +409,7 @@ async def login(body: LoginRequest):
     return {
         "status": "success", 
         "email": user["email"], 
+        "access_token": user["email"],
         "access": {"allowed": allowed, "reason": reason}
     }
 
@@ -317,6 +420,47 @@ async def forgot_password(email: str):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "If this email exists, a reset link has been sent."}
+
+@app.post("/api/v1/billing/cancel")
+async def cancel_subscription(body: CancelSubscriptionRequest):
+    user = users_store.get_user(body.email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    now = time.time()
+    updates = {
+        "cancelled_at": now,
+        "refund_requested_at": now,
+        "is_subscriber": False,
+    }
+
+    charged_at = user.get("charged_at")
+    refund_eligible = bool(charged_at and now - charged_at <= 10 * 86400)
+    if refund_eligible:
+        updates["refunded_at"] = now
+
+    updated = users_store.update_user(body.email, updates)
+    email_service.send_email(
+        updated["email"],
+        "AI Translate cancellation confirmation",
+        (
+            "Your AI Translate subscription has been cancelled.\n\n"
+            + (
+                "Your cancellation is within the 10-day satisfaction period, so a refund has been recorded.\n"
+                if refund_eligible
+                else "This cancellation is outside the 10-day satisfaction period or occurred before a paid charge; no refund is due.\n"
+            )
+        ),
+    )
+    return {
+        "status": "cancelled",
+        "refund_eligible": refund_eligible,
+        "message": (
+            "Cancellation recorded and refund marked."
+            if refund_eligible
+            else "Cancellation recorded. No refund is available under the agreed terms."
+        ),
+    }
 
 # ── Vocabulary Pydantic schemas ────────────────────────────────────────────────
 

@@ -138,7 +138,7 @@ _CSP = (
     "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
     "font-src 'self' https://fonts.gstatic.com; "
     "connect-src 'self' wss: ws:; "
-    "img-src 'self' data:; "
+    "img-src 'self' data: https://images.unsplash.com; "
     "media-src 'self' blob:; "
     "frame-ancestors 'none';"
 )

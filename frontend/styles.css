@@ -2374,7 +2374,7 @@ footer p {
 
 .auth-mode-switch {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.25rem;
   padding: 0.25rem;
   background: #eef2f7;
@@ -2438,6 +2438,25 @@ footer p {
 }
 
 .auth-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.auth-textarea {
+  width: 100%;
+  min-height: 92px;
+  padding: 0.72rem 0.85rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #0f172a;
+  font: inherit;
+  font-size: 0.92rem;
+  outline: none;
+  background: #ffffff;
+  resize: vertical;
+}
+
+.auth-textarea:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
@@ -2568,6 +2587,69 @@ footer p {
   color: #0f766e;
 }
 
+.billing-shell {
+  width: min(620px, 100%);
+}
+
+.billing-card {
+  max-width: none;
+  border-radius: 8px;
+}
+
+.billing-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 800;
+  padding: 0;
+  margin-bottom: 1rem;
+}
+
+.billing-back-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.billing-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.billing-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.billing-terms {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.9rem;
+  border: 1px solid #dbe3ef;
+  background: #f8fafc;
+  border-radius: 8px;
+  color: #334155;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.billing-terms.compact {
+  padding: 0.75rem;
+}
+
+.billing-terms input {
+  margin-top: 0.2rem;
+  accent-color: #2563eb;
+  flex-shrink: 0;
+}
+
 @media (max-width: 900px) {
   .auth-overlay {
     align-items: flex-start;
@@ -2617,6 +2699,10 @@ footer p {
 
   .landing-auth-card {
     padding: 1.25rem;
+  }
+
+  .billing-row {
+    grid-template-columns: 1fr;
   }
 
   .conv-setup-header {

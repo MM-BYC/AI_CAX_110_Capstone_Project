@@ -1,6 +1,7 @@
 import json
 import os
 import time
+import uuid
 from pathlib import Path
 
 STORE_FILE = Path(__file__).parent / "users.json"
@@ -20,24 +21,56 @@ def get_user(email):
     users = _load()
     return users.get(email.lower())
 
-def create_user(email, phone, password_hash, trial_days=3):
+def list_users():
+    return _load()
+
+def create_user(
+    email,
+    phone,
+    password_hash,
+    trial_days=3,
+    plan="trial",
+    billing_address=None,
+    payment_method=None,
+    accepted_terms_at=None,
+):
     users = _load()
     email = email.lower()
     if email in users:
         return None
     
     now = time.time()
+    trial_ends_at = now + (trial_days * 86400)
     user = {
         "email": email,
         "phone": phone,
         "password_hash": password_hash,
         "created_at": now,
-        "trial_ends_at": now + (trial_days * 86400),
-        "is_subscriber": False
+        "trial_ends_at": trial_ends_at,
+        "is_subscriber": False,
+        "plan": plan,
+        "billing_address": billing_address or {},
+        "payment_method": payment_method or {},
+        "accepted_terms_at": accepted_terms_at,
+        "cancelled_at": None,
+        "refund_requested_at": None,
+        "refunded_at": None,
+        "charged_at": None,
+        "invoice_number": None,
+        "invoice_sent_at": None
     }
     users[email] = user
     _save(users)
     return user
+
+def update_user(email, updates):
+    users = _load()
+    email = email.lower()
+    if email not in users:
+        return None
+    users[email].update(updates)
+    _save(users)
+    return users[email]
 
 def update_subscription(email, is_subscriber=True):
     users = _load()
@@ -60,3 +93,15 @@ def check_access(email):
         return True, "Trial active"
     
     return False, "Trial expired"
+
+def mark_charged(email):
+    users = _load()
+    email = email.lower()
+    if email not in users:
+        return None
+    now = time.time()
+    users[email]["is_subscriber"] = True
+    users[email]["charged_at"] = now
+    users[email]["invoice_number"] = users[email].get("invoice_number") or f"INV-{uuid.uuid4().hex[:8].upper()}"
+    _save(users)
+    return users[email]
