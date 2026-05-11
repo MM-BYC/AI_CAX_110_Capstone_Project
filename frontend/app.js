@@ -300,7 +300,7 @@ function showBillingModal(signupData) {
 
         <label class="billing-terms">
           <input type="checkbox" id="billingTerms">
-          <span>I agree that I may cancel within 10 days after my first paid charge if I am not satisfied and receive a refund. After that 10-day period, no refund will be made. I authorize AI Translate to charge my card after the three-day trial period ends.</span>
+          <span>I acknowledge and agree that I may cancel my subscription and request a refund within ten (10) days following the first paid charge if I am not satisfied with the product. After the expiration of this ten (10) day refund period, all payments are final and non-refundable. I further authorize AI Translate to charge the payment method provided upon expiration of the three (3) day trial period.</span>
         </label>
 
         <button id="billingSubmit" class="btn btn-primary auth-submit">Submit Payment</button>
