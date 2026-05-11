@@ -183,6 +183,7 @@ document.addEventListener("click", (e) => {
 // ── Authentication Management ──────────────────────────────────────────────
 let currentUserEmail = localStorage.getItem("auth_email") || null;
 let currentUserToken = localStorage.getItem("auth_token") || null;
+let currentUserFirstName = localStorage.getItem("auth_first_name") || "";
 
 function logout() {
   if (convWs && convWs.readyState === WebSocket.OPEN) {
@@ -192,8 +193,10 @@ function logout() {
   }
   localStorage.removeItem("auth_email");
   localStorage.removeItem("auth_token");
+  localStorage.removeItem("auth_first_name");
   currentUserEmail = null;
   currentUserToken = null;
+  currentUserFirstName = "";
   // Reset conversation state if active
   if (typeof convReset === "function") convReset();
   updateAuthHeader();
@@ -210,6 +213,21 @@ function updateAuthHeader() {
 function routeToConversation() {
   showTab({ btn: tabConv, panel: convTab });
   setMenuOpen(false);
+  showWelcomeMessage();
+}
+
+function showWelcomeMessage() {
+  if (!currentUserFirstName) return;
+  const host = document.querySelector(".conv-setup-header");
+  if (!host) return;
+  let welcome = document.getElementById("accountWelcome");
+  if (!welcome) {
+    welcome = document.createElement("div");
+    welcome.id = "accountWelcome";
+    welcome.className = "account-welcome";
+    host.appendChild(welcome);
+  }
+  welcome.textContent = `Welcome, ${currentUserFirstName}`;
 }
 
 window.selectPlan = (card) => {
@@ -273,6 +291,16 @@ function showSignupModal(plan = "trial") {
           <div class="signup-panel">
             <h3>Account</h3>
             <div class="billing-grid">
+              <div class="billing-row">
+                <div class="auth-input-group">
+                  <label>First Name</label>
+                  <input type="text" id="signupFirstName" class="auth-input" placeholder="First name" autocomplete="given-name">
+                </div>
+                <div class="auth-input-group">
+                  <label>Last Name</label>
+                  <input type="text" id="signupLastName" class="auth-input" placeholder="Last name" autocomplete="family-name">
+                </div>
+              </div>
               <div class="auth-input-group">
                 <label>Email Address</label>
                 <input type="email" id="signupEmail" class="auth-input" placeholder="name@company.com" autocomplete="email">
@@ -345,13 +373,15 @@ function showSignupModal(plan = "trial") {
 
   document.getElementById("billingBackBtn").onclick = () => showAuthModal("pricing");
   document.getElementById("billingSubmit").onclick = async () => {
+    const firstName = document.getElementById("signupFirstName").value.trim();
+    const lastName = document.getElementById("signupLastName").value.trim();
     const email = document.getElementById("signupEmail").value.trim();
     const phone = document.getElementById("signupPhone").value.trim();
     const password = document.getElementById("signupPass").value.trim();
     const cardNumber = document.getElementById("cardNumber").value;
     const cardDigits = cardNumber.replace(/\D/g, "");
-    if (!email || !password) {
-      alert("Please enter your email and password");
+    if (!firstName || !lastName || !email || !password) {
+      alert("Please enter your first name, last name, email, and password");
       return;
     }
     if (cardDigits.length < 12) {
@@ -364,6 +394,8 @@ function showSignupModal(plan = "trial") {
     }
 
     const body = {
+      first_name: firstName,
+      last_name: lastName,
       email,
       password,
       phone,
@@ -395,8 +427,10 @@ function showSignupModal(plan = "trial") {
       const data = await res.json();
       currentUserEmail = data.email;
       currentUserToken = data.access_token;
+      currentUserFirstName = data.first_name || "";
       localStorage.setItem("auth_email", data.email);
       localStorage.setItem("auth_token", data.access_token);
+      localStorage.setItem("auth_first_name", currentUserFirstName);
       updateAuthHeader();
       overlay.remove();
       routeToConversation();
@@ -615,8 +649,10 @@ function showAuthModal(mode = "login") {
       const data = await res.json();
       currentUserEmail = data.email;
       currentUserToken = data.access_token;
+      currentUserFirstName = data.first_name || "";
       localStorage.setItem("auth_email", data.email);
       localStorage.setItem("auth_token", data.access_token);
+      localStorage.setItem("auth_first_name", currentUserFirstName);
       updateAuthHeader();
       overlay.remove();
       routeToConversation();

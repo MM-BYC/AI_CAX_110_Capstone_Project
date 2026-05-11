@@ -207,6 +207,8 @@ def _get_pricing():
     return {"monthly_price": 29.0, "yearly_price": 290.0, "trial_days": 3}
 
 class SignupRequest(BaseModel):
+    first_name: str = ""
+    last_name: str = ""
     email: str
     phone: str
     password: str
@@ -380,6 +382,8 @@ async def signup(body: SignupRequest):
         body.phone,
         h,
         trial_days=pricing["trial_days"],
+        first_name=body.first_name,
+        last_name=body.last_name,
         plan=body.plan,
         billing_address=body.billing_address,
         payment_method=body.payment_method,
@@ -391,6 +395,8 @@ async def signup(body: SignupRequest):
     return {
         "status": "success",
         "email": user["email"],
+        "first_name": user.get("first_name", ""),
+        "last_name": user.get("last_name", ""),
         "access_token": user["email"],
         "trial_ends_at": user["trial_ends_at"],
     }
@@ -409,6 +415,8 @@ async def login(body: LoginRequest):
     return {
         "status": "success", 
         "email": user["email"], 
+        "first_name": user.get("first_name", ""),
+        "last_name": user.get("last_name", ""),
         "access_token": user["email"],
         "access": {"allowed": allowed, "reason": reason}
     }

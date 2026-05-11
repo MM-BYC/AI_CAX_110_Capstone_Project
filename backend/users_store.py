@@ -29,6 +29,8 @@ def create_user(
     phone,
     password_hash,
     trial_days=3,
+    first_name="",
+    last_name="",
     plan="trial",
     billing_address=None,
     payment_method=None,
@@ -43,6 +45,8 @@ def create_user(
     trial_ends_at = now + (trial_days * 86400)
     user = {
         "email": email,
+        "first_name": first_name,
+        "last_name": last_name,
         "phone": phone,
         "password_hash": password_hash,
         "created_at": now,
