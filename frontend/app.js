@@ -243,57 +243,90 @@ function makePaymentToken(cardNumber) {
   return `pm_mock_${btoa(`${digits.slice(-4)}:${Date.now()}`).replace(/=+$/, "")}`;
 }
 
-function showBillingModal(signupData) {
+function getPlanLabel(plan) {
+  if (plan === "annual") return "Annual";
+  if (plan === "monthly") return "Monthly";
+  return "Free Trial";
+}
+
+function showSignupModal(plan = "trial") {
   const overlay = document.getElementById("authOverlay");
   if (!overlay) return;
 
   overlay.innerHTML = `
-    <div class="billing-shell">
+    <div class="billing-shell signup-shell">
       <section class="auth-card billing-card" aria-label="Billing information">
         <div class="auth-header">
           <button type="button" class="billing-back-btn" id="billingBackBtn">
             <i data-lucide="arrow-left"></i>
             <span>Back</span>
           </button>
-          <h2>Billing information</h2>
-          <p>Your trial starts today. Your card will be charged after the three-day trial unless you cancel first.</p>
+          <div class="signup-step-row">
+            <span class="signup-step active">1 Account</span>
+            <span class="signup-step active">2 Billing</span>
+          </div>
+          <h2>Create your account</h2>
+          <p>${getPlanLabel(plan)} plan selected. Your trial starts today and your card will be charged after the three-day trial unless you cancel first.</p>
         </div>
 
-        <div class="billing-grid">
-          <div class="auth-input-group">
-            <label>Billing Name</label>
-            <input type="text" id="billingName" class="auth-input" placeholder="Name on card" autocomplete="cc-name">
-          </div>
-          <div class="auth-input-group">
-            <label>Address</label>
-            <input type="text" id="billingAddress1" class="auth-input" placeholder="Street address" autocomplete="billing address-line1">
-          </div>
-          <div class="auth-input-group">
-            <label>City</label>
-            <input type="text" id="billingCity" class="auth-input" placeholder="City" autocomplete="billing address-level2">
-          </div>
-          <div class="billing-row">
-            <div class="auth-input-group">
-              <label>State</label>
-              <input type="text" id="billingState" class="auth-input" placeholder="State" autocomplete="billing address-level1">
-            </div>
-            <div class="auth-input-group">
-              <label>ZIP</label>
-              <input type="text" id="billingZip" class="auth-input" placeholder="ZIP" autocomplete="billing postal-code">
+        <div class="signup-modal-grid">
+          <div class="signup-panel">
+            <h3>Account</h3>
+            <div class="billing-grid">
+              <div class="auth-input-group">
+                <label>Email Address</label>
+                <input type="email" id="signupEmail" class="auth-input" placeholder="name@company.com" autocomplete="email">
+              </div>
+              <div class="auth-input-group">
+                <label>Phone Number</label>
+                <input type="tel" id="signupPhone" class="auth-input" placeholder="+1 (555) 000-0000" autocomplete="tel">
+              </div>
+              <div class="auth-input-group">
+                <label>Password</label>
+                <input type="password" id="signupPass" class="auth-input" placeholder="Password" autocomplete="new-password">
+              </div>
             </div>
           </div>
-          <div class="auth-input-group">
-            <label>Card Number</label>
-            <input type="text" id="cardNumber" class="auth-input" placeholder="4242 4242 4242 4242" inputmode="numeric" autocomplete="cc-number">
-          </div>
-          <div class="billing-row">
-            <div class="auth-input-group">
-              <label>Expiration</label>
-              <input type="text" id="cardExpiry" class="auth-input" placeholder="MM/YY" autocomplete="cc-exp">
-            </div>
-            <div class="auth-input-group">
-              <label>CVC</label>
-              <input type="password" id="cardCvc" class="auth-input" placeholder="CVC" inputmode="numeric" autocomplete="cc-csc">
+
+          <div class="signup-panel">
+            <h3>Payment</h3>
+            <div class="billing-grid">
+              <div class="auth-input-group">
+                <label>Billing Name</label>
+                <input type="text" id="billingName" class="auth-input" placeholder="Name on card" autocomplete="cc-name">
+              </div>
+              <div class="auth-input-group">
+                <label>Address</label>
+                <input type="text" id="billingAddress1" class="auth-input" placeholder="Street address" autocomplete="billing address-line1">
+              </div>
+              <div class="auth-input-group">
+                <label>City</label>
+                <input type="text" id="billingCity" class="auth-input" placeholder="City" autocomplete="billing address-level2">
+              </div>
+              <div class="billing-row">
+                <div class="auth-input-group">
+                  <label>State</label>
+                  <input type="text" id="billingState" class="auth-input" placeholder="State" autocomplete="billing address-level1">
+                </div>
+                <div class="auth-input-group">
+                  <label>ZIP</label>
+                  <input type="text" id="billingZip" class="auth-input" placeholder="ZIP" autocomplete="billing postal-code">
+                </div>
+              </div>
+              <div class="auth-input-group">
+                <label>Card Number</label>
+                <input type="text" id="cardNumber" class="auth-input" placeholder="4242 4242 4242 4242" inputmode="numeric" autocomplete="cc-number">
+              </div>
+              <div class="billing-row">
+                <div class="auth-input-group">
+                  <label>Expiration</label>
+                  <input type="text" id="cardExpiry" class="auth-input" placeholder="MM/YY" autocomplete="cc-exp">
+                </div>
+                <div class="auth-input-group">
+                  <label>CVC</label>
+                  <input type="password" id="cardCvc" class="auth-input" placeholder="CVC" inputmode="numeric" autocomplete="cc-csc">
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -303,17 +336,24 @@ function showBillingModal(signupData) {
           <span>I acknowledge and agree that I may cancel my subscription and request a refund within ten (10) days following the first paid charge if I am not satisfied with the product. After the expiration of this ten (10) day refund period, all payments are final and non-refundable. I further authorize AI Translate to charge the payment method provided upon expiration of the three (3) day trial period.</span>
         </label>
 
-        <button id="billingSubmit" class="btn btn-primary auth-submit">Submit Payment</button>
+        <button id="billingSubmit" class="btn btn-primary auth-submit">Create Account and Start Trial</button>
       </section>
     </div>
   `;
 
   lucide.createIcons({ nodes: [overlay] });
 
-  document.getElementById("billingBackBtn").onclick = () => showAuthModal("signup");
+  document.getElementById("billingBackBtn").onclick = () => showAuthModal("pricing");
   document.getElementById("billingSubmit").onclick = async () => {
+    const email = document.getElementById("signupEmail").value.trim();
+    const phone = document.getElementById("signupPhone").value.trim();
+    const password = document.getElementById("signupPass").value.trim();
     const cardNumber = document.getElementById("cardNumber").value;
     const cardDigits = cardNumber.replace(/\D/g, "");
+    if (!email || !password) {
+      alert("Please enter your email and password");
+      return;
+    }
     if (cardDigits.length < 12) {
       alert("Please enter a valid card number");
       return;
@@ -324,7 +364,10 @@ function showBillingModal(signupData) {
     }
 
     const body = {
-      ...signupData,
+      email,
+      password,
+      phone,
+      plan,
       accepted_terms: true,
       billing_address: {
         name: document.getElementById("billingName").value.trim(),
@@ -372,10 +415,11 @@ function showAuthModal(mode = "login") {
     document.body.appendChild(overlay);
   }
 
-  const isLogin = mode === "login";
-  const isSignup = mode === "signup";
+  const normalizedMode = mode === "signup" ? "pricing" : mode;
+  const isLogin = normalizedMode === "login";
+  const isPricing = normalizedMode === "pricing";
   const isForgot = mode === "forgot";
-  const isCancel = mode === "cancel";
+  const isCancel = normalizedMode === "cancel";
 
   const checkmarkSvg = `<div class="checkmark-overlay"><svg class="checkmark-svg" viewBox="0 0 52 52"><circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/><path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg></div>`;
 
@@ -395,15 +439,19 @@ function showAuthModal(mode = "login") {
       <div class="plan-card monthly" onclick="selectPlan(this)">
         ${checkmarkSvg}
         <h3>Monthly</h3>
-        <div class="price">$29<span>/mo</span></div>
+        <div class="price">$7.99<span>/mo</span></div>
         <p>Billed monthly</p>
       </div>
       <div class="plan-card annual" onclick="selectPlan(this)">
         ${checkmarkSvg}
         <h3>Annual</h3>
-        <div class="price">$290<span>/yr</span></div>
+        <div class="price">$79<span>/yr</span></div>
         <p>Save 20% vs monthly</p>
       </div>
+      <button type="button" class="btn btn-primary pricing-continue" id="pricingContinueBtn">
+        <i data-lucide="arrow-right"></i>
+        <span>Continue with selected plan</span>
+      </button>
     </div>
   `;
 
@@ -428,24 +476,24 @@ function showAuthModal(mode = "login") {
         </div>
       </section>
 
-      <section class="auth-card landing-auth-card" aria-label="${isLogin ? "Login" : isSignup ? "Create account" : "Reset password"}">
+      <section class="auth-card landing-auth-card" aria-label="${isLogin ? "Login" : isPricing ? "Pricing and account creation" : "Reset password"}">
         <div class="auth-header">
           <div class="auth-mode-switch">
             <button type="button" class="${isLogin ? "active" : ""}" onclick="showAuthModal('login')">Login</button>
-            <button type="button" class="${isSignup ? "active" : ""}" onclick="showAuthModal('signup')">Create account</button>
+            <button type="button" class="${isPricing ? "active" : ""}" onclick="showAuthModal('pricing')">Pricing</button>
             <button type="button" class="${isCancel ? "active" : ""}" onclick="showAuthModal('cancel')">Cancel</button>
           </div>
-          <h2>${isLogin ? "Welcome back" : isSignup ? "Choose a plan" : isCancel ? "Cancel subscription" : "Reset password"}</h2>
-          <p>${isLogin ? "Sign in to open your conversation workspace." : isSignup ? "Start with a trial or select a paid plan." : isCancel ? "Refunds are available within 10 days after your first paid charge." : "Enter your email to receive a reset link."}</p>
+          <h2>${isLogin ? "Welcome back" : isPricing ? "Pricing plans" : isCancel ? "Cancel subscription" : "Reset password"}</h2>
+          <p>${isLogin ? "Sign in to open your conversation workspace." : isPricing ? "Select a plan, create your account, and continue to billing." : isCancel ? "Refunds are available within 10 days after your first paid charge." : "Enter your email to receive a reset link."}</p>
         </div>
-        ${isSignup ? pricingHtml : ""}
-        <div class="auth-form">
+        ${isPricing ? pricingHtml : ""}
+        <div class="auth-form" ${isPricing ? 'style="display:none"' : ""}>
           <div class="auth-input-group">
             <label>Email Address</label>
             <input type="email" id="authEmail" class="auth-input" placeholder="name@company.com" autocomplete="email">
           </div>
           ${
-            isSignup
+            isPricing
               ? `
           <div class="auth-input-group">
             <label>Phone Number</label>
@@ -475,8 +523,8 @@ function showAuthModal(mode = "login") {
           </label>`
               : ""
           }
-          <button id="authSubmit" class="btn btn-primary auth-submit ${isSignup ? "plan-trial" : ""}">
-            ${isLogin ? "Sign In" : isSignup ? "Create Account" : isCancel ? "Submit Cancellation" : "Send Reset Link"}
+          <button id="authSubmit" class="btn btn-primary auth-submit ${isPricing ? "plan-trial" : ""}">
+            ${isLogin ? "Sign In" : isPricing ? "Create Account" : isCancel ? "Submit Cancellation" : "Send Reset Link"}
           </button>
         </div>
         <div class="auth-footer">
@@ -501,31 +549,22 @@ function showAuthModal(mode = "login") {
   // Re-initialize icons for the new HTML
   lucide.createIcons({ nodes: [overlay] });
 
+  if (isPricing) {
+    document.getElementById("pricingContinueBtn").onclick = () => {
+      showSignupModal(getSelectedPlan());
+    };
+    return;
+  }
+
   document.getElementById("authSubmit").onclick = async () => {
     const email = document.getElementById("authEmail").value.trim();
     if (!email) {
       alert("Please enter an email");
       return;
     }
-    const pass = !isForgot
+    const pass = !isForgot && !isCancel
       ? document.getElementById("authPass").value.trim()
       : "";
-    const phone = isSignup ? document.getElementById("authPhone").value : "";
-
-    if (isSignup) {
-      if (!pass) {
-        alert("Please enter a password");
-        return;
-      }
-      showBillingModal({
-        email,
-        password: pass,
-        phone,
-        plan: getSelectedPlan(),
-      });
-      return;
-    }
-
     if (isCancel) {
       if (!document.getElementById("cancelTerms").checked) {
         alert("Please acknowledge the refund policy");
@@ -554,7 +593,7 @@ function showAuthModal(mode = "login") {
       let endpoint = isLogin
         ? "/api/v1/auth/login"
         : "/api/v1/auth/forgot-password";
-      let body = isForgot ? { email } : { email, password: pass, phone };
+      let body = isForgot ? { email } : { email, password: pass };
 
       const res = await fetch(
         `${API_BASE}${endpoint}${isForgot ? "?email=" + email : ""}`,
@@ -602,8 +641,8 @@ function showPricingModal(reason) {
       </div>
       <div style="background:#f9fafb; padding:1.5rem; border-radius:12px; border:1px solid #e5e7eb">
         <h3 style="margin-bottom:1rem">Choose a Plan</h3>
-        <button class="btn btn-primary" style="width:100%; margin-bottom:0.5rem">Monthly - $29.00</button>
-        <button class="btn btn-secondary" style="width:100%">Yearly - $290.00 (Save 20%)</button>
+        <button class="btn btn-primary" style="width:100%; margin-bottom:0.5rem">Monthly - $7.99</button>
+        <button class="btn btn-secondary" style="width:100%">Yearly - $79.00 (Save 20%)</button>
       </div>
       <span class="auth-link" onclick="location.reload()">Back to login</span>
     </div>

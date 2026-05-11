@@ -2505,6 +2505,14 @@ footer p {
   text-align: left;
 }
 
+.pricing-continue {
+  width: 100%;
+  justify-content: center;
+  min-height: 46px;
+  margin-top: 0.25rem;
+  font-weight: 800;
+}
+
 .plan-card {
   background: #f8fafc;
   border: 1px solid #dbe3ef;
@@ -2591,6 +2599,10 @@ footer p {
   width: min(620px, 100%);
 }
 
+.signup-shell {
+  width: min(940px, 100%);
+}
+
 .billing-card {
   max-width: none;
   border-radius: 8px;
@@ -2619,6 +2631,49 @@ footer p {
 .billing-grid {
   display: grid;
   gap: 1rem;
+}
+
+.signup-step-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.signup-step {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.signup-step.active {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.signup-modal-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 1rem;
+}
+
+.signup-panel {
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 1rem;
+}
+
+.signup-panel h3 {
+  margin: 0 0 0.9rem;
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 800;
 }
 
 .billing-row {
@@ -2702,6 +2757,10 @@ footer p {
   }
 
   .billing-row {
+    grid-template-columns: 1fr;
+  }
+
+  .signup-modal-grid {
     grid-template-columns: 1fr;
   }
 
