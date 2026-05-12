@@ -225,6 +225,7 @@ document.addEventListener("click", (e) => {
 let currentUserEmail = localStorage.getItem("auth_email") || null;
 let currentUserToken = localStorage.getItem("auth_token") || null;
 let currentUserFirstName = localStorage.getItem("auth_first_name") || "";
+let currentUserLastName = localStorage.getItem("auth_last_name") || "";
 
 function logout() {
   if (convWs && convWs.readyState === WebSocket.OPEN) {
@@ -235,9 +236,11 @@ function logout() {
   localStorage.removeItem("auth_email");
   localStorage.removeItem("auth_token");
   localStorage.removeItem("auth_first_name");
+  localStorage.removeItem("auth_last_name");
   currentUserEmail = null;
   currentUserToken = null;
   currentUserFirstName = "";
+  currentUserLastName = "";
   // Reset conversation state if active
   if (typeof convReset === "function") convReset();
   updateAuthHeader();
@@ -259,7 +262,8 @@ function routeToConversation() {
 }
 
 function showWelcomeMessage() {
-  if (!currentUserFirstName) return;
+  const displayName = getAuthenticatedDisplayName();
+  if (!displayName) return;
   const host = document.querySelector(".conv-setup-header");
   if (!host) return;
   let welcome = document.getElementById("accountWelcome");
@@ -269,11 +273,15 @@ function showWelcomeMessage() {
     welcome.className = "account-welcome";
     host.appendChild(welcome);
   }
-  welcome.textContent = `Welcome, ${currentUserFirstName}`;
+  welcome.textContent = `Welcome, ${displayName}`;
 }
 
 function getAuthenticatedDisplayName() {
-  return (currentUserFirstName || currentUserEmail || "").trim();
+  const fullName = [currentUserFirstName, currentUserLastName]
+    .map((part) => (part || "").trim())
+    .filter(Boolean)
+    .join(" ");
+  return (fullName || currentUserEmail || "").trim();
 }
 
 window.selectPlan = (card) => {
@@ -410,9 +418,11 @@ function showSignupModal(plan = "trial") {
       currentUserEmail = data.email;
       currentUserToken = data.access_token;
       currentUserFirstName = data.first_name || "";
+      currentUserLastName = data.last_name || "";
       localStorage.setItem("auth_email", data.email);
       localStorage.setItem("auth_token", data.access_token);
       localStorage.setItem("auth_first_name", currentUserFirstName);
+      localStorage.setItem("auth_last_name", currentUserLastName);
       updateAuthHeader();
       overlay.remove();
       routeToConversation();
@@ -644,9 +654,11 @@ function showAuthModal(mode = "login") {
       currentUserEmail = data.email;
       currentUserToken = data.access_token;
       currentUserFirstName = data.first_name || "";
+      currentUserLastName = data.last_name || "";
       localStorage.setItem("auth_email", data.email);
       localStorage.setItem("auth_token", data.access_token);
       localStorage.setItem("auth_first_name", currentUserFirstName);
+      localStorage.setItem("auth_last_name", currentUserLastName);
       updateAuthHeader();
       overlay.remove();
       routeToConversation();
