@@ -400,6 +400,10 @@ function showSignupModal(plan = "trial") {
               <label>Password</label>
               <input type="password" id="signupPass" class="auth-input" placeholder="Password" autocomplete="new-password">
             </div>
+            <div class="auth-input-group">
+              <label>Confirm Password</label>
+              <input type="password" id="signupPassConfirm" class="auth-input" placeholder="Confirm password" autocomplete="new-password">
+            </div>
           </div>
         </div>
 
@@ -422,8 +426,13 @@ function showSignupModal(plan = "trial") {
     const email = document.getElementById("signupEmail").value.trim();
     const phone = document.getElementById("signupPhone").value.trim();
     const password = document.getElementById("signupPass").value.trim();
+    const passwordConfirm = document.getElementById("signupPassConfirm").value.trim();
     if (!firstName || !lastName || !email || !password) {
       alert("Please enter your first name, last name, email, and password");
+      return;
+    }
+    if (password !== passwordConfirm) {
+      alert("Passwords do not match");
       return;
     }
     if (!document.getElementById("billingTerms").checked) {
