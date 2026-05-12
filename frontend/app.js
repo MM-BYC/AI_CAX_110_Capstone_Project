@@ -579,7 +579,13 @@ function showAuthModal(mode = "login") {
         },
       );
 
-      if (!res.ok) throw new Error((await res.json()).detail || "Auth failed");
+      if (!res.ok) {
+        const err = await res.json();
+        if (isLogin && res.status === 401) {
+          throw new Error("Email or password not recognized. Try again or create a trial account from Plans.");
+        }
+        throw new Error(err.detail || "Auth failed");
+      }
 
       if (isForgot) {
         alert("If this email exists, a reset link has been sent.");
