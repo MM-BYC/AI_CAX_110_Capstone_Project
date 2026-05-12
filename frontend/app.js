@@ -423,7 +423,7 @@ function showAuthModal(mode = "login") {
         <span>Continue with selected plan</span>
       </button>
       <div class="pricing-login-prompt">
-        Already have an account? <span class="auth-link" onclick="showAuthModal('login')">Login</span>
+        Already have an account? <span class="auth-link" onclick="showAuthModal('login')">Sign in</span>
       </div>
     </div>
   `;
@@ -501,7 +501,7 @@ function showAuthModal(mode = "login") {
               ${isLogin ? "Sign In" : isPricing ? "Create Account" : isCancel ? "Submit Cancellation" : "Send Reset Link"}
             </button>
           </div>
-          <div class="auth-footer">
+          <div class="auth-footer" ${isPricing ? 'style="display:none"' : ""}>
             ${
               isLogin
                 ? `
