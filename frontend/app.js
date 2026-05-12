@@ -256,11 +256,6 @@ function getSelectedPlan() {
   return "trial";
 }
 
-function makePaymentToken(cardNumber) {
-  const digits = cardNumber.replace(/\D/g, "");
-  return `pm_mock_${btoa(`${digits.slice(-4)}:${Date.now()}`).replace(/=+$/, "")}`;
-}
-
 function getPlanLabel(plan) {
   if (plan === "annual") return "Annual";
   if (plan === "monthly") return "Monthly";
@@ -281,87 +276,43 @@ function showSignupModal(plan = "trial") {
           </button>
           <div class="signup-step-row">
             <span class="signup-step active">1 Account</span>
-            <span class="signup-step active">2 Billing</span>
+            <span class="signup-step active">2 Trial</span>
           </div>
           <h2>Create your account</h2>
-          <p>${getPlanLabel(plan)} plan selected. Your trial starts today and your card will be charged after the three-day trial unless you cancel first.</p>
+          <p>${getPlanLabel(plan)} plan selected. Your trial starts today. Payment information is skipped for testing.</p>
         </div>
 
-        <div class="signup-modal-grid">
-          <div class="signup-panel">
-            <h3>Account</h3>
-            <div class="billing-grid">
-              <div class="billing-row">
-                <div class="auth-input-group">
-                  <label>First Name</label>
-                  <input type="text" id="signupFirstName" class="auth-input" placeholder="First name" autocomplete="given-name">
-                </div>
-                <div class="auth-input-group">
-                  <label>Last Name</label>
-                  <input type="text" id="signupLastName" class="auth-input" placeholder="Last name" autocomplete="family-name">
-                </div>
+        <div class="signup-panel">
+          <h3>Account</h3>
+          <div class="billing-grid">
+            <div class="billing-row">
+              <div class="auth-input-group">
+                <label>First Name</label>
+                <input type="text" id="signupFirstName" class="auth-input" placeholder="First name" autocomplete="given-name">
               </div>
               <div class="auth-input-group">
-                <label>Email Address</label>
-                <input type="email" id="signupEmail" class="auth-input" placeholder="name@company.com" autocomplete="email">
-              </div>
-              <div class="auth-input-group">
-                <label>Phone Number</label>
-                <input type="tel" id="signupPhone" class="auth-input" placeholder="+1 (555) 000-0000" autocomplete="tel">
-              </div>
-              <div class="auth-input-group">
-                <label>Password</label>
-                <input type="password" id="signupPass" class="auth-input" placeholder="Password" autocomplete="new-password">
+                <label>Last Name</label>
+                <input type="text" id="signupLastName" class="auth-input" placeholder="Last name" autocomplete="family-name">
               </div>
             </div>
-          </div>
-
-          <div class="signup-panel">
-            <h3>Payment</h3>
-            <div class="billing-grid">
-              <div class="auth-input-group">
-                <label>Billing Name</label>
-                <input type="text" id="billingName" class="auth-input" placeholder="Name on card" autocomplete="cc-name">
-              </div>
-              <div class="auth-input-group">
-                <label>Address</label>
-                <input type="text" id="billingAddress1" class="auth-input" placeholder="Street address" autocomplete="billing address-line1">
-              </div>
-              <div class="auth-input-group">
-                <label>City</label>
-                <input type="text" id="billingCity" class="auth-input" placeholder="City" autocomplete="billing address-level2">
-              </div>
-              <div class="billing-row">
-                <div class="auth-input-group">
-                  <label>State</label>
-                  <input type="text" id="billingState" class="auth-input" placeholder="State" autocomplete="billing address-level1">
-                </div>
-                <div class="auth-input-group">
-                  <label>ZIP</label>
-                  <input type="text" id="billingZip" class="auth-input" placeholder="ZIP" autocomplete="billing postal-code">
-                </div>
-              </div>
-              <div class="auth-input-group">
-                <label>Card Number</label>
-                <input type="text" id="cardNumber" class="auth-input" placeholder="4242 4242 4242 4242" inputmode="numeric" autocomplete="cc-number">
-              </div>
-              <div class="billing-row">
-                <div class="auth-input-group">
-                  <label>Expiration</label>
-                  <input type="text" id="cardExpiry" class="auth-input" placeholder="MM/YY" autocomplete="cc-exp">
-                </div>
-                <div class="auth-input-group">
-                  <label>CVC</label>
-                  <input type="password" id="cardCvc" class="auth-input" placeholder="CVC" inputmode="numeric" autocomplete="cc-csc">
-                </div>
-              </div>
+            <div class="auth-input-group">
+              <label>Email Address</label>
+              <input type="email" id="signupEmail" class="auth-input" placeholder="name@company.com" autocomplete="email">
+            </div>
+            <div class="auth-input-group">
+              <label>Phone Number</label>
+              <input type="tel" id="signupPhone" class="auth-input" placeholder="+1 (555) 000-0000" autocomplete="tel">
+            </div>
+            <div class="auth-input-group">
+              <label>Password</label>
+              <input type="password" id="signupPass" class="auth-input" placeholder="Password" autocomplete="new-password">
             </div>
           </div>
         </div>
 
         <label class="billing-terms">
           <input type="checkbox" id="billingTerms">
-          <span>I acknowledge and agree that I may cancel my subscription and request a refund within ten (10) days following the first paid charge if I am not satisfied with the product. After the expiration of this ten (10) day refund period, all payments are final and non-refundable. I further authorize AI Translate to charge the payment method provided upon expiration of the three (3) day trial period.</span>
+          <span>I acknowledge this is a test trial signup. No payment information is collected in this testing flow.</span>
         </label>
 
         <button id="billingSubmit" class="btn btn-primary auth-submit">Create Account and Start Trial</button>
@@ -378,18 +329,12 @@ function showSignupModal(plan = "trial") {
     const email = document.getElementById("signupEmail").value.trim();
     const phone = document.getElementById("signupPhone").value.trim();
     const password = document.getElementById("signupPass").value.trim();
-    const cardNumber = document.getElementById("cardNumber").value;
-    const cardDigits = cardNumber.replace(/\D/g, "");
     if (!firstName || !lastName || !email || !password) {
       alert("Please enter your first name, last name, email, and password");
       return;
     }
-    if (cardDigits.length < 12) {
-      alert("Please enter a valid card number");
-      return;
-    }
     if (!document.getElementById("billingTerms").checked) {
-      alert("Please agree to the billing and refund terms");
+      alert("Please acknowledge the test trial terms");
       return;
     }
 
@@ -401,18 +346,9 @@ function showSignupModal(plan = "trial") {
       phone,
       plan,
       accepted_terms: true,
-      billing_address: {
-        name: document.getElementById("billingName").value.trim(),
-        line1: document.getElementById("billingAddress1").value.trim(),
-        city: document.getElementById("billingCity").value.trim(),
-        state: document.getElementById("billingState").value.trim(),
-        postal_code: document.getElementById("billingZip").value.trim(),
-      },
+      billing_address: {},
       payment_method: {
-        token: makePaymentToken(cardNumber),
-        brand: "card",
-        last4: cardDigits.slice(-4),
-        exp: document.getElementById("cardExpiry").value.trim(),
+        type: "test_trial_bypass",
       },
     };
 

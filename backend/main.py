@@ -248,6 +248,7 @@ def _plan_amount(plan: str, pricing: dict) -> float:
 def _send_account_emails(user: dict, pricing: dict) -> None:
     charge_date = _format_trial_charge_date(user["trial_ends_at"])
     amount = _plan_amount(user.get("plan", "trial"), pricing)
+    has_payment_token = bool(user.get("payment_method", {}).get("token"))
     email_service.send_email(
         user["email"],
         "AI Translate account confirmation",
@@ -259,6 +260,17 @@ def _send_account_emails(user: dict, pricing: dict) -> None:
             "if you are not satisfied. After that period, no refund will be made.\n"
         ),
     )
+    if not has_payment_token:
+        email_service.send_email(
+            user["email"],
+            "AI Translate test trial notice",
+            (
+                "Your AI Translate test trial is active.\n\n"
+                "No payment information was collected for this testing signup, "
+                "so no automatic charge will be processed when the trial ends."
+            ),
+        )
+        return
     email_service.send_email(
         user["email"],
         "AI Translate trial and billing notice",
@@ -374,8 +386,6 @@ async def signup(body: SignupRequest):
     pricing = _get_pricing()
     if not body.accepted_terms:
         raise HTTPException(status_code=400, detail="Billing and refund terms must be accepted")
-    if not body.payment_method.get("token"):
-        raise HTTPException(status_code=400, detail="Payment method is required")
     h = hashlib.sha256(body.password.encode()).hexdigest()
     user = users_store.create_user(
         body.email,
