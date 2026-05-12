@@ -524,6 +524,7 @@ class ConversationSummaryMessage(BaseModel):
     translation: str = ""
     shown_text: str = ""
     is_self: bool = False
+    source: str = ""
     timestamp: str = ""
 
 
@@ -677,9 +678,13 @@ async def conversation_summary(body: ConversationSummaryRequest):
 
     transcript_lines = []
     for m in rows:
-        text = m.original or m.shown_text or m.translation
+        text = m.shown_text or m.original or m.translation
+        original = m.original if m.original and m.original != text else ""
         translated = m.translation if m.translation and m.translation != text else ""
-        line = f"{m.speaker}: {text.strip()}"
+        source = "chat board" if m.source == "discussion_board" else "transcript"
+        line = f"{m.speaker}: {text.strip()} [{source}]"
+        if original:
+            line += f" | Original: {original.strip()}"
         if translated:
             line += f" | Translation shown: {translated.strip()}"
         transcript_lines.append(line[:1200])
@@ -688,17 +693,21 @@ async def conversation_summary(body: ConversationSummaryRequest):
     target_language = SUMMARY_LANG_NAMES.get(body.target_language, body.target_language or "English")
 
     prompt = (
-        "Summarize this live conversation for a work follow-up record. "
+        "Fill the existing Conversation Summary modal from the chat board transcript below. "
+        "Use the messages as the source of truth for what transpired on the conversation board. "
         f"Write every user-visible JSON value in {target_language}. "
         "Keep JSON keys exactly in English as specified. "
-        "Return valid JSON only with these keys: "
+        "Return valid JSON only. The JSON must map exactly to these predefined sections: "
         "main_goal string; important_discussions array of strings; takeaways array of strings; "
         "action_items array of objects with owner, task, deliverable, due_date; "
         "follow_ups array of objects with owner, with_whom, reason, timing; "
         "second_meeting string; reconvene_notes array of strings. "
-        "Use 'Not identified' for unknown owner/date/timing fields. "
-        "Do not invent details not supported by the transcript.\n\n"
-        f"Participants: {participants}\n\nTranscript:\n{transcript}"
+        "If the chat is a language or translation check, capture the language identification or usage under "
+        "important_discussions and takeaways even when there is no business meeting goal. "
+        "Use 'Not identified' for unknown string fields. "
+        "Return empty arrays for action_items or follow_ups when no explicit task, owner, follow-up, or timing is stated. "
+        "Do not invent details not supported by the chat board transcript.\n\n"
+        f"Participants: {participants}\n\nChat board transcript:\n{transcript}"
     )
 
     try:

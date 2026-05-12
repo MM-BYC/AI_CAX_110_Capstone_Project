@@ -2889,6 +2889,68 @@ function convSummaryFollowUps(items) {
   `).join("")}</div>`;
 }
 
+function convNormalizeSummaryText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function convReadBoardMessagesForSummary() {
+  if (!convMessages) return [];
+
+  return Array.from(convMessages.querySelectorAll(".conv-bubble"))
+    .map((bubble) => {
+      const speaker = convNormalizeSummaryText(
+        bubble.querySelector(".conv-bubble-name")?.textContent,
+      );
+      const shownText = convNormalizeSummaryText(
+        bubble.querySelector(".conv-bubble-main")?.textContent,
+      );
+      if (!speaker || !shownText) return null;
+
+      const isSelf = bubble.classList.contains("self");
+      return {
+        speaker,
+        original: shownText,
+        translation: "",
+        shown_text: shownText,
+        is_self: isSelf,
+        source: "discussion_board",
+        timestamp: "",
+      };
+    })
+    .filter(Boolean);
+}
+
+function convMessagesForSummary() {
+  const rows = [];
+  const seen = new Set();
+  const addRow = (message) => {
+    const speaker = convNormalizeSummaryText(message.speaker);
+    const shownText = convNormalizeSummaryText(
+      message.shown_text || message.original || message.translation,
+    );
+    const original = convNormalizeSummaryText(message.original);
+    const translation = convNormalizeSummaryText(message.translation);
+    if (!speaker || !shownText) return;
+
+    const key = `${speaker}\u0000${shownText}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    rows.push({
+      speaker,
+      original: original || shownText,
+      translation,
+      shown_text: shownText,
+      is_self: !!message.is_self,
+      source: message.source || "transcript",
+      timestamp: message.timestamp || "",
+    });
+  };
+
+  convTranscript.forEach(addRow);
+  convReadBoardMessagesForSummary().forEach(addRow);
+  return rows;
+}
+
 function convRenderSummary(summary) {
   convSummaryBody.innerHTML = `
     <section><h3>Main Goal</h3><p>${escapeHtml(summary.main_goal || "Not identified.")}</p></section>
@@ -2909,7 +2971,8 @@ async function convOpenSummary() {
   convSummaryBody.innerHTML = `<p>${escapeHtml(copy.preparing)}</p>`;
   lucide.createIcons({ nodes: [convSummaryModal] });
 
-  if (!convTranscript.length) {
+  const messages = convMessagesForSummary();
+  if (!messages.length) {
     convSummaryBody.innerHTML = `<p>${escapeHtml(copy.empty)}</p>`;
     return;
   }
@@ -2922,7 +2985,7 @@ async function convOpenSummary() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        messages: convTranscript,
+        messages,
         participants,
         target_language: targetLanguage,
       }),
