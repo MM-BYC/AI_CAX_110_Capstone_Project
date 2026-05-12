@@ -439,7 +439,7 @@ function showAuthModal(mode = "login") {
         <p class="landing-copy">Create secure rooms, invite participants, and keep multilingual discussions moving with speech, text, and media translation in one workspace.</p>
         <div class="landing-proof">
           <div><strong>16</strong><span>Languages</span></div>
-          <div><strong>Live</strong><span>Rooms</span></div>
+          <div><strong>Conversation</strong><span>Rooms</span></div>
           <div><strong>AI</strong><span>Speech + Text</span></div>
         </div>
         <div class="landing-feature-list">
