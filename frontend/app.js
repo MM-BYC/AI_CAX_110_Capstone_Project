@@ -394,7 +394,7 @@ function showSignupModal(plan = "trial") {
             </div>
             <div class="auth-input-group">
               <label>Phone Number</label>
-              <input type="tel" id="signupPhone" class="auth-input" placeholder="+1 (555) 000-0000" autocomplete="tel">
+              <input type="tel" id="signupPhone" class="auth-input" placeholder="Optional: +1 (555) 000-0000" autocomplete="tel">
             </div>
             <div class="auth-input-group">
               <label>Password</label>
@@ -559,7 +559,7 @@ function showAuthModal(mode = "login") {
                 ? `
             <div class="auth-input-group">
               <label>Phone Number</label>
-              <input type="tel" id="authPhone" class="auth-input" placeholder="+1 (555) 000-0000" autocomplete="tel">
+              <input type="tel" id="authPhone" class="auth-input" placeholder="Optional: +1 (555) 000-0000" autocomplete="tel">
             </div>`
                 : ""
             }
