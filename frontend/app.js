@@ -292,6 +292,9 @@ function updateAuthHeader() {
 }
 
 function routeToConversation() {
+  if (typeof convReset === "function") convReset();
+  if (convRoomInput) convRoomInput.value = "";
+  if (convRoomCode) convRoomCode.textContent = "------";
   showTab({ btn: tabConv, panel: convTab });
   setMenuOpen(false);
   showWelcomeMessage();
