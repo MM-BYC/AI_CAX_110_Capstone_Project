@@ -128,6 +128,7 @@ from fastapi import FastAPI, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
+from groq import Groq  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 from agents.orchestrator import run_text_pipeline, run_audio_pipeline, run_conversation_pipeline  # noqa: E402
 from agents import language_detection_agent, transcription_agent  # noqa: E402
@@ -142,6 +143,7 @@ import voice_clone  # noqa: E402  # standalone XTTS-v2 voice cloning module
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+_summary_client = None
 
 # Frontend directory - works whether run from project root or from backend directory
 _current_file = Path(__file__).resolve()
@@ -509,6 +511,20 @@ class TranslationCorrection(BaseModel):
     bad_translation: str = ""
 
 
+class ConversationSummaryMessage(BaseModel):
+    speaker: str
+    original: str = ""
+    translation: str = ""
+    shown_text: str = ""
+    is_self: bool = False
+    timestamp: str = ""
+
+
+class ConversationSummaryRequest(BaseModel):
+    messages: list[ConversationSummaryMessage]
+    participants: list[str] = []
+
+
 _ROOM_ID_ALPHABET = "0123456789"
 
 
@@ -617,6 +633,81 @@ async def translation_correction(body: TranslationCorrection):
     logger.info("Translation correction saved: %r [%s→%s] = %r",
                 source_text[:60], body.source_lang, body.target_lang, correct[:60])
     return entry
+
+
+def _get_summary_client() -> Groq:
+    global _summary_client
+    if _summary_client is None:
+        api_key = os.environ.get("GROQ_API_KEY")
+        if not api_key:
+            raise RuntimeError("GROQ_API_KEY environment variable is not set")
+        _summary_client = Groq(api_key=api_key)
+    return _summary_client
+
+
+def _extract_json_object(text: str) -> dict:
+    raw = (text or "").strip()
+    if raw.startswith("```"):
+        raw = raw.strip("`")
+        if raw.lower().startswith("json"):
+            raw = raw[4:].strip()
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start >= 0 and end > start:
+        raw = raw[start:end + 1]
+    return json.loads(raw)
+
+
+@app.post("/api/v1/conversation/summary")
+async def conversation_summary(body: ConversationSummaryRequest):
+    rows = [
+        m for m in body.messages[-120:]
+        if (m.original or m.translation or m.shown_text).strip()
+    ]
+    if not rows:
+        raise HTTPException(status_code=400, detail="No conversation messages to summarize")
+
+    transcript_lines = []
+    for m in rows:
+        text = m.original or m.shown_text or m.translation
+        translated = m.translation if m.translation and m.translation != text else ""
+        line = f"{m.speaker}: {text.strip()}"
+        if translated:
+            line += f" | Translation shown: {translated.strip()}"
+        transcript_lines.append(line[:1200])
+    transcript = "\n".join(transcript_lines)[-14000:]
+    participants = ", ".join(p for p in body.participants if p) or "Not provided"
+
+    prompt = (
+        "Summarize this live conversation for a work follow-up record. "
+        "Return valid JSON only with these keys: "
+        "main_goal string; important_discussions array of strings; takeaways array of strings; "
+        "action_items array of objects with owner, task, deliverable, due_date; "
+        "follow_ups array of objects with owner, with_whom, reason, timing; "
+        "second_meeting string; reconvene_notes array of strings. "
+        "Use 'Not identified' for unknown owner/date/timing fields. "
+        "Do not invent details not supported by the transcript.\n\n"
+        f"Participants: {participants}\n\nTranscript:\n{transcript}"
+    )
+
+    try:
+        response = _get_summary_client().chat.completions.create(
+            model=os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a precise executive meeting summarizer. Return JSON only.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0,
+            max_tokens=1400,
+        )
+        content = response.choices[0].message.content
+        return _extract_json_object(content)
+    except Exception as exc:
+        logger.error("Conversation summary failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Conversation summary failed")
 
 
 # ── Translation cache stats (API-first observability) ─────────────────────────

@@ -1301,6 +1301,7 @@ let convRoomId = null;
 let convUserId = null; // this session's user_id assigned by server
 let convIsHost = false;
 let convUsers = {}; // user_id → {name, language, is_host, mic_on, camera_on}
+let convTranscript = [];
 let convIsListening = false;
 let convRecognition = null;
 let convXlateTimer = null;
@@ -1326,6 +1327,15 @@ const _PARTICIPANT_PALETTE = [
 ];
 const _participantColors = {}; // user_id → hex colour
 let _paletteIndex = 0;
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 function convColorFor(userId) {
   if (!_participantColors[userId]) {
@@ -1625,8 +1635,11 @@ const convMicBtn = document.getElementById("convMicBtn");
 const convMicLabel = document.getElementById("convMicLabel");
 const convCamBtn = document.getElementById("convCamBtn");
 const convCamLabel = document.getElementById("convCamLabel");
-const convTtsBtn = document.getElementById("convTtsBtn");
-const convTtsLabel = document.getElementById("convTtsLabel");
+const convSummaryBtn = document.getElementById("convSummaryBtn");
+const convSummaryLabel = document.getElementById("convSummaryLabel");
+const convSummaryModal = document.getElementById("convSummaryModal");
+const convSummaryClose = document.getElementById("convSummaryClose");
+const convSummaryBody = document.getElementById("convSummaryBody");
 // convCamPreview / convCamVideo removed — local camera shown in own carousel card
 
 function syncConversationNameField() {
@@ -1845,6 +1858,15 @@ document.getElementById("convCarouselRight")?.addEventListener("click", () => {
 // ── Message rendering ──────────────────────────────────────────────────────
 function convAddMessage(msg) {
   convClearInterim();
+  convTranscript.push({
+    speaker: msg.from || "Unknown",
+    original: msg.original || "",
+    translation: msg.translation || "",
+    shown_text: msg.is_self ? msg.original || "" : msg.translation || "",
+    is_self: !!msg.is_self,
+    timestamp: new Date().toISOString(),
+  });
+  if (convTranscript.length > 200) convTranscript = convTranscript.slice(-200);
 
   const color = convColorFor(msg.from_id);
 
@@ -2642,22 +2664,89 @@ convMicBtn.addEventListener("click", () => {
   }
 });
 
-// ── TTS toggle ─────────────────────────────────────────────────────────────
-function convSetTtsUI(enabled) {
-  if (!convTtsBtn || !convTtsLabel) return;
-  convTtsBtn.classList.toggle("tts-off", !enabled);
-  convTtsBtn
-    .querySelector("i")
-    ?.setAttribute("data-lucide", enabled ? "volume-2" : "volume-x");
-  convTtsLabel.textContent = enabled ? "Voice on" : "Voice off";
-  lucide.createIcons({ nodes: [convTtsBtn] });
+// ── Conversation summary ───────────────────────────────────────────────────
+function convSetSummaryLoading(isLoading) {
+  if (!convSummaryBtn || !convSummaryLabel) return;
+  convSummaryBtn.disabled = isLoading;
+  convSummaryLabel.textContent = isLoading ? "Summarizing..." : "Summarize";
 }
 
-convTtsBtn?.addEventListener("click", () => {
-  _unlockTts(); // also unlock from TTS toggle (user gesture)
-  _ttsEnabled = !_ttsEnabled;
-  if (!_ttsEnabled) convSpeakCancel();
-  convSetTtsUI(_ttsEnabled);
+function convSummaryList(items) {
+  const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!rows.length) return "<p>Not identified.</p>";
+  return `<ul>${rows.map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")}</ul>`;
+}
+
+function convSummaryActions(items) {
+  const rows = Array.isArray(items) ? items : [];
+  if (!rows.length) return "<p>Not identified.</p>";
+  return `<div class="conv-summary-actions">${rows.map((item) => `
+    <div class="conv-summary-action">
+      <strong>${escapeHtml(item.owner || "Not identified")}</strong>
+      <span>${escapeHtml(item.task || "Not identified")}</span>
+      <small>Deliverable: ${escapeHtml(item.deliverable || "Not identified")} · Due: ${escapeHtml(item.due_date || "Not identified")}</small>
+    </div>
+  `).join("")}</div>`;
+}
+
+function convSummaryFollowUps(items) {
+  const rows = Array.isArray(items) ? items : [];
+  if (!rows.length) return "<p>Not identified.</p>";
+  return `<div class="conv-summary-actions">${rows.map((item) => `
+    <div class="conv-summary-action">
+      <strong>${escapeHtml(item.owner || "Not identified")} → ${escapeHtml(item.with_whom || "Not identified")}</strong>
+      <span>${escapeHtml(item.reason || "Not identified")}</span>
+      <small>Timing: ${escapeHtml(item.timing || "Not identified")}</small>
+    </div>
+  `).join("")}</div>`;
+}
+
+function convRenderSummary(summary) {
+  convSummaryBody.innerHTML = `
+    <section><h3>Main Goal</h3><p>${escapeHtml(summary.main_goal || "Not identified.")}</p></section>
+    <section><h3>Important Discussions</h3>${convSummaryList(summary.important_discussions)}</section>
+    <section><h3>Takeaways</h3>${convSummaryList(summary.takeaways)}</section>
+    <section><h3>Who Needs To Work On What</h3>${convSummaryActions(summary.action_items)}</section>
+    <section><h3>Who Needs To Get Back To Whom</h3>${convSummaryFollowUps(summary.follow_ups)}</section>
+    <section><h3>Second Meeting</h3><p>${escapeHtml(summary.second_meeting || "Not identified.")}</p></section>
+    <section><h3>Reconvene Notes</h3>${convSummaryList(summary.reconvene_notes)}</section>
+  `;
+}
+
+async function convOpenSummary() {
+  if (!convSummaryModal || !convSummaryBody) return;
+  convSummaryModal.style.display = "flex";
+  convSummaryBody.innerHTML = "<p>Preparing summary...</p>";
+  lucide.createIcons({ nodes: [convSummaryModal] });
+
+  if (!convTranscript.length) {
+    convSummaryBody.innerHTML = "<p>No finalized conversation messages yet.</p>";
+    return;
+  }
+
+  convSetSummaryLoading(true);
+  try {
+    const participants = Object.values(convUsers).map((u) => u.name).filter(Boolean);
+    const res = await fetch(`${API_BASE}/api/v1/conversation/summary`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: convTranscript, participants }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || "Summary failed");
+    convRenderSummary(await res.json());
+  } catch (e) {
+    convSummaryBody.innerHTML = `<p>${escapeHtml(e.message || "Could not summarize conversation.")}</p>`;
+  } finally {
+    convSetSummaryLoading(false);
+  }
+}
+
+convSummaryBtn?.addEventListener("click", convOpenSummary);
+convSummaryClose?.addEventListener("click", () => {
+  convSummaryModal.style.display = "none";
+});
+convSummaryModal?.addEventListener("click", (e) => {
+  if (e.target === convSummaryModal) convSummaryModal.style.display = "none";
 });
 
 // ── Camera start / stop ────────────────────────────────────────────────────
@@ -2833,6 +2922,7 @@ function convReset() {
   convUserId = null;
   convIsHost = false;
   convUsers = {};
+  convTranscript = [];
   // Reset carousel, colour and typing state for next session
   _carouselCards.length = 0;
   _carouselPage = 0;

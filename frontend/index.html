@@ -434,7 +434,7 @@
               <span id="voiceCloneBadgeText" style="font-size:0.72rem;padding:0.2rem 0.65rem;border-radius:999px;font-weight:600;letter-spacing:0.04em"></span>
             </div>
 
-            <!-- Mic + Camera + TTS buttons -->
+            <!-- Mic + Camera + Summary buttons -->
             <div class="conv-mic-bar">
               <div class="conv-mic-slot">
                 <button type="button" class="conv-mic-btn" id="convMicBtn">
@@ -449,10 +449,10 @@
                 <span class="conv-mic-label" id="convCamLabel">Tap for camera</span>
               </div>
               <div class="conv-mic-slot">
-                <button type="button" class="conv-mic-btn" id="convTtsBtn">
-                  <i data-lucide="volume-2"></i>
+                <button type="button" class="conv-mic-btn" id="convSummaryBtn">
+                  <i data-lucide="clipboard-list"></i>
                 </button>
-                <span class="conv-mic-label" id="convTtsLabel">Voice on</span>
+                <span class="conv-mic-label" id="convSummaryLabel">Summarize</span>
               </div>
             </div>
 
@@ -465,6 +465,22 @@
               </button>
             </div>
 
+          </div>
+        </div>
+
+        <!-- Conversation summary modal -->
+        <div id="convSummaryModal" class="conv-summary-modal" style="display:none" aria-modal="true" role="dialog">
+          <div class="conv-summary-card">
+            <div class="conv-summary-header">
+              <div class="conv-summary-title">
+                <i data-lucide="clipboard-list"></i>
+                <span>Conversation Summary</span>
+              </div>
+              <button type="button" class="conv-summary-close" id="convSummaryClose">
+                <i data-lucide="x"></i>
+              </button>
+            </div>
+            <div class="conv-summary-body" id="convSummaryBody"></div>
           </div>
         </div>
 
