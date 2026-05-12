@@ -47,6 +47,10 @@ def is_production() -> bool:
     return bool(_API_KEY)
 
 
+def get_api_key() -> str:
+    return _API_KEY
+
+
 def get_allowed_origins() -> list[str]:
     if _ALLOWED_ORIGINS.strip() == "*":
         return ["*"]

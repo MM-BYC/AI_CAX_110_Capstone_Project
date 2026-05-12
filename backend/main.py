@@ -1300,6 +1300,7 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str,
                 room_id, user_id, lang_code, sample_rate)
 
     def run_stt():
+        nonlocal speaker_name
         client = _make_speech_client()
         cfg_kwargs = dict(
             encoding=_google_speech.RecognitionConfig.AudioEncoding.LINEAR16,
