@@ -9,3 +9,15 @@ services:
         value: 3.12
       - key: GROQ_API_KEY
         sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB
+        value: ai_translate
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: PINECONE_INDEX_HOST
+        sync: false
+      - key: PINECONE_NAMESPACE
+        value: ai-translate
+      - key: PINECONE_TEXT_FIELD
+        value: chunk_text

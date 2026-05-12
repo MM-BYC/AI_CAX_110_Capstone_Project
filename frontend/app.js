@@ -457,7 +457,7 @@ function showAuthModal(mode = "login") {
             <button type="button" class="${isLogin ? "active" : ""}" onclick="showAuthModal('login')">Login</button>
           </div>
           <h2>${isLogin ? "Welcome back" : isPricing ? "Choose a plan" : isCancel ? "Cancel subscription" : "Reset password"}</h2>
-          <p>${isLogin ? "Sign in to open your conversation workspace." : isPricing ? "Select a plan, create your account, and continue to billing." : isCancel ? "Refunds are available within 10 days after your first paid charge." : "Enter your email to receive a reset link."}</p>
+          <p>${isLogin ? "Sign in to open your conversation workspace." : isPricing ? "Select a plan, create your account, and start your trial." : isCancel ? "Refunds are available within 10 days after your first paid charge." : "Enter your email to receive a reset link."}</p>
         </div>
         <div class="auth-tab-body">
           ${isPricing ? pricingHtml : ""}

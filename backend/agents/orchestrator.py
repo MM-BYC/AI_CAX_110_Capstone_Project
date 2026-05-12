@@ -1,4 +1,5 @@
 """Orchestrator — routes requests and coordinates all agents."""
+import json
 import logging
 from agents import (
     transcription_agent,
@@ -8,11 +9,44 @@ from agents import (
     keyboard_agent,
     conversation_agent,
 )
+import memory_store
 import vocabulary_store
 
 logger = logging.getLogger(__name__)
 MAX_RETRIES = 1
 _DETECT_OVERRIDE_MIN_LEN = 6
+
+
+def _retrieval_context(text: str, source: str, target: str, vocab_ctx: str) -> tuple[str, int]:
+    semantic_hits = memory_store.semantic_search(text, source, target)
+    memory_ctx = memory_store.to_context([
+        hit for hit in semantic_hits
+        if hit.get("kind") == "translation_memory"
+    ])
+    semantic_vocab = []
+    for hit in semantic_hits:
+        if hit.get("kind") != "vocabulary" or not hit.get("term"):
+            continue
+        try:
+            translations = json.loads(hit.get("translations_json") or "{}")
+        except Exception:
+            translations = {}
+        preferred = translations.get(target, "")
+        if preferred:
+            semantic_vocab.append(f'  • "{hit["term"]}" → use exactly "{preferred}"')
+        elif hit.get("definition"):
+            semantic_vocab.append(f'  • "{hit["term"]}": {hit["definition"]}')
+    semantic_vocab_ctx = (
+        "Semantic terminology matches — apply when relevant:\n" + "\n".join(semantic_vocab[:5])
+        if semantic_vocab else ""
+    )
+    parts = [part for part in (vocab_ctx, semantic_vocab_ctx, memory_ctx) if part]
+    return "\n\n".join(parts), len(semantic_hits)
+
+
+def _save_memory(text: str, translation: str, source: str, target: str) -> None:
+    if text and translation and source != target:
+        memory_store.add(text, translation, source, target)
 
 
 def run_text_pipeline(text: str, source: str, target: str) -> dict:
@@ -27,16 +61,30 @@ def run_text_pipeline(text: str, source: str, target: str) -> dict:
     vocab_ctx = vocabulary_store.to_context(vocab_entries, target)
     vocab_ver = vocabulary_store.get_version()
 
+    exact_memory = memory_store.find_exact(text, effective_source, target)
+    if exact_memory:
+        return {
+            "original_text": text,
+            "detected_language": detected,
+            "translation": exact_memory["translated_text"],
+            "vocab_hits": len(vocab_entries),
+            "memory_hits": 1,
+            "words": [],
+        }
+
+    retrieval_ctx, memory_hits = _retrieval_context(text, effective_source, target, vocab_ctx)
     translation = translation_agent.run(
         text, effective_source, target,
-        vocab_context=vocab_ctx, vocab_version=vocab_ver,
+        vocab_context=retrieval_ctx, vocab_version=vocab_ver,
     )
+    _save_memory(text, translation, effective_source, target)
 
     return {
         "original_text": text,
         "detected_language": detected,
         "translation": translation,
         "vocab_hits": len(vocab_entries),
+        "memory_hits": memory_hits,
         "words": [],
     }
 
@@ -72,11 +120,24 @@ def run_conversation_pipeline(
     vocab_ctx = vocabulary_store.to_context(vocab_entries, target)
     vocab_ver = vocabulary_store.get_version()
 
+    exact_memory = memory_store.find_exact(cleaned, effective_source, target)
+    if exact_memory:
+        return {
+            "original_text": text,
+            "cleaned_text": cleaned,
+            "detected_language": detected,
+            "translation": exact_memory["translated_text"],
+            "quality": {"passed": True, "critique": "translation memory exact match"},
+            "vocab_hits": len(vocab_entries),
+            "memory_hits": 1,
+        }
+
+    retrieval_ctx, memory_hits = _retrieval_context(cleaned, effective_source, target, vocab_ctx)
     try:
         translation = translation_agent.run(
             cleaned, effective_source, target,
             strict=True,
-            vocab_context=vocab_ctx,
+            vocab_context=retrieval_ctx,
             vocab_version=vocab_ver,
             style_context=style_context,
         )
@@ -99,7 +160,7 @@ def run_conversation_pipeline(
                 cleaned, effective_source, target,
                 critique=review["critique"],
                 strict=True,
-                vocab_context=vocab_ctx,
+                vocab_context=retrieval_ctx,
                 vocab_version=vocab_ver,
                 style_context=style_context,
             )
@@ -107,6 +168,7 @@ def run_conversation_pipeline(
             logger.error("Retry translation failed: %s", e)
             break
 
+    _save_memory(cleaned, translation, effective_source, target)
     return {
         "original_text": text,
         "cleaned_text": cleaned,
@@ -114,6 +176,7 @@ def run_conversation_pipeline(
         "translation": translation,
         "quality": review,
         "vocab_hits": len(vocab_entries),
+        "memory_hits": memory_hits,
     }
 
 
@@ -127,15 +190,28 @@ def run_keyboard_pipeline(text: str, source: str, target: str) -> dict:
     vocab_ctx = vocabulary_store.to_context(vocab_entries, target)
     vocab_ver = vocabulary_store.get_version()
 
+    exact_memory = memory_store.find_exact(cleaned, effective_source, target)
+    if exact_memory:
+        return {
+            "original_text": cleaned,
+            "detected_language": detected,
+            "translation": exact_memory["translated_text"],
+            "vocab_hits": len(vocab_entries),
+            "memory_hits": 1,
+        }
+
+    retrieval_ctx, memory_hits = _retrieval_context(cleaned, effective_source, target, vocab_ctx)
     translation = translation_agent.run(
         cleaned, effective_source, target,
-        vocab_context=vocab_ctx, vocab_version=vocab_ver,
+        vocab_context=retrieval_ctx, vocab_version=vocab_ver,
     )
+    _save_memory(cleaned, translation, effective_source, target)
     return {
         "original_text": cleaned,
         "detected_language": detected,
         "translation": translation,
         "vocab_hits": len(vocab_entries),
+        "memory_hits": memory_hits,
     }
 
 
@@ -156,9 +232,22 @@ def run_audio_pipeline(audio_file: str, source: str, target: str) -> dict:
     vocab_ctx = vocabulary_store.to_context(vocab_entries, target)
     vocab_ver = vocabulary_store.get_version()
 
+    exact_memory = memory_store.find_exact(text, effective_source, target)
+    if exact_memory:
+        return {
+            "original_text": text,
+            "detected_language": detected,
+            "translation": exact_memory["translated_text"],
+            "words": words,
+            "quality": {"passed": True, "critique": "translation memory exact match"},
+            "vocab_hits": len(vocab_entries),
+            "memory_hits": 1,
+        }
+
+    retrieval_ctx, memory_hits = _retrieval_context(text, effective_source, target, vocab_ctx)
     translation = translation_agent.run(
         text, effective_source, target,
-        vocab_context=vocab_ctx, vocab_version=vocab_ver,
+        vocab_context=retrieval_ctx, vocab_version=vocab_ver,
     )
 
     review = {"passed": True, "critique": ""}
@@ -169,10 +258,11 @@ def run_audio_pipeline(audio_file: str, source: str, target: str) -> dict:
         translation = translation_agent.run(
             text, effective_source, target,
             critique=review["critique"],
-            vocab_context=vocab_ctx,
+            vocab_context=retrieval_ctx,
             vocab_version=vocab_ver,
         )
 
+    _save_memory(text, translation, effective_source, target)
     return {
         "original_text": text,
         "detected_language": detected,
@@ -180,4 +270,5 @@ def run_audio_pipeline(audio_file: str, source: str, target: str) -> dict:
         "words": words,
         "quality": review,
         "vocab_hits": len(vocab_entries),
+        "memory_hits": memory_hits,
     }

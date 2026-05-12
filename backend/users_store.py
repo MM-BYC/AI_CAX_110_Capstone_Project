@@ -4,6 +4,8 @@ import time
 import uuid
 from pathlib import Path
 
+import mongo_store
+
 STORE_FILE = Path(__file__).parent / "users.json"
 
 def _load():
@@ -18,10 +20,20 @@ def _save(data):
     STORE_FILE.write_text(json.dumps(data, indent=2))
 
 def get_user(email):
+    coll = mongo_store.collection("users")
+    if coll is not None:
+        return mongo_store.strip_id(coll.find_one({"email": email.lower()}))
     users = _load()
     return users.get(email.lower())
 
 def list_users():
+    coll = mongo_store.collection("users")
+    if coll is not None:
+        return {
+            u["email"]: u
+            for u in (mongo_store.strip_id(doc) for doc in coll.find({}))
+            if u and u.get("email")
+        }
     return _load()
 
 def create_user(
@@ -36,11 +48,7 @@ def create_user(
     payment_method=None,
     accepted_terms_at=None,
 ):
-    users = _load()
     email = email.lower()
-    if email in users:
-        return None
-    
     now = time.time()
     trial_ends_at = now + (trial_days * 86400)
     user = {
@@ -63,11 +71,32 @@ def create_user(
         "invoice_number": None,
         "invoice_sent_at": None
     }
+    coll = mongo_store.collection("users")
+    if coll is not None:
+        try:
+            coll.insert_one(dict(user))
+            return dict(user)
+        except Exception:
+            return None
+
+    users = _load()
+    if email in users:
+        return None
     users[email] = user
     _save(users)
     return user
 
 def update_user(email, updates):
+    coll = mongo_store.collection("users")
+    if coll is not None:
+        email = email.lower()
+        updated = coll.find_one_and_update(
+            {"email": email},
+            {"$set": updates},
+            return_document=True,
+        )
+        return mongo_store.strip_id(updated)
+
     users = _load()
     email = email.lower()
     if email not in users:
@@ -77,6 +106,14 @@ def update_user(email, updates):
     return users[email]
 
 def update_subscription(email, is_subscriber=True):
+    coll = mongo_store.collection("users")
+    if coll is not None:
+        result = coll.update_one(
+            {"email": email.lower()},
+            {"$set": {"is_subscriber": is_subscriber}},
+        )
+        return result.matched_count > 0
+
     users = _load()
     email = email.lower()
     if email in users:
@@ -99,6 +136,27 @@ def check_access(email):
     return False, "Trial expired"
 
 def mark_charged(email):
+    coll = mongo_store.collection("users")
+    if coll is not None:
+        email = email.lower()
+        user = get_user(email)
+        if not user:
+            return None
+        now = time.time()
+        invoice_number = user.get("invoice_number") or f"INV-{uuid.uuid4().hex[:8].upper()}"
+        updated = coll.find_one_and_update(
+            {"email": email},
+            {
+                "$set": {
+                    "is_subscriber": True,
+                    "charged_at": now,
+                    "invoice_number": invoice_number,
+                }
+            },
+            return_document=True,
+        )
+        return mongo_store.strip_id(updated)
+
     users = _load()
     email = email.lower()
     if email not in users:

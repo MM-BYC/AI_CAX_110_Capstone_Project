@@ -17,6 +17,9 @@ from pathlib import Path
 from threading import Lock
 from typing import Optional
 
+import memory_store
+import mongo_store
+
 logger = logging.getLogger(__name__)
 
 _VOCAB_FILE = Path(__file__).parent / "vocabulary.json"
@@ -29,6 +32,16 @@ _version: int = 0   # incremented on every write; used to invalidate the transla
 
 def _load() -> None:
     global _entries, _version
+    coll = mongo_store.collection("vocabulary")
+    if coll is not None:
+        _entries = [
+            e for e in (mongo_store.strip_id(doc) for doc in coll.find({}))
+            if e
+        ]
+        logger.info("Vocabulary: loaded %d entries from MongoDB", len(_entries))
+        _version = 0
+        return
+
     # Cloud-deploy path: operator serialises the vocabulary into an env var.
     env_val = os.getenv("VOCABULARY_JSON", "").strip()
     if env_val:
@@ -52,6 +65,17 @@ def _load() -> None:
 
 
 def _save() -> None:
+    coll = mongo_store.collection("vocabulary")
+    if coll is not None:
+        ids = [e["id"] for e in _entries if e.get("id")]
+        if ids:
+            coll.delete_many({"id": {"$nin": ids}})
+        else:
+            coll.delete_many({})
+        for entry in _entries:
+            coll.replace_one({"id": entry["id"]}, dict(entry), upsert=True)
+        return
+
     try:
         with open(_VOCAB_FILE, "w", encoding="utf-8") as fh:
             json.dump(_entries, fh, indent=2, ensure_ascii=False)
@@ -104,6 +128,7 @@ def add(term: str, definition: str, *,
         _entries.append(entry)
         _version += 1
         _save()
+        memory_store.upsert_vocabulary(entry)
     return dict(entry)
 
 
@@ -119,6 +144,7 @@ def update(entry_id: str, **kwargs) -> Optional[dict]:
                         e[k] = v
                 _version += 1
                 _save()
+                memory_store.upsert_vocabulary(e)
                 return dict(e)
     return None
 
@@ -156,6 +182,7 @@ def bulk_import(rows: list[dict]) -> int:
                 "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             }
             _entries.append(entry)
+            memory_store.upsert_vocabulary(entry)
             added += 1
         if added:
             _version += 1

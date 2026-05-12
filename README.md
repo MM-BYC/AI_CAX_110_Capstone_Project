@@ -260,6 +260,26 @@ cp .env.example .env
 
 Get a free Groq API key at [console.groq.com](https://console.groq.com)
 
+### Optional Persistence and Memory
+
+Set these in `backend/.env` locally or Render environment variables:
+
+```bash
+# Persistent credentials, plans, trials, pricing, vocabulary, and exact translation memory
+MONGODB_URI=mongodb+srv://...
+MONGODB_DB=ai_translate
+
+# Optional semantic retrieval for vocabulary and translation memory
+PINECONE_API_KEY=...
+PINECONE_INDEX_HOST=https://your-index-host.pinecone.io
+PINECONE_NAMESPACE=ai-translate
+PINECONE_TEXT_FIELD=chunk_text
+```
+
+`backend/pricing.json` remains the local/default seed. When MongoDB is enabled,
+pricing is read from the `pricing` collection and seeded from `pricing.json` on
+first use.
+
 ### 3. Frontend
 
 ```bash

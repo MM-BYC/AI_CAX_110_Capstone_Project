@@ -133,6 +133,8 @@ from agents.orchestrator import run_text_pipeline, run_audio_pipeline, run_conve
 from agents import language_detection_agent, transcription_agent  # noqa: E402
 import vocabulary_store  # noqa: E402
 import users_store  # noqa: E402
+import pricing_store  # noqa: E402
+import mongo_store  # noqa: E402
 import email_service  # noqa: E402
 import style_profiler  # noqa: E402
 import security  # noqa: E402
@@ -201,10 +203,7 @@ async def _cleanup_empty_rooms():
 
 
 def _get_pricing():
-    p_path = Path(__file__).parent / "pricing.json"
-    if p_path.exists():
-        return json.loads(p_path.read_text())
-    return {"monthly_price": 29.0, "yearly_price": 290.0, "trial_days": 3}
+    return pricing_store.get_pricing()
 
 class SignupRequest(BaseModel):
     first_name: str = ""
@@ -626,6 +625,8 @@ async def api_stats():
         "translation_cache_size": _ta.cache_size(),
         "vocabulary_entries": len(vocabulary_store.list_all()),
         "vocabulary_version": vocabulary_store.get_version(),
+        "mongodb_enabled": mongo_store.is_enabled(),
+        "pinecone_enabled": bool(os.getenv("PINECONE_API_KEY") and os.getenv("PINECONE_INDEX_HOST")),
         "production_mode": security.is_production(),
         "rate_limit_rpm": int(os.getenv("RATE_LIMIT_RPM", "120")),
     }

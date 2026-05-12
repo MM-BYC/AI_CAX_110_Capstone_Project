@@ -212,12 +212,13 @@ def run(
     if source == target:
         return text
 
-    # Cache key incorporates style fingerprint so profile changes invalidate it.
-    # Style context is short enough to hash cheaply by identity.
+    # Cache key incorporates style/context fingerprints so profile or memory
+    # changes invalidate it without needing a global cache flush.
     style_key = hash(style_context) if style_context else 0
+    context_key = hash(vocab_context) if vocab_context else 0
 
     if not critique:
-        key = _cache_key(text, source, target, vocab_version) + (style_key,)
+        key = _cache_key(text, source, target, vocab_version) + (style_key, context_key)
         cached = _cache_get(key)
         if cached:
             return cached
@@ -280,7 +281,7 @@ def run(
     result = response.choices[0].message.content.strip()
 
     if not critique:
-        full_key = _cache_key(text, source, target, vocab_version) + (style_key,)
+        full_key = _cache_key(text, source, target, vocab_version) + (style_key, context_key)
         _cache_set(full_key, result)
 
     return result
