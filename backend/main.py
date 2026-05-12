@@ -1158,8 +1158,10 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
         room["conns"].pop(user_id, None)
         room["info"].pop(user_id, None)
 
-        if user_was_host and explicit_leave:
-            # Host clicked Leave: hand off to the next user or tear down.
+        if user_was_host:
+            # Host left or disconnected: hand off to the next user when
+            # participants remain. Only mark ended when the host explicitly
+            # leaves and nobody is left in the room.
             remaining = list(room["conns"].keys())
             if remaining:
                 new_host_id = remaining[0]
@@ -1175,9 +1177,8 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                     pass
             else:
                 room["host_id"] = None
-                room["host_left"] = True
-        # On incidental host disconnect, keep host_id reserved so the host
-        # can reclaim it on reconnect (their frontend sends is_creator=true).
+                if explicit_leave:
+                    room["host_left"] = True
 
         # Notify remaining participants
         for uid, ws in list(room["conns"].items()):
@@ -1188,11 +1189,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                     pass
 
         if not room["conns"]:
-            # Keep the room alive unless the host has explicitly ended it.
-            # Brief WS drops (iOS Safari background, network blip) leave
-            # empty_since unset so reconnects always succeed.
-            if room.get("host_left", False):
-                room["empty_since"] = time.time()
+            room["empty_since"] = time.time()
 
 
 @app.post("/detect_language")

@@ -269,10 +269,10 @@ function sendConversationLeave() {
   }
 }
 
-function endBrowserSession({ showLogin = false } = {}) {
+function endBrowserSession({ showLogin = false, notifyRoom = false } = {}) {
   if (_browserSessionEnding) return;
   _browserSessionEnding = true;
-  sendConversationLeave();
+  if (notifyRoom) sendConversationLeave();
   clearAuthSession();
   if (typeof convReset === "function") convReset();
   updateAuthHeader();
@@ -280,7 +280,7 @@ function endBrowserSession({ showLogin = false } = {}) {
 }
 
 function logout() {
-  endBrowserSession({ showLogin: true });
+  endBrowserSession({ showLogin: true, notifyRoom: true });
 }
 
 function updateAuthHeader() {
