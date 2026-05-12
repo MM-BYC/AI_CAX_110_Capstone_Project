@@ -1647,6 +1647,7 @@ const convCamLabel = document.getElementById("convCamLabel");
 const convSummaryBtn = document.getElementById("convSummaryBtn");
 const convSummaryLabel = document.getElementById("convSummaryLabel");
 const convSummaryModal = document.getElementById("convSummaryModal");
+const convSummaryTitle = document.getElementById("convSummaryTitle");
 const convSummaryClose = document.getElementById("convSummaryClose");
 const convSummaryBody = document.getElementById("convSummaryBody");
 // convCamPreview / convCamVideo removed — local camera shown in own carousel card
@@ -2674,10 +2675,166 @@ convMicBtn.addEventListener("click", () => {
 });
 
 // ── Conversation summary ───────────────────────────────────────────────────
+const SUMMARY_UI_COPY = {
+  en: {
+    title: "Conversation Summary",
+    button: "Summarize",
+    loadingButton: "Summarizing...",
+    preparing: "Preparing summary...",
+    empty: "No finalized conversation messages yet.",
+    failed: "Could not summarize conversation.",
+    requestFailed: "Summary failed",
+  },
+  es: {
+    title: "Resumen de la conversación",
+    button: "Resumir",
+    loadingButton: "Resumiendo...",
+    preparing: "Preparando el resumen...",
+    empty: "Todavía no hay mensajes finales de la conversación.",
+    failed: "No se pudo resumir la conversación.",
+    requestFailed: "No se pudo generar el resumen",
+  },
+  fr: {
+    title: "Résumé de la conversation",
+    button: "Résumer",
+    loadingButton: "Résumé en cours...",
+    preparing: "Préparation du résumé...",
+    empty: "Aucun message finalisé de la conversation pour le moment.",
+    failed: "Impossible de résumer la conversation.",
+    requestFailed: "Échec du résumé",
+  },
+  de: {
+    title: "Gesprächszusammenfassung",
+    button: "Zusammenfassen",
+    loadingButton: "Wird zusammengefasst...",
+    preparing: "Zusammenfassung wird vorbereitet...",
+    empty: "Noch keine finalisierten Gesprächsnachrichten vorhanden.",
+    failed: "Das Gespräch konnte nicht zusammengefasst werden.",
+    requestFailed: "Zusammenfassung fehlgeschlagen",
+  },
+  it: {
+    title: "Riepilogo della conversazione",
+    button: "Riassumi",
+    loadingButton: "Riassunto in corso...",
+    preparing: "Preparazione del riepilogo...",
+    empty: "Non ci sono ancora messaggi finali della conversazione.",
+    failed: "Impossibile riassumere la conversazione.",
+    requestFailed: "Riepilogo non riuscito",
+  },
+  pt: {
+    title: "Resumo da conversa",
+    button: "Resumir",
+    loadingButton: "Resumindo...",
+    preparing: "Preparando resumo...",
+    empty: "Ainda não há mensagens finalizadas da conversa.",
+    failed: "Não foi possível resumir a conversa.",
+    requestFailed: "Falha ao resumir",
+  },
+  zh: {
+    title: "对话摘要",
+    button: "总结",
+    loadingButton: "正在总结...",
+    preparing: "正在准备摘要...",
+    empty: "还没有已完成的对话消息。",
+    failed: "无法总结对话。",
+    requestFailed: "摘要失败",
+  },
+  ja: {
+    title: "会話の要約",
+    button: "要約",
+    loadingButton: "要約中...",
+    preparing: "要約を準備しています...",
+    empty: "確定した会話メッセージはまだありません。",
+    failed: "会話を要約できませんでした。",
+    requestFailed: "要約に失敗しました",
+  },
+  ko: {
+    title: "대화 요약",
+    button: "요약",
+    loadingButton: "요약 중...",
+    preparing: "요약을 준비 중...",
+    empty: "아직 확정된 대화 메시지가 없습니다.",
+    failed: "대화를 요약할 수 없습니다.",
+    requestFailed: "요약 실패",
+  },
+  ar: {
+    title: "ملخص المحادثة",
+    button: "تلخيص",
+    loadingButton: "جارٍ التلخيص...",
+    preparing: "جارٍ إعداد الملخص...",
+    empty: "لا توجد رسائل محادثة نهائية بعد.",
+    failed: "تعذر تلخيص المحادثة.",
+    requestFailed: "فشل التلخيص",
+  },
+  ru: {
+    title: "Сводка разговора",
+    button: "Сводка",
+    loadingButton: "Создание сводки...",
+    preparing: "Подготовка сводки...",
+    empty: "Пока нет завершенных сообщений разговора.",
+    failed: "Не удалось создать сводку разговора.",
+    requestFailed: "Не удалось создать сводку",
+  },
+  hi: {
+    title: "बातचीत का सारांश",
+    button: "सारांश",
+    loadingButton: "सारांश बनाया जा रहा है...",
+    preparing: "सारांश तैयार किया जा रहा है...",
+    empty: "अभी तक कोई अंतिम बातचीत संदेश नहीं है।",
+    failed: "बातचीत का सारांश नहीं बनाया जा सका।",
+    requestFailed: "सारांश विफल रहा",
+  },
+  nl: {
+    title: "Gesprekssamenvatting",
+    button: "Samenvatten",
+    loadingButton: "Samenvatten...",
+    preparing: "Samenvatting voorbereiden...",
+    empty: "Er zijn nog geen definitieve gespreksberichten.",
+    failed: "Kan het gesprek niet samenvatten.",
+    requestFailed: "Samenvatting mislukt",
+  },
+  pl: {
+    title: "Podsumowanie rozmowy",
+    button: "Podsumuj",
+    loadingButton: "Podsumowywanie...",
+    preparing: "Przygotowywanie podsumowania...",
+    empty: "Nie ma jeszcze zakończonych wiadomości z rozmowy.",
+    failed: "Nie udało się podsumować rozmowy.",
+    requestFailed: "Podsumowanie nie powiodło się",
+  },
+  tr: {
+    title: "Görüşme özeti",
+    button: "Özetle",
+    loadingButton: "Özetleniyor...",
+    preparing: "Özet hazırlanıyor...",
+    empty: "Henüz kesinleşmiş konuşma mesajı yok.",
+    failed: "Görüşme özetlenemedi.",
+    requestFailed: "Özet başarısız oldu",
+  },
+  tl: {
+    title: "Buod ng pag-uusap",
+    button: "Ibuod",
+    loadingButton: "Binubuod...",
+    preparing: "Inihahanda ang buod...",
+    empty: "Wala pang pinal na mensahe sa pag-uusap.",
+    failed: "Hindi maibuod ang pag-uusap.",
+    requestFailed: "Nabigo ang pagbubuod",
+  },
+};
+
+function convSummaryLanguage() {
+  return convUsers[convUserId]?.language || convLangSelect.value || "en";
+}
+
+function convSummaryCopy() {
+  return SUMMARY_UI_COPY[convSummaryLanguage()] || SUMMARY_UI_COPY.en;
+}
+
 function convSetSummaryLoading(isLoading) {
   if (!convSummaryBtn || !convSummaryLabel) return;
+  const copy = convSummaryCopy();
   convSummaryBtn.disabled = isLoading;
-  convSummaryLabel.textContent = isLoading ? "Summarizing..." : "Summarize";
+  convSummaryLabel.textContent = isLoading ? copy.loadingButton : copy.button;
 }
 
 function convSummaryList(items) {
@@ -2724,19 +2881,21 @@ function convRenderSummary(summary) {
 
 async function convOpenSummary() {
   if (!convSummaryModal || !convSummaryBody) return;
+  const copy = convSummaryCopy();
   convSummaryModal.style.display = "flex";
-  convSummaryBody.innerHTML = "<p>Preparing summary...</p>";
+  if (convSummaryTitle) convSummaryTitle.textContent = copy.title;
+  convSummaryBody.innerHTML = `<p>${escapeHtml(copy.preparing)}</p>`;
   lucide.createIcons({ nodes: [convSummaryModal] });
 
   if (!convTranscript.length) {
-    convSummaryBody.innerHTML = "<p>No finalized conversation messages yet.</p>";
+    convSummaryBody.innerHTML = `<p>${escapeHtml(copy.empty)}</p>`;
     return;
   }
 
   convSetSummaryLoading(true);
   try {
     const participants = Object.values(convUsers).map((u) => u.name).filter(Boolean);
-    const targetLanguage = convUsers[convUserId]?.language || convLangSelect.value || "en";
+    const targetLanguage = convSummaryLanguage();
     const res = await fetch(`${API_BASE}/api/v1/conversation/summary`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2746,10 +2905,10 @@ async function convOpenSummary() {
         target_language: targetLanguage,
       }),
     });
-    if (!res.ok) throw new Error((await res.json()).detail || "Summary failed");
+    if (!res.ok) throw new Error((await res.json()).detail || copy.requestFailed);
     convRenderSummary(await res.json());
   } catch (e) {
-    convSummaryBody.innerHTML = `<p>${escapeHtml(e.message || "Could not summarize conversation.")}</p>`;
+    convSummaryBody.innerHTML = `<p>${escapeHtml(e.message || copy.failed)}</p>`;
   } finally {
     convSetSummaryLoading(false);
   }
