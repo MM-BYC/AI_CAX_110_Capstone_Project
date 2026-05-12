@@ -249,6 +249,7 @@ function updateAuthHeader() {
     btn.style.display = currentUserToken ? "inline-flex" : "none";
     btn.onclick = logout;
   });
+  syncConversationNameField();
 }
 
 function routeToConversation() {
@@ -269,6 +270,10 @@ function showWelcomeMessage() {
     host.appendChild(welcome);
   }
   welcome.textContent = `Welcome, ${currentUserFirstName}`;
+}
+
+function getAuthenticatedDisplayName() {
+  return (currentUserFirstName || currentUserEmail || "").trim();
 }
 
 window.selectPlan = (card) => {
@@ -1587,6 +1592,21 @@ const convTtsBtn = document.getElementById("convTtsBtn");
 const convTtsLabel = document.getElementById("convTtsLabel");
 // convCamPreview / convCamVideo removed — local camera shown in own carousel card
 
+function syncConversationNameField() {
+  if (!convNameInput) return;
+  const displayName = getAuthenticatedDisplayName();
+  if (currentUserToken && displayName) {
+    convNameInput.value = displayName;
+    convNameInput.readOnly = true;
+    convNameInput.classList.add("locked");
+    convNameInput.title = "Name comes from your logged-in account";
+    return;
+  }
+  convNameInput.readOnly = false;
+  convNameInput.classList.remove("locked");
+  convNameInput.title = "";
+}
+
 function convShowScreen(screen) {
   convSetup.style.display = "none";
   convActive.style.display = "none";
@@ -1981,7 +2001,8 @@ function convSetMicUI(isOn) {
 async function convConnect(roomId, isCreator = false) {
   convRoomId = roomId;
   _convWasCreator = !!isCreator;
-  const name = convNameInput.value.trim();
+  syncConversationNameField();
+  const name = getAuthenticatedDisplayName() || convNameInput.value.trim();
   const lang = convLangSelect.value;
 
   const wsUrl = `${convGetWsBase()}/ws/conversation/${roomId}`;
@@ -2857,6 +2878,8 @@ convRoomInput.addEventListener("keydown", (e) => {
 convNameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") convCreateBtn.click();
 });
+
+syncConversationNameField();
 
 convLeaveBtn.addEventListener("click", () => {
   // Explicit leave: tell the server so the room can be torn down (if host)
