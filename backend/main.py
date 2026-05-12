@@ -145,6 +145,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 _summary_client = None
 
+SUMMARY_LANG_NAMES = {
+    "en": "English", "es": "Spanish", "fr": "French", "de": "German",
+    "it": "Italian", "pt": "Portuguese", "zh": "Chinese", "ja": "Japanese",
+    "ko": "Korean", "ar": "Arabic", "ru": "Russian", "hi": "Hindi",
+    "nl": "Dutch", "pl": "Polish", "tr": "Turkish", "tl": "Tagalog",
+}
+
 # Frontend directory - works whether run from project root or from backend directory
 _current_file = Path(__file__).resolve()
 if _current_file.parent.name == "backend":
@@ -523,6 +530,7 @@ class ConversationSummaryMessage(BaseModel):
 class ConversationSummaryRequest(BaseModel):
     messages: list[ConversationSummaryMessage]
     participants: list[str] = []
+    target_language: str = "en"
 
 
 _ROOM_ID_ALPHABET = "0123456789"
@@ -677,9 +685,12 @@ async def conversation_summary(body: ConversationSummaryRequest):
         transcript_lines.append(line[:1200])
     transcript = "\n".join(transcript_lines)[-14000:]
     participants = ", ".join(p for p in body.participants if p) or "Not provided"
+    target_language = SUMMARY_LANG_NAMES.get(body.target_language, body.target_language or "English")
 
     prompt = (
         "Summarize this live conversation for a work follow-up record. "
+        f"Write every user-visible JSON value in {target_language}. "
+        "Keep JSON keys exactly in English as specified. "
         "Return valid JSON only with these keys: "
         "main_goal string; important_discussions array of strings; takeaways array of strings; "
         "action_items array of objects with owner, task, deliverable, due_date; "

@@ -2727,10 +2727,15 @@ async function convOpenSummary() {
   convSetSummaryLoading(true);
   try {
     const participants = Object.values(convUsers).map((u) => u.name).filter(Boolean);
+    const targetLanguage = convUsers[convUserId]?.language || convLangSelect.value || "en";
     const res = await fetch(`${API_BASE}/api/v1/conversation/summary`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: convTranscript, participants }),
+      body: JSON.stringify({
+        messages: convTranscript,
+        participants,
+        target_language: targetLanguage,
+      }),
     });
     if (!res.ok) throw new Error((await res.json()).detail || "Summary failed");
     convRenderSummary(await res.json());
