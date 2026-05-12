@@ -2844,12 +2844,227 @@ const SUMMARY_UI_COPY = {
   },
 };
 
+const SUMMARY_SECTION_COPY = {
+  en: {
+    mainGoal: "Main Goal",
+    importantDiscussions: "Important Discussions",
+    takeaways: "Takeaways",
+    actionItems: "Who Needs To Work On What",
+    followUps: "Who Needs To Get Back To Whom",
+    secondMeeting: "Second Meeting",
+    reconveneNotes: "Reconvene Notes",
+    notIdentified: "Not identified",
+    deliverable: "Deliverable",
+    due: "Due",
+    timing: "Timing",
+  },
+  es: {
+    mainGoal: "Objetivo principal",
+    importantDiscussions: "Discusiones importantes",
+    takeaways: "Conclusiones",
+    actionItems: "Quién debe trabajar en qué",
+    followUps: "Quién debe responder a quién",
+    secondMeeting: "Segunda reunión",
+    reconveneNotes: "Notas para retomar",
+    notIdentified: "No identificado",
+    deliverable: "Entregable",
+    due: "Fecha límite",
+    timing: "Momento",
+  },
+  fr: {
+    mainGoal: "Objectif principal",
+    importantDiscussions: "Discussions importantes",
+    takeaways: "Points à retenir",
+    actionItems: "Qui doit travailler sur quoi",
+    followUps: "Qui doit revenir vers qui",
+    secondMeeting: "Deuxième réunion",
+    reconveneNotes: "Notes de reprise",
+    notIdentified: "Non identifié",
+    deliverable: "Livrable",
+    due: "Échéance",
+    timing: "Calendrier",
+  },
+  de: {
+    mainGoal: "Hauptziel",
+    importantDiscussions: "Wichtige Diskussionen",
+    takeaways: "Erkenntnisse",
+    actionItems: "Wer woran arbeiten muss",
+    followUps: "Wer sich bei wem melden muss",
+    secondMeeting: "Zweites Treffen",
+    reconveneNotes: "Notizen zum Wiederaufnehmen",
+    notIdentified: "Nicht identifiziert",
+    deliverable: "Ergebnis",
+    due: "Fällig",
+    timing: "Zeitpunkt",
+  },
+  it: {
+    mainGoal: "Obiettivo principale",
+    importantDiscussions: "Discussioni importanti",
+    takeaways: "Conclusioni",
+    actionItems: "Chi deve lavorare su cosa",
+    followUps: "Chi deve ricontattare chi",
+    secondMeeting: "Seconda riunione",
+    reconveneNotes: "Note per riconvocarsi",
+    notIdentified: "Non identificato",
+    deliverable: "Consegna",
+    due: "Scadenza",
+    timing: "Tempistica",
+  },
+  pt: {
+    mainGoal: "Objetivo principal",
+    importantDiscussions: "Discussões importantes",
+    takeaways: "Conclusões",
+    actionItems: "Quem precisa trabalhar em quê",
+    followUps: "Quem precisa retornar para quem",
+    secondMeeting: "Segunda reunião",
+    reconveneNotes: "Notas para retomada",
+    notIdentified: "Não identificado",
+    deliverable: "Entregável",
+    due: "Prazo",
+    timing: "Momento",
+  },
+  zh: {
+    mainGoal: "主要目标",
+    importantDiscussions: "重要讨论",
+    takeaways: "要点",
+    actionItems: "谁需要负责什么",
+    followUps: "谁需要回复谁",
+    secondMeeting: "第二次会议",
+    reconveneNotes: "重新开会说明",
+    notIdentified: "未确定",
+    deliverable: "交付物",
+    due: "截止日期",
+    timing: "时间安排",
+  },
+  ja: {
+    mainGoal: "主な目的",
+    importantDiscussions: "重要な議論",
+    takeaways: "要点",
+    actionItems: "誰が何に取り組むべきか",
+    followUps: "誰が誰に連絡するべきか",
+    secondMeeting: "2回目の会議",
+    reconveneNotes: "再集合メモ",
+    notIdentified: "特定されていません",
+    deliverable: "成果物",
+    due: "期限",
+    timing: "時期",
+  },
+  ko: {
+    mainGoal: "주요 목표",
+    importantDiscussions: "중요한 논의",
+    takeaways: "핵심 내용",
+    actionItems: "누가 무엇을 해야 하는지",
+    followUps: "누가 누구에게 회신해야 하는지",
+    secondMeeting: "두 번째 회의",
+    reconveneNotes: "재소집 메모",
+    notIdentified: "확인되지 않음",
+    deliverable: "산출물",
+    due: "기한",
+    timing: "시점",
+  },
+  ar: {
+    mainGoal: "الهدف الرئيسي",
+    importantDiscussions: "النقاشات المهمة",
+    takeaways: "الخلاصات",
+    actionItems: "من يحتاج إلى العمل على ماذا",
+    followUps: "من يحتاج إلى الرجوع إلى من",
+    secondMeeting: "الاجتماع الثاني",
+    reconveneNotes: "ملاحظات إعادة الاجتماع",
+    notIdentified: "غير محدد",
+    deliverable: "المخرج",
+    due: "الموعد النهائي",
+    timing: "التوقيت",
+  },
+  ru: {
+    mainGoal: "Главная цель",
+    importantDiscussions: "Важные обсуждения",
+    takeaways: "Выводы",
+    actionItems: "Кто над чем должен работать",
+    followUps: "Кто с кем должен связаться",
+    secondMeeting: "Вторая встреча",
+    reconveneNotes: "Заметки для повторной встречи",
+    notIdentified: "Не определено",
+    deliverable: "Результат",
+    due: "Срок",
+    timing: "Время",
+  },
+  hi: {
+    mainGoal: "मुख्य लक्ष्य",
+    importantDiscussions: "महत्वपूर्ण चर्चाएँ",
+    takeaways: "मुख्य निष्कर्ष",
+    actionItems: "किसे किस पर काम करना है",
+    followUps: "किसे किससे संपर्क करना है",
+    secondMeeting: "दूसरी बैठक",
+    reconveneNotes: "फिर से मिलने के नोट्स",
+    notIdentified: "पहचाना नहीं गया",
+    deliverable: "डिलिवरेबल",
+    due: "समय सीमा",
+    timing: "समय",
+  },
+  nl: {
+    mainGoal: "Hoofddoel",
+    importantDiscussions: "Belangrijke besprekingen",
+    takeaways: "Belangrijkste punten",
+    actionItems: "Wie waaraan moet werken",
+    followUps: "Wie bij wie moet terugkomen",
+    secondMeeting: "Tweede vergadering",
+    reconveneNotes: "Notities voor opnieuw samenkomen",
+    notIdentified: "Niet geïdentificeerd",
+    deliverable: "Op te leveren resultaat",
+    due: "Deadline",
+    timing: "Timing",
+  },
+  pl: {
+    mainGoal: "Główny cel",
+    importantDiscussions: "Ważne dyskusje",
+    takeaways: "Wnioski",
+    actionItems: "Kto nad czym ma pracować",
+    followUps: "Kto ma wrócić do kogo",
+    secondMeeting: "Drugie spotkanie",
+    reconveneNotes: "Notatki do ponownego spotkania",
+    notIdentified: "Nie określono",
+    deliverable: "Rezultat",
+    due: "Termin",
+    timing: "Czas",
+  },
+  tr: {
+    mainGoal: "Ana hedef",
+    importantDiscussions: "Önemli görüşmeler",
+    takeaways: "Çıkarımlar",
+    actionItems: "Kim ne üzerinde çalışmalı",
+    followUps: "Kim kime geri dönmeli",
+    secondMeeting: "İkinci toplantı",
+    reconveneNotes: "Yeniden toplanma notları",
+    notIdentified: "Belirlenmedi",
+    deliverable: "Teslimat",
+    due: "Son tarih",
+    timing: "Zamanlama",
+  },
+  tl: {
+    mainGoal: "Pangunahing layunin",
+    importantDiscussions: "Mahahalagang napag-usapan",
+    takeaways: "Mahahalagang punto",
+    actionItems: "Sino ang kailangang gumawa ng ano",
+    followUps: "Sino ang kailangang bumalik kanino",
+    secondMeeting: "Ikalawang pagpupulong",
+    reconveneNotes: "Mga tala sa muling pagpupulong",
+    notIdentified: "Hindi natukoy",
+    deliverable: "Ihahatid",
+    due: "Takdang petsa",
+    timing: "Oras",
+  },
+};
+
 function convSummaryLanguage() {
   return convUsers[convUserId]?.language || convLangSelect.value || "en";
 }
 
 function convSummaryCopy() {
   return SUMMARY_UI_COPY[convSummaryLanguage()] || SUMMARY_UI_COPY.en;
+}
+
+function convSummarySectionCopy() {
+  return SUMMARY_SECTION_COPY[convSummaryLanguage()] || SUMMARY_SECTION_COPY.en;
 }
 
 function convSetSummaryLoading(isLoading) {
@@ -2860,31 +3075,34 @@ function convSetSummaryLoading(isLoading) {
 }
 
 function convSummaryList(items) {
+  const sectionCopy = convSummarySectionCopy();
   const rows = Array.isArray(items) ? items.filter(Boolean) : [];
-  if (!rows.length) return "<p>Not identified.</p>";
+  if (!rows.length) return `<p>${escapeHtml(sectionCopy.notIdentified)}</p>`;
   return `<ul>${rows.map((item) => `<li>${escapeHtml(String(item))}</li>`).join("")}</ul>`;
 }
 
 function convSummaryActions(items) {
+  const sectionCopy = convSummarySectionCopy();
   const rows = Array.isArray(items) ? items : [];
-  if (!rows.length) return "<p>Not identified.</p>";
+  if (!rows.length) return `<p>${escapeHtml(sectionCopy.notIdentified)}</p>`;
   return `<div class="conv-summary-actions">${rows.map((item) => `
     <div class="conv-summary-action">
-      <strong>${escapeHtml(item.owner || "Not identified")}</strong>
-      <span>${escapeHtml(item.task || "Not identified")}</span>
-      <small>Deliverable: ${escapeHtml(item.deliverable || "Not identified")} · Due: ${escapeHtml(item.due_date || "Not identified")}</small>
+      <strong>${escapeHtml(item.owner || sectionCopy.notIdentified)}</strong>
+      <span>${escapeHtml(item.task || sectionCopy.notIdentified)}</span>
+      <small>${escapeHtml(sectionCopy.deliverable)}: ${escapeHtml(item.deliverable || sectionCopy.notIdentified)} · ${escapeHtml(sectionCopy.due)}: ${escapeHtml(item.due_date || sectionCopy.notIdentified)}</small>
     </div>
   `).join("")}</div>`;
 }
 
 function convSummaryFollowUps(items) {
+  const sectionCopy = convSummarySectionCopy();
   const rows = Array.isArray(items) ? items : [];
-  if (!rows.length) return "<p>Not identified.</p>";
+  if (!rows.length) return `<p>${escapeHtml(sectionCopy.notIdentified)}</p>`;
   return `<div class="conv-summary-actions">${rows.map((item) => `
     <div class="conv-summary-action">
-      <strong>${escapeHtml(item.owner || "Not identified")} → ${escapeHtml(item.with_whom || "Not identified")}</strong>
-      <span>${escapeHtml(item.reason || "Not identified")}</span>
-      <small>Timing: ${escapeHtml(item.timing || "Not identified")}</small>
+      <strong>${escapeHtml(item.owner || sectionCopy.notIdentified)} → ${escapeHtml(item.with_whom || sectionCopy.notIdentified)}</strong>
+      <span>${escapeHtml(item.reason || sectionCopy.notIdentified)}</span>
+      <small>${escapeHtml(sectionCopy.timing)}: ${escapeHtml(item.timing || sectionCopy.notIdentified)}</small>
     </div>
   `).join("")}</div>`;
 }
@@ -2952,14 +3170,15 @@ function convMessagesForSummary() {
 }
 
 function convRenderSummary(summary) {
+  const sectionCopy = convSummarySectionCopy();
   convSummaryBody.innerHTML = `
-    <section><h3>Main Goal</h3><p>${escapeHtml(summary.main_goal || "Not identified.")}</p></section>
-    <section><h3>Important Discussions</h3>${convSummaryList(summary.important_discussions)}</section>
-    <section><h3>Takeaways</h3>${convSummaryList(summary.takeaways)}</section>
-    <section><h3>Who Needs To Work On What</h3>${convSummaryActions(summary.action_items)}</section>
-    <section><h3>Who Needs To Get Back To Whom</h3>${convSummaryFollowUps(summary.follow_ups)}</section>
-    <section><h3>Second Meeting</h3><p>${escapeHtml(summary.second_meeting || "Not identified.")}</p></section>
-    <section><h3>Reconvene Notes</h3>${convSummaryList(summary.reconvene_notes)}</section>
+    <section><h3>${escapeHtml(sectionCopy.mainGoal)}</h3><p>${escapeHtml(summary.main_goal || sectionCopy.notIdentified)}</p></section>
+    <section><h3>${escapeHtml(sectionCopy.importantDiscussions)}</h3>${convSummaryList(summary.important_discussions)}</section>
+    <section><h3>${escapeHtml(sectionCopy.takeaways)}</h3>${convSummaryList(summary.takeaways)}</section>
+    <section><h3>${escapeHtml(sectionCopy.actionItems)}</h3>${convSummaryActions(summary.action_items)}</section>
+    <section><h3>${escapeHtml(sectionCopy.followUps)}</h3>${convSummaryFollowUps(summary.follow_ups)}</section>
+    <section><h3>${escapeHtml(sectionCopy.secondMeeting)}</h3><p>${escapeHtml(summary.second_meeting || sectionCopy.notIdentified)}</p></section>
+    <section><h3>${escapeHtml(sectionCopy.reconveneNotes)}</h3>${convSummaryList(summary.reconvene_notes)}</section>
   `;
 }
 

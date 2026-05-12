@@ -704,7 +704,7 @@ async def conversation_summary(body: ConversationSummaryRequest):
         "second_meeting string; reconvene_notes array of strings. "
         "If the chat is a language or translation check, capture the language identification or usage under "
         "important_discussions and takeaways even when there is no business meeting goal. "
-        "Use 'Not identified' for unknown string fields. "
+        "Use the local-language equivalent of 'Not identified' for unknown string fields. "
         "Return empty arrays for action_items or follow_ups when no explicit task, owner, follow-up, or timing is stated. "
         "Do not invent details not supported by the chat board transcript.\n\n"
         f"Participants: {participants}\n\nChat board transcript:\n{transcript}"
