@@ -222,29 +222,65 @@ document.addEventListener("click", (e) => {
 });
 
 // ── Authentication Management ──────────────────────────────────────────────
-let currentUserEmail = localStorage.getItem("auth_email") || null;
-let currentUserToken = localStorage.getItem("auth_token") || null;
-let currentUserFirstName = localStorage.getItem("auth_first_name") || "";
-let currentUserLastName = localStorage.getItem("auth_last_name") || "";
+const AUTH_STORAGE_KEYS = [
+  "auth_email",
+  "auth_token",
+  "auth_first_name",
+  "auth_last_name",
+];
 
-function logout() {
+// Clear old persistent auth from earlier builds. Auth is now tab-session scoped.
+AUTH_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+
+let currentUserEmail = sessionStorage.getItem("auth_email") || null;
+let currentUserToken = sessionStorage.getItem("auth_token") || null;
+let currentUserFirstName = sessionStorage.getItem("auth_first_name") || "";
+let currentUserLastName = sessionStorage.getItem("auth_last_name") || "";
+let _browserSessionEnding = false;
+
+function persistAuthSession(data) {
+  _browserSessionEnding = false;
+  currentUserEmail = data.email;
+  currentUserToken = data.access_token;
+  currentUserFirstName = data.first_name || "";
+  currentUserLastName = data.last_name || "";
+  sessionStorage.setItem("auth_email", currentUserEmail);
+  sessionStorage.setItem("auth_token", currentUserToken);
+  sessionStorage.setItem("auth_first_name", currentUserFirstName);
+  sessionStorage.setItem("auth_last_name", currentUserLastName);
+}
+
+function clearAuthSession() {
+  AUTH_STORAGE_KEYS.forEach((key) => {
+    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
+  });
+  currentUserEmail = null;
+  currentUserToken = null;
+  currentUserFirstName = "";
+  currentUserLastName = "";
+}
+
+function sendConversationLeave() {
   if (convWs && convWs.readyState === WebSocket.OPEN) {
     try {
       convWs.send(JSON.stringify({ type: "leave" }));
     } catch {}
   }
-  localStorage.removeItem("auth_email");
-  localStorage.removeItem("auth_token");
-  localStorage.removeItem("auth_first_name");
-  localStorage.removeItem("auth_last_name");
-  currentUserEmail = null;
-  currentUserToken = null;
-  currentUserFirstName = "";
-  currentUserLastName = "";
-  // Reset conversation state if active
+}
+
+function endBrowserSession({ showLogin = false } = {}) {
+  if (_browserSessionEnding) return;
+  _browserSessionEnding = true;
+  sendConversationLeave();
+  clearAuthSession();
   if (typeof convReset === "function") convReset();
   updateAuthHeader();
-  showAuthModal("login");
+  if (showLogin) showAuthModal("login");
+}
+
+function logout() {
+  endBrowserSession({ showLogin: true });
 }
 
 function updateAuthHeader() {
@@ -415,14 +451,7 @@ function showSignupModal(plan = "trial") {
       if (!res.ok) throw new Error((await res.json()).detail || "Signup failed");
 
       const data = await res.json();
-      currentUserEmail = data.email;
-      currentUserToken = data.access_token;
-      currentUserFirstName = data.first_name || "";
-      currentUserLastName = data.last_name || "";
-      localStorage.setItem("auth_email", data.email);
-      localStorage.setItem("auth_token", data.access_token);
-      localStorage.setItem("auth_first_name", currentUserFirstName);
-      localStorage.setItem("auth_last_name", currentUserLastName);
+      persistAuthSession(data);
       updateAuthHeader();
       overlay.remove();
       routeToConversation();
@@ -651,14 +680,7 @@ function showAuthModal(mode = "login") {
       }
 
       const data = await res.json();
-      currentUserEmail = data.email;
-      currentUserToken = data.access_token;
-      currentUserFirstName = data.first_name || "";
-      currentUserLastName = data.last_name || "";
-      localStorage.setItem("auth_email", data.email);
-      localStorage.setItem("auth_token", data.access_token);
-      localStorage.setItem("auth_first_name", currentUserFirstName);
-      localStorage.setItem("auth_last_name", currentUserLastName);
+      persistAuthSession(data);
       updateAuthHeader();
       overlay.remove();
       routeToConversation();
@@ -2230,10 +2252,8 @@ async function convStartListening() {
     return;
   }
 
-  const myInfo = convUsers[convUserId];
-  // myInfo may not have arrived yet if clicked immediately after joining —
-  // fall back to "en-US" so the mic still starts rather than silently doing nothing
-  const lang = LANG_LOCALES[myInfo?.language] || "en-US";
+  const selectedLang = convUsers[convUserId]?.language || convLangSelect.value || "en";
+  const lang = LANG_LOCALES[selectedLang] || "en-US";
 
   convFinalText = "";
   _recognitionRestartCount = 0;
@@ -2431,7 +2451,7 @@ async function _convStartIosMicInner() {
   if (_iosSttWs && _iosSttWs.readyState < WebSocket.CLOSING) _iosSttWs.close();
   _iosSttWs = null;
 
-  const lang = convUsers[convUserId]?.language || "en";
+  const lang = convUsers[convUserId]?.language || convLangSelect.value || "en";
   const wsUrl = _buildIosSttWsUrl();
   console.log("[mic] WS URL:", wsUrl);
   _iosSttWs = new WebSocket(wsUrl);
@@ -2588,7 +2608,7 @@ function _scheduleIosSttReconnect() {
 
 function _reconnectIosSttWs() {
   if (!_iosMicActive || !_iosAudioCtx) return;
-  const lang = convUsers[convUserId]?.language || "en";
+  const lang = convUsers[convUserId]?.language || convLangSelect.value || "en";
   const sampleRate = Math.round(_iosAudioCtx.sampleRate);
   const ws = new WebSocket(_buildIosSttWsUrl());
   ws.binaryType = "arraybuffer";
@@ -2787,9 +2807,8 @@ function convHandleDisconnect(reason) {
     convWs.onerror = null;
     convWs = null;
   }
-  convStopListening();
-  if (reason) alert(reason + "\nReturning to setup.");
-  convReset();
+  if (reason) alert(reason + "\nYou have been logged out.");
+  endBrowserSession({ showLogin: true });
 }
 
 function convReset() {
@@ -2897,11 +2916,7 @@ convLeaveBtn.addEventListener("click", () => {
   // Explicit leave: tell the server so the room can be torn down (if host)
   // or the user can be removed (if participant). Without this message a
   // close is treated as a transient WS drop and the room stays alive.
-  if (convWs && convWs.readyState === WebSocket.OPEN) {
-    try {
-      convWs.send(JSON.stringify({ type: "leave" }));
-    } catch {}
-  }
+  sendConversationLeave();
   convReset();
 });
 
@@ -3685,4 +3700,12 @@ window.addEventListener("DOMContentLoaded", () => {
     showAuthModal("login");
   }
   updateAuthHeader();
+});
+
+window.addEventListener("pagehide", () => {
+  endBrowserSession();
+});
+
+window.addEventListener("beforeunload", () => {
+  endBrowserSession();
 });

@@ -1296,8 +1296,8 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str,
     if _cached_room:
         speaker_name = (_cached_room["info"].get(user_id) or {}).get("name", "")
 
-    logger.info("STT session opening: room=%s user=%s lang=%s rate=%d",
-                room_id, user_id, lang_code, sample_rate)
+    logger.info("STT session opening: room=%s user=%s requested_lang=%s lang=%s rate=%d",
+                room_id, user_id, language, lang_code, sample_rate)
 
     def run_stt():
         nonlocal speaker_name
@@ -1383,11 +1383,10 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str,
                             logger.info("STT dropped hallucination (sess=%d): %r",
                                         session_idx_local, transcript[:80])
                             continue
-                        if confidence and confidence < 0.6:
-                            logger.info("STT dropped low-confidence (sess=%d) %.2f: %r",
-                                        session_idx_local, confidence, transcript[:80])
-                            continue
                         norm = transcript.strip().lower()
+                        if confidence and confidence < 0.6:
+                            logger.info("STT accepting low-confidence (sess=%d) %.2f: %r",
+                                        session_idx_local, confidence, transcript[:80])
                         now_ts = time.monotonic()
                         if norm == last_emit["text"] and now_ts - last_emit["ts"] < 5.0:
                             logger.info("STT dedup duplicate within 5s: %r", transcript[:60])
