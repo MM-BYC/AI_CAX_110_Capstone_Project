@@ -251,10 +251,8 @@ function persistAuthSession(data) {
 }
 
 function clearAuthSession() {
-  AUTH_STORAGE_KEYS.forEach((key) => {
-    sessionStorage.removeItem(key);
-    localStorage.removeItem(key);
-  });
+  sessionStorage.clear();
+  AUTH_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
   currentUserEmail = null;
   currentUserToken = null;
   currentUserFirstName = "";
@@ -3106,7 +3104,11 @@ function convReset() {
   convStopIosMic();
   convStopCamera();
   convSpeakCancel();
+  for (const timeoutId of _voiceAwaiting.values()) clearTimeout(timeoutId);
+  _voiceAwaiting.clear();
   _ttsUnlocked = false;
+  _ttsSpeakerMode = true;
+  convSetTtsUI();
   _voiceCloneEnrolled = false;
   _voiceCloneCapturing = false;
   _voiceCloneAvailable = null;
@@ -3138,6 +3140,9 @@ function convReset() {
   convMessages.innerHTML =
     '<div class="conv-start-hint">Press your mic to start speaking</div>';
   convRoomCode.textContent = "------";
+  if (convRoomInput) convRoomInput.value = "";
+  if (convSummaryModal) convSummaryModal.style.display = "none";
+  if (convSummaryBody) convSummaryBody.innerHTML = "";
   convShowScreen(convSetup);
   convCreateBtn.disabled = false;
   convCreateBtn.querySelector("span").textContent = "Create Room";
