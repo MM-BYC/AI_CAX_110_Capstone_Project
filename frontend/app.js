@@ -2663,6 +2663,7 @@ function _reconnectIosSttWs() {
 }
 
 convMicBtn.addEventListener("click", () => {
+  _unlockTts();
   if (_isIOS) {
     if (_iosMicActive) {
       convStopIosMic();
@@ -3327,6 +3328,7 @@ function _typingStop() {
 }
 
 function convSendKeyboard() {
+  _unlockTts();
   const text = convKeyboardInput.value.trim();
   if (!text || convWs?.readyState !== WebSocket.OPEN) return;
   _typingStop();
