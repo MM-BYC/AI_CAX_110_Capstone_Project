@@ -3042,7 +3042,7 @@ footer p {
   }
 
   #convActive .conv-mic-bar {
-    gap: 0.55rem;
+    gap: 0.3rem;
     justify-content: space-around;
     padding: 0.5rem 0.4rem;
   }
@@ -3053,18 +3053,18 @@ footer p {
   }
 
   #convActive .conv-mic-btn {
-    width: 54px;
-    height: 54px;
+    width: 48px;
+    height: 48px;
   }
 
   #convActive .conv-mic-btn svg {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
   }
 
   #convActive .conv-mic-label {
-    max-width: 78px;
-    font-size: 0.68rem;
+    max-width: 68px;
+    font-size: 0.64rem;
   }
 
   #convActive .conv-keyboard-bar {

@@ -1363,6 +1363,7 @@ function convColorFor(userId) {
 // so TTS is just reading verified text — zero hallucination from synthesis.
 
 let _ttsEnabled = true;
+let _ttsSpeakerMode = true;
 let _ttsVoices = [];
 let _ttsUnlocked = false;
 
@@ -1410,6 +1411,7 @@ function convSpeak(text, langCode) {
   utt.lang = locale;
   utt.rate = 1.0;
   utt.pitch = 1.0;
+  utt.volume = _ttsSpeakerMode ? 1.0 : 0.18;
   const voices = _ttsVoices.length ? _ttsVoices : ss.getVoices();
   const prefix = langCode.split("-")[0];
   utt.voice =
@@ -1558,6 +1560,7 @@ function convPlayClonedAudio(audioB64, fromId) {
   try {
     convSpeakCancel();
     const a = new Audio(`data:audio/wav;base64,${audioB64}`);
+    a.volume = _ttsSpeakerMode ? 1.0 : 0.18;
     a.play().catch((e) => console.warn("[VoiceClone] play failed:", e));
   } catch (e) {
     console.warn("[VoiceClone] play exception:", e);
@@ -1646,6 +1649,8 @@ const convCamBtn = document.getElementById("convCamBtn");
 const convCamLabel = document.getElementById("convCamLabel");
 const convSummaryBtn = document.getElementById("convSummaryBtn");
 const convSummaryLabel = document.getElementById("convSummaryLabel");
+const convTtsBtn = document.getElementById("convTtsBtn");
+const convTtsLabel = document.getElementById("convTtsLabel");
 const convSummaryModal = document.getElementById("convSummaryModal");
 const convSummaryTitle = document.getElementById("convSummaryTitle");
 const convSummaryClose = document.getElementById("convSummaryClose");
@@ -2674,6 +2679,24 @@ convMicBtn.addEventListener("click", () => {
     convIsListening ? convStopListening() : convStartListening();
   }
 });
+
+function convSetTtsUI() {
+  if (!convTtsBtn || !convTtsLabel) return;
+  convTtsBtn.classList.toggle("tts-off", !_ttsSpeakerMode);
+  convTtsBtn
+    .querySelector("i")
+    ?.setAttribute("data-lucide", _ttsSpeakerMode ? "volume-2" : "volume-1");
+  convTtsLabel.textContent = _ttsSpeakerMode ? "Speaker" : "Ear mode";
+  lucide.createIcons({ nodes: [convTtsBtn] });
+}
+
+convTtsBtn?.addEventListener("click", () => {
+  _unlockTts();
+  _ttsEnabled = true;
+  _ttsSpeakerMode = !_ttsSpeakerMode;
+  convSetTtsUI();
+});
+convSetTtsUI();
 
 // ── Conversation summary ───────────────────────────────────────────────────
 const SUMMARY_UI_COPY = {
