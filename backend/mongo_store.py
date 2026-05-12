@@ -24,9 +24,11 @@ def is_enabled() -> bool:
 def _db():
     if not is_enabled():
         return None
-    client = MongoClient(os.getenv("MONGODB_URI"), serverSelectionTimeoutMS=3000)
-    db = client[os.getenv("MONGODB_DB", "ai_translate")]
+    uri = os.getenv("MONGODB_URI", "").strip()
+    db_name = os.getenv("MONGODB_DB", "ai_translate").strip() or "ai_translate"
     try:
+        client = MongoClient(uri, serverSelectionTimeoutMS=3000)
+        db = client[db_name]
         db.command("ping")
         db.users.create_index([("email", ASCENDING)], unique=True)
         db.pricing.create_index([("key", ASCENDING)], unique=True)
@@ -36,7 +38,7 @@ def _db():
             unique=True,
         )
     except Exception as exc:
-        logger.warning("MongoDB unavailable, using local fallback: %s", exc)
+        logger.warning("MongoDB unavailable or misconfigured, using local fallback: %s", exc)
         return None
     return db
 
