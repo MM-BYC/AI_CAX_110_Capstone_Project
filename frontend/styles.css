@@ -60,6 +60,45 @@ header {
   margin: 0;
 }
 
+.app-logout-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 36px;
+  margin-left: auto;
+  padding: 0 0.9rem;
+  border: 1px solid #dc2626;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 900;
+  box-shadow: 0 8px 18px rgba(220, 38, 38, 0.24);
+  transition:
+    transform 0.12s ease,
+    background 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.app-logout-btn:hover {
+  background: #b91c1c;
+  box-shadow: 0 10px 22px rgba(185, 28, 28, 0.3);
+  transform: translateY(-1px);
+}
+
+.app-logout-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 10px rgba(185, 28, 28, 0.22);
+}
+
+.app-logout-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
 .logo svg {
   width: 22px;
   height: 22px;
@@ -114,21 +153,21 @@ header .badge {
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
-  margin-bottom: 0.5rem;
+  margin: 0;
 }
 
 .logo svg {
-  width: 28px;
-  height: 28px;
-  color: #6366f1;
+  width: 22px;
+  height: 22px;
+  color: #2d8cff;
   flex-shrink: 0;
 }
 
 header h1 {
-  font-size: 1.75rem;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0;
-  color: #111827;
+  color: #232333;
 }
 
 .subtitle {
@@ -157,7 +196,7 @@ header h1 {
   display: none;
   position: absolute;
   top: 56px; /* directly under the 56px-tall header */
-  left: 1rem;
+  left: 2rem;
   z-index: 50;
 }
 .tab-menu-wrap.open {
@@ -348,7 +387,7 @@ select option {
     padding: 0 0.75rem;
   }
   .tab-menu-wrap {
-    left: 0.75rem;
+    left: 1.75rem;
   }
   .tab-btn {
     padding: 0.7rem 0.85rem;
@@ -778,10 +817,6 @@ footer p {
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: -0.5rem;
-}
-
-.conv-logout-btn {
-  flex-shrink: 0;
 }
 
 .account-welcome {

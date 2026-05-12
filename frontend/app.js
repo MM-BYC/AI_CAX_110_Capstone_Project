@@ -204,7 +204,7 @@ function logout() {
 }
 
 function updateAuthHeader() {
-  document.querySelectorAll(".conv-logout-btn").forEach((btn) => {
+  document.querySelectorAll(".app-logout-btn").forEach((btn) => {
     btn.style.display = currentUserToken ? "inline-flex" : "none";
     btn.onclick = logout;
   });
