@@ -433,10 +433,7 @@ async def login(body: LoginRequest):
 
 @app.post("/api/v1/auth/forgot-password")
 async def forgot_password(email: str):
-    # Mock password reset
-    user = users_store.get_user(email)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    # Avoid revealing whether an email address has an account.
     return {"message": "If this email exists, a reset link has been sent."}
 
 @app.post("/api/v1/billing/cancel")

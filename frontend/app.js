@@ -422,6 +422,9 @@ function showAuthModal(mode = "login") {
         <i data-lucide="arrow-right"></i>
         <span>Continue with selected plan</span>
       </button>
+      <div class="pricing-login-prompt">
+        Already have an account? <span class="auth-link" onclick="showAuthModal('login')">Login</span>
+      </div>
     </div>
   `;
 
@@ -450,7 +453,7 @@ function showAuthModal(mode = "login") {
         <div class="auth-header">
           <div class="auth-mode-switch">
             <button type="button" class="${isPricing ? "active" : ""}" onclick="showAuthModal('pricing')">Plans</button>
-            <button type="button" class="${isCancel ? "active" : ""}" onclick="showAuthModal('cancel')">Cancel</button>
+            <button type="button" class="${isCancel ? "active" : ""}" onclick="showAuthModal('cancel')">Cancel Plan</button>
             <button type="button" class="${isLogin ? "active" : ""}" onclick="showAuthModal('login')">Login</button>
           </div>
           <h2>${isLogin ? "Welcome back" : isPricing ? "Choose a plan" : isCancel ? "Cancel subscription" : "Reset password"}</h2>
@@ -579,7 +582,7 @@ function showAuthModal(mode = "login") {
       if (!res.ok) throw new Error((await res.json()).detail || "Auth failed");
 
       if (isForgot) {
-        alert("Reset link sent!");
+        alert("If this email exists, a reset link has been sent.");
         showAuthModal("login");
         return;
       }

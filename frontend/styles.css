@@ -2567,6 +2567,12 @@ footer p {
   font-weight: 800;
 }
 
+.pricing-login-prompt {
+  text-align: center;
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
 .plan-card {
   background: #f8fafc;
   border: 1px solid #dbe3ef;
