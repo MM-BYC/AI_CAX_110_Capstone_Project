@@ -2911,6 +2911,23 @@ footer p {
 }
 
 @media (max-width: 560px) {
+  html,
+  body {
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  .container,
+  main,
+  .tab-content,
+  #convTab,
+  .conv-screen {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
   .auth-overlay {
     padding: 0;
   }
@@ -2946,6 +2963,121 @@ footer p {
 
   .conv-setup-header {
     flex-direction: column;
+  }
+
+  .conv-screen {
+    min-height: auto;
+  }
+
+  .conv-setup-card,
+  .conv-waiting-card {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 1rem;
+    border-radius: 10px;
+    gap: 1rem;
+  }
+
+  .account-welcome {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .conv-join-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+  }
+
+  .conv-join-row input {
+    min-width: 0;
+  }
+
+  #convActive {
+    width: 100%;
+    max-width: 100%;
+    min-height: calc(100dvh - 118px);
+    border-radius: 8px;
+  }
+
+  #convActive .conv-room-bar {
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    padding: 0.45rem 0.55rem;
+  }
+
+  #convActive .conv-room-bar-left,
+  #convActive .conv-room-bar-right {
+    flex: 1 1 100%;
+    min-width: 0;
+    justify-content: space-between;
+  }
+
+  #convActive .conv-room-label {
+    display: none;
+  }
+
+  #convActive .conv-invite-btn,
+  #convActive .conv-leave-btn,
+  #convActive .btn.conv-vocab-btn {
+    padding: 0.3rem 0.45rem;
+    font-size: 0.72rem;
+  }
+
+  #convActive .conv-carousel-wrapper {
+    min-height: 150px;
+    padding: 6px;
+  }
+
+  #convActive .conv-card-placeholder {
+    font-size: 2.4rem;
+  }
+
+  #convActive .conv-messages {
+    max-height: 150px;
+    min-height: 86px;
+    padding: 0.45rem 0.55rem;
+  }
+
+  #convActive .conv-mic-bar {
+    gap: 0.55rem;
+    justify-content: space-around;
+    padding: 0.5rem 0.4rem;
+  }
+
+  #convActive .conv-mic-slot {
+    min-width: 0;
+    flex: 1 1 0;
+  }
+
+  #convActive .conv-mic-btn {
+    width: 54px;
+    height: 54px;
+  }
+
+  #convActive .conv-mic-btn svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  #convActive .conv-mic-label {
+    max-width: 78px;
+    font-size: 0.68rem;
+  }
+
+  #convActive .conv-keyboard-bar {
+    padding: 0.45rem;
+  }
+
+  #convActive .conv-keyboard-input {
+    min-width: 0;
+    font-size: 0.84rem;
+  }
+
+  #convActive .conv-keyboard-send {
+    flex: 0 0 auto;
   }
 }
 
