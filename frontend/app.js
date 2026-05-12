@@ -14,6 +14,47 @@ const _isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
 document.getElementById("copyright").textContent =
   `© ${new Date().getFullYear()} AI-Translate. All rights reserved.`;
 
+const defaultPricing = {
+  currency: "USD",
+  monthly_price: 7.99,
+  yearly_price: 79,
+  trial_days: 3,
+};
+let currentPricing = { ...defaultPricing };
+
+function formatPrice(amount) {
+  const value = Number(amount);
+  if (!Number.isFinite(value)) return "$0";
+  return `$${value.toLocaleString(undefined, {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function updatePricingDisplay() {
+  const trialEl = document.getElementById("trialPrice");
+  const monthlyEl = document.getElementById("monthlyPrice");
+  const annualEl = document.getElementById("annualPrice");
+  if (trialEl) trialEl.textContent = `${currentPricing.trial_days || 3} Days`;
+  if (monthlyEl) {
+    monthlyEl.innerHTML = `${formatPrice(currentPricing.monthly_price)}<span>/mo</span>`;
+  }
+  if (annualEl) {
+    annualEl.innerHTML = `${formatPrice(currentPricing.yearly_price)}<span>/yr</span>`;
+  }
+}
+
+async function loadPricing() {
+  try {
+    const res = await fetch(`${API_BASE}/api/pricing`, { cache: "no-store" });
+    if (!res.ok) throw new Error("Pricing unavailable");
+    currentPricing = { ...defaultPricing, ...(await res.json()) };
+    updatePricingDisplay();
+  } catch (e) {
+    console.warn("Using default pricing", e);
+  }
+}
+
 // Text tab elements
 const textSourceLang = document.getElementById("textSourceLang");
 const textTargetLang = document.getElementById("textTargetLang");
@@ -399,7 +440,7 @@ function showAuthModal(mode = "login") {
         ${checkmarkSvg}
         <div class="plan-badge">Most Popular</div>
         <h3>Free Trial</h3>
-        <div class="price">3 Days</div>
+        <div class="price" id="trialPrice">${currentPricing.trial_days || 3} Days</div>
         <p>Full access to all features</p>
         <ul>
           <li><i data-lucide="check"></i> 16 Languages</li>
@@ -409,13 +450,13 @@ function showAuthModal(mode = "login") {
       <div class="plan-card monthly" onclick="selectPlan(this)">
         ${checkmarkSvg}
         <h3>Monthly</h3>
-        <div class="price">$7.99<span>/mo</span></div>
+        <div class="price" id="monthlyPrice">${formatPrice(currentPricing.monthly_price)}<span>/mo</span></div>
         <p>Billed monthly</p>
       </div>
       <div class="plan-card annual" onclick="selectPlan(this)">
         ${checkmarkSvg}
         <h3>Annual</h3>
-        <div class="price">$79<span>/yr</span></div>
+        <div class="price" id="annualPrice">${formatPrice(currentPricing.yearly_price)}<span>/yr</span></div>
         <p>Save 20% vs monthly</p>
       </div>
       <button type="button" class="btn btn-primary pricing-continue" id="pricingContinueBtn">
@@ -523,6 +564,7 @@ function showAuthModal(mode = "login") {
 
   // Re-initialize icons for the new HTML
   lucide.createIcons({ nodes: [overlay] });
+  if (isPricing) loadPricing();
 
   if (isPricing) {
     document.getElementById("pricingContinueBtn").onclick = () => {

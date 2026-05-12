@@ -379,6 +379,11 @@ _rooms: dict = {}
 
 # ── Authentication API ────────────────────────────────────────────────────────
 
+@app.get("/api/pricing")
+async def pricing():
+    return _get_pricing()
+
+
 @app.post("/api/v1/auth/signup")
 async def signup(body: SignupRequest):
     import hashlib
