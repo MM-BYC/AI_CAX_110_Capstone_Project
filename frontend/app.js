@@ -11,8 +11,14 @@ const _isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 // iOS Safari does not support webkitSpeechRecognition reliably — use MediaRecorder instead.
 const _isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
 
-document.getElementById("copyright").textContent =
-  `© ${new Date().getFullYear()} AI-Translate. All rights reserved.`;
+function updateCopyrightYear() {
+  const text = `© ${new Date().getFullYear()} AI Translate. All rights reserved.`;
+  document.querySelectorAll("#copyright, #landingCopyright").forEach((el) => {
+    el.textContent = text;
+  });
+}
+
+updateCopyrightYear();
 
 const defaultPricing = {
   currency: "USD",
@@ -539,7 +545,6 @@ function showAuthModal(mode = "login") {
         </div>
         <div class="landing-feature-list">
           <span><i data-lucide="video"></i> Video conversation rooms</span>
-          <span><i data-lucide="mic"></i> Push-to-talk translation</span>
           <span><i data-lucide="book-open"></i> Enterprise vocabulary</span>
         </div>
       </section>
@@ -614,8 +619,10 @@ function showAuthModal(mode = "login") {
         </div>
       </section>
       </div>
+      <p class="landing-copyright" id="landingCopyright"></p>
   `;
 
+  updateCopyrightYear();
   // Re-initialize icons for the new HTML
   lucide.createIcons({ nodes: [overlay] });
   if (isPricing) loadPricing();
