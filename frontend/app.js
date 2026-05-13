@@ -1344,6 +1344,21 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function showToast(message, type = "info") {
+  let tray = document.getElementById("toastTray");
+  if (!tray) {
+    tray = document.createElement("div");
+    tray.id = "toastTray";
+    tray.className = "toast-tray";
+    document.body.appendChild(tray);
+  }
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  tray.appendChild(toast);
+  setTimeout(() => toast.remove(), 3200);
+}
+
 function convColorFor(userId) {
   if (!_participantColors[userId]) {
     _participantColors[userId] =
@@ -1855,6 +1870,7 @@ function convUpdateChipCam(userId, isOn) {
 }
 
 function convSetUserIdle(userId, isIdle) {
+  const wasIdle = !!convUsers[userId]?.idle;
   if (convUsers[userId]) {
     convUsers[userId].idle = isIdle;
     if (isIdle) {
@@ -1868,6 +1884,9 @@ function convSetUserIdle(userId, isIdle) {
   if (isIdle) {
     convUpdateChipMic(userId, false);
     convUpdateChipCam(userId, false);
+  }
+  if (wasIdle && !isIdle && userId !== convUserId) {
+    showToast(`${convUsers[userId]?.name || "Participant"} is back online.`, "success");
   }
 }
 
@@ -3333,11 +3352,17 @@ async function convSaveCurrentSummary() {
     const saved = await res.json();
     if (label) label.textContent = "Saved";
     convSummarySaveBtn.title = `Saved ${saved.local_date}`;
+    const timestamp = saved.updated_at || new Date().toISOString();
+    convSummaryBody.insertAdjacentHTML(
+      "afterbegin",
+      `<p class="conv-summary-saved-stamp">Saved ${escapeHtml(timestamp)}</p>`,
+    );
+    showToast("Summary and full chat saved.", "success");
     setTimeout(() => {
       if (label) label.textContent = previous;
     }, 1500);
   } catch (err) {
-    alert(err.message || "Save failed");
+    showToast(err.message || "Save failed", "error");
     if (label) label.textContent = previous;
   } finally {
     convSummarySaveBtn.disabled = false;
@@ -3547,7 +3572,7 @@ async function convSubmitAdminAuth(mode = "login") {
   const email = document.getElementById("convAdminEmailInput")?.value.trim();
   const password = document.getElementById("convAdminPasswordInput")?.value;
   if (!email || !password) {
-    alert("Enter admin email and password.");
+    showToast("Enter admin email and password.", "error");
     return;
   }
   try {
@@ -3572,7 +3597,7 @@ async function convSubmitAdminAuth(mode = "login") {
     sessionStorage.setItem("history_admin_email", convAdminEmail);
     await convOpenHistoryAdmin();
   } catch (err) {
-    alert(err.message || "Admin login failed");
+    showToast(err.message || "Admin login failed", "error");
   }
 }
 
@@ -3592,6 +3617,8 @@ function convAdminPanelHtml(retentionDays = 90) {
     <div class="conv-history-toolbar">
       <label>From <input type="date" id="convAdminHistoryStart"></label>
       <label>To <input type="date" id="convAdminHistoryEnd" value="${today}"></label>
+      <label>Participant email <input type="email" id="convAdminHistoryEmail" placeholder="name@company.com"></label>
+      <label>Room code <input type="text" id="convAdminHistoryRoom" placeholder="123456" maxlength="6"></label>
       <button type="button" class="btn btn-secondary" id="convAdminHistorySearchBtn">
         <i data-lucide="search"></i><span>List History</span>
       </button>
@@ -3637,7 +3664,7 @@ async function convOpenHistoryAdmin() {
 async function convAdminSaveRetention() {
   const retentionDays = Number(document.getElementById("convAdminRetentionDays")?.value);
   if (!Number.isInteger(retentionDays) || retentionDays < 1) {
-    alert("Enter a whole number of days.");
+    showToast("Enter a whole number of days.", "error");
     return;
   }
   try {
@@ -3651,9 +3678,9 @@ async function convAdminSaveRetention() {
     });
     if (!res.ok) throw new Error((await res.json()).detail || "Could not update retention");
     const saved = await res.json();
-    alert(`Retention updated to ${saved.retention_days} days. Purged records: ${saved.purged_records || 0}.`);
+    showToast(`Retention updated to ${saved.retention_days} days. Purged records: ${saved.purged_records || 0}.`, "success");
   } catch (err) {
-    alert(err.message || "Could not update retention");
+    showToast(err.message || "Could not update retention", "error");
   }
 }
 
@@ -3663,8 +3690,12 @@ async function convAdminLoadHistoryDates() {
   const params = new URLSearchParams();
   const start = document.getElementById("convAdminHistoryStart")?.value || "";
   const end = document.getElementById("convAdminHistoryEnd")?.value || "";
+  const participantEmail = document.getElementById("convAdminHistoryEmail")?.value.trim() || "";
+  const room = document.getElementById("convAdminHistoryRoom")?.value.trim() || "";
   if (start) params.set("start_date", start);
   if (end) params.set("end_date", end);
+  if (participantEmail) params.set("participant_email", participantEmail);
+  if (room) params.set("room_id", room);
   list.innerHTML = "<p>Loading history...</p>";
   try {
     const res = await fetch(`${API_BASE}/api/v1/admin/conversation-history/dates?${params}`, {
@@ -3711,14 +3742,27 @@ async function convAdminOpenHistoryDate(date) {
           <i data-lucide="trash-2"></i><span>Delete date</span>
         </button>
       </div>
+      <div class="conv-status-legend">
+        <span><b class="active"></b>Active</span>
+        <span><b class="speaking"></b>Speaking</span>
+        <span><b class="away"></b>Away/backgrounded</span>
+      </div>
       <div class="conv-history-records">
         ${records.map((record) => `
           <section class="conv-history-record">
             <div class="conv-history-record-head">
               <strong>${escapeHtml(record.created_at || record.local_date || date)}</strong>
-              <button type="button" class="btn btn-secondary conv-admin-email-btn" data-record-id="${escapeHtml(record.id)}">
-                <i data-lucide="mail"></i><span>Email</span>
-              </button>
+              <div class="conv-history-record-actions">
+                <button type="button" class="btn btn-secondary conv-admin-chat-btn" data-record-id="${escapeHtml(record.id)}">
+                  <i data-lucide="messages-square"></i><span>View Full Chat</span>
+                </button>
+                <button type="button" class="btn btn-secondary conv-admin-regen-btn" data-record-id="${escapeHtml(record.id)}">
+                  <i data-lucide="refresh-cw"></i><span>Regenerate</span>
+                </button>
+                <button type="button" class="btn btn-secondary conv-admin-email-btn" data-record-id="${escapeHtml(record.id)}">
+                  <i data-lucide="mail"></i><span>Email</span>
+                </button>
+              </div>
             </div>
             <p class="conv-history-meta">To/From: ${escapeHtml(convAdminEmail || "Admin")} · CC: ${escapeHtml((record.participant_emails || []).join(", ") || "No participant emails captured")}</p>
             <p class="conv-history-meta">Room ${escapeHtml(record.room_id || "Not identified")} · ${escapeHtml((record.participants || []).join(", ") || "No participants listed")} · ${escapeHtml(String(record.metadata?.message_count || 0))} chat messages</p>
@@ -3731,6 +3775,12 @@ async function convAdminOpenHistoryDate(date) {
     document.getElementById("convAdminDeleteDateBtn")?.addEventListener("click", () => convAdminDeleteHistoryDate(date));
     convSummaryBody.querySelectorAll(".conv-admin-email-btn").forEach((btn) => {
       btn.addEventListener("click", () => convAdminEmailHistoryRecord(btn.dataset.recordId));
+    });
+    convSummaryBody.querySelectorAll(".conv-admin-chat-btn").forEach((btn) => {
+      btn.addEventListener("click", () => convAdminViewFullChat(btn.dataset.recordId, date));
+    });
+    convSummaryBody.querySelectorAll(".conv-admin-regen-btn").forEach((btn) => {
+      btn.addEventListener("click", () => convAdminRegenerateSummary(btn.dataset.recordId, date));
     });
     lucide.createIcons({ nodes: [convSummaryModal] });
   } catch (err) {
@@ -3748,18 +3798,93 @@ async function convAdminDeleteHistoryDate(date) {
     if (!res.ok) throw new Error((await res.json()).detail || "Delete failed");
     await convOpenHistoryAdmin();
   } catch (err) {
-    alert(err.message || "Delete failed");
+    showToast(err.message || "Delete failed", "error");
   }
 }
 
+async function convAdminFetchRecord(recordId) {
+  const res = await fetch(`${API_BASE}/api/v1/admin/conversation-history/record/${encodeURIComponent(recordId)}`, {
+    headers: convAdminHeaders(),
+  });
+  if (!res.ok) throw new Error((await res.json()).detail || "Could not load record");
+  return res.json();
+}
+
+async function convAdminViewFullChat(recordId, date) {
+  try {
+    const record = await convAdminFetchRecord(recordId);
+    const rows = Array.isArray(record.chat_messages) ? record.chat_messages : [];
+    convShowSummaryModal(`Full Chat - ${record.local_date || date}`, `
+      <div class="conv-history-toolbar">
+        <button type="button" class="btn btn-secondary" id="convAdminChatBackBtn">
+          <i data-lucide="arrow-left"></i><span>Back</span>
+        </button>
+      </div>
+      <div class="conv-full-chat-list">
+        ${rows.map((m) => `
+          <div class="conv-full-chat-row">
+            <strong>${escapeHtml(m.speaker || "Unknown")}</strong>
+            <span>${escapeHtml(m.shown_text || m.original || m.translation || "")}</span>
+            ${m.original && m.original !== (m.shown_text || m.translation) ? `<small>Original: ${escapeHtml(m.original)}</small>` : ""}
+            ${m.translation && m.translation !== (m.shown_text || m.original) ? `<small>Translation: ${escapeHtml(m.translation)}</small>` : ""}
+          </div>
+        `).join("") || "<p>No full chat source saved.</p>"}
+      </div>
+    `);
+    document.getElementById("convAdminChatBackBtn")?.addEventListener("click", () => convAdminOpenHistoryDate(date));
+  } catch (err) {
+    showToast(err.message || "Could not load full chat", "error");
+  }
+}
+
+async function convAdminRegenerateSummary(recordId, date) {
+  try {
+    showToast("Regenerating summary from full chat...", "info");
+    const res = await fetch(`${API_BASE}/api/v1/admin/conversation-history/record/${encodeURIComponent(recordId)}/regenerate`, {
+      method: "POST",
+      headers: convAdminHeaders(),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || "Regeneration failed");
+    showToast("Summary regenerated from full chat.", "success");
+    await convAdminOpenHistoryDate(date);
+  } catch (err) {
+    showToast(err.message || "Regeneration failed", "error");
+  }
+}
+
+function convAdminEmailChoiceHtml(recordId) {
+  return `
+    <div class="conv-admin-auth">
+      <p class="conv-history-meta">To/From will use the logged-in admin email. Participant emails for this saved chat are added to CC.</p>
+      <label>Email content
+        <select id="convAdminEmailContent">
+          <option value="both">Summary and full chat</option>
+          <option value="summary">Summary only</option>
+          <option value="chat">Full chat only</option>
+        </select>
+      </label>
+      <div class="conv-admin-footer">
+        <button type="button" class="btn btn-secondary" id="convAdminEmailCancelBtn">
+          <i data-lucide="x"></i><span>Cancel</span>
+        </button>
+        <button type="button" class="btn btn-primary" id="convAdminEmailSendBtn" data-record-id="${escapeHtml(recordId)}">
+          <i data-lucide="mail"></i><span>Send</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
 async function convAdminEmailHistoryRecord(recordId) {
-  const choice = prompt(
-    "What should be emailed?\n1 = Summary and full chat\n2 = Summary only\n3 = Full chat only",
-    "1",
-  );
-  if (!choice) return;
-  const contentType =
-    choice.trim() === "2" ? "summary" : choice.trim() === "3" ? "chat" : "both";
+  convShowSummaryModal("Email Conversation History", convAdminEmailChoiceHtml(recordId));
+  document.getElementById("convAdminEmailCancelBtn")?.addEventListener("click", convOpenHistoryAdmin);
+  document.getElementById("convAdminEmailSendBtn")?.addEventListener("click", async () => {
+    const contentType = document.getElementById("convAdminEmailContent")?.value || "both";
+    await convAdminSendHistoryEmail(recordId, contentType);
+  });
+}
+
+async function convAdminSendHistoryEmail(recordId, contentType) {
   try {
     const res = await fetch(`${API_BASE}/api/v1/admin/conversation-history/record/${encodeURIComponent(recordId)}/email`, {
       method: "POST",
@@ -3768,9 +3893,10 @@ async function convAdminEmailHistoryRecord(recordId) {
     });
     if (!res.ok) throw new Error((await res.json()).detail || "Email failed");
     const data = await res.json();
-    alert(`History email queued. CC: ${(data.cc || []).join(", ") || "none"}`);
+    showToast(`History email queued. CC: ${(data.cc || []).join(", ") || "none"}`, "success");
+    await convOpenHistoryAdmin();
   } catch (err) {
-    alert(err.message || "Email failed");
+    showToast(err.message || "Email failed", "error");
   }
 }
 
@@ -4054,6 +4180,7 @@ convCopyCodeBtn.addEventListener("click", () => {
 
 // ── Invite Modal ───────────────────────────────────────────────────────────
 const convInviteBtn = document.getElementById("convInviteBtn");
+const convCopyLinkBtn = document.getElementById("convCopyLinkBtn");
 const convInviteModal = document.getElementById("convInviteModal");
 const convInviteMsg = document.getElementById("convInviteMsg");
 const convInviteClose = document.getElementById("convInviteClose");
@@ -4136,6 +4263,11 @@ convInviteBtn.addEventListener("click", () => {
   convInviteMsg.value = inviteText();
   convInviteModal.style.display = "flex";
   lucide.createIcons({ nodes: [convInviteClose] });
+});
+convCopyLinkBtn?.addEventListener("click", () => {
+  navigator.clipboard.writeText(inviteShort()).then(() => {
+    showToast("Room link copied.", "success");
+  });
 });
 convInviteClose.addEventListener("click", () => {
   convInviteModal.style.display = "none";

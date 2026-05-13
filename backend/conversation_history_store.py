@@ -291,9 +291,19 @@ def list_dates(owner_email: str, start_date: str = "", end_date: str = "") -> li
     return _list_dates_query(query, start_date, end_date)
 
 
-def list_all_dates(start_date: str = "", end_date: str = "") -> list[dict]:
+def list_all_dates(
+    start_date: str = "",
+    end_date: str = "",
+    participant_email: str = "",
+    room_id: str = "",
+) -> list[dict]:
     purge_expired()
-    return _list_dates_query({}, start_date, end_date)
+    query = {}
+    if participant_email:
+        query["participant_emails"] = participant_email.lower().strip()
+    if room_id:
+        query["room_id"] = room_id.strip()
+    return _list_dates_query(query, start_date, end_date)
 
 
 def _list_dates_query(query: dict, start_date: str = "", end_date: str = "") -> list[dict]:

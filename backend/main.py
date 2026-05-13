@@ -748,30 +748,31 @@ def _history_participants(
     return names, emails
 
 
-@app.post("/api/v1/conversation/summary")
-async def conversation_summary(body: ConversationSummaryRequest, request: Request):
-    rows = [
-        m for m in body.messages[-120:]
-        if (m.original or m.translation or m.shown_text).strip()
-    ]
-    if not rows:
-        raise HTTPException(status_code=400, detail="No conversation messages to summarize")
+def _message_value(message, field: str) -> str:
+    if isinstance(message, dict):
+        return message.get(field, "") or ""
+    return getattr(message, field, "") or ""
 
+
+def _generate_conversation_summary(rows: list, participants: list[str], target_language_code: str) -> dict:
     transcript_lines = []
     for m in rows:
-        text = m.shown_text or m.original or m.translation
-        original = m.original if m.original and m.original != text else ""
-        translated = m.translation if m.translation and m.translation != text else ""
-        source = "chat board" if m.source == "discussion_board" else "transcript"
-        line = f"{m.speaker}: {text.strip()} [{source}]"
+        shown_text = _message_value(m, "shown_text")
+        original_text = _message_value(m, "original")
+        translated_text = _message_value(m, "translation")
+        text = shown_text or original_text or translated_text
+        original = original_text if original_text and original_text != text else ""
+        translated = translated_text if translated_text and translated_text != text else ""
+        source = "chat board" if _message_value(m, "source") == "discussion_board" else "transcript"
+        line = f"{_message_value(m, 'speaker')}: {text.strip()} [{source}]"
         if original:
             line += f" | Original: {original.strip()}"
         if translated:
             line += f" | Translation shown: {translated.strip()}"
         transcript_lines.append(line[:1200])
     transcript = "\n".join(transcript_lines)[-14000:]
-    participants = ", ".join(p for p in body.participants if p) or "Not provided"
-    target_language = SUMMARY_LANG_NAMES.get(body.target_language, body.target_language or "English")
+    participant_text = ", ".join(p for p in participants if p) or "Not provided"
+    target_language = SUMMARY_LANG_NAMES.get(target_language_code, target_language_code or "English")
 
     prompt = (
         "You are writing professional meeting minutes from a live conversation chat board. "
@@ -798,28 +799,39 @@ async def conversation_summary(body: ConversationSummaryRequest, request: Reques
         "Use exact dates only if stated; otherwise use the local-language equivalent of 'Not identified'. "
         "Do not invent facts, decisions, owners, deadlines, or meetings not supported by the chat board transcript. "
         "Do not quote the transcript unless a short exact phrase is necessary for clarity.\n\n"
-        f"Participants: {participants}\n\nChat board transcript:\n{transcript}"
+        f"Participants: {participant_text}\n\nChat board transcript:\n{transcript}"
     )
 
+    model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+    response = _get_summary_client().chat.completions.create(
+        model=model,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a senior meeting-minutes editor. Produce concise, professional, "
+                    "evidence-based minutes as JSON only."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0,
+        max_tokens=1800,
+    )
+    return _extract_json_object(response.choices[0].message.content)
+
+
+@app.post("/api/v1/conversation/summary")
+async def conversation_summary(body: ConversationSummaryRequest, request: Request):
+    rows = [
+        m for m in body.messages[-120:]
+        if (m.original or m.translation or m.shown_text).strip()
+    ]
+    if not rows:
+        raise HTTPException(status_code=400, detail="No conversation messages to summarize")
+
     try:
-        model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-        response = _get_summary_client().chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a senior meeting-minutes editor. Produce concise, professional, "
-                        "evidence-based minutes as JSON only."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0,
-            max_tokens=1800,
-        )
-        content = response.choices[0].message.content
-        return _extract_json_object(content)
+        return _generate_conversation_summary(rows, body.participants, body.target_language)
     except Exception as exc:
         logger.error("Conversation summary failed: %s", exc)
         raise HTTPException(status_code=500, detail="Conversation summary failed")
@@ -1041,11 +1053,22 @@ async def admin_login(body: AdminLoginRequest):
 
 
 @app.get("/api/v1/admin/conversation-history/dates")
-async def admin_history_dates(request: Request, start_date: str = "", end_date: str = ""):
+async def admin_history_dates(
+    request: Request,
+    start_date: str = "",
+    end_date: str = "",
+    participant_email: str = "",
+    room_id: str = "",
+):
     _require_admin(request)
     return {
         "retention_days": conversation_history_store.get_retention_days(),
-        "dates": conversation_history_store.list_all_dates(start_date, end_date),
+        "dates": conversation_history_store.list_all_dates(
+            start_date,
+            end_date,
+            participant_email,
+            room_id,
+        ),
     }
 
 
@@ -1055,11 +1078,55 @@ async def admin_history_by_date(date: str, request: Request):
     return {"date": date, "records": conversation_history_store.list_all_records_for_date(date)}
 
 
+@app.get("/api/v1/admin/conversation-history/record/{record_id}")
+async def admin_history_record(record_id: str, request: Request):
+    _require_admin(request)
+    record = conversation_history_store.get_record_any(record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="History record not found")
+    return record
+
+
 @app.delete("/api/v1/admin/conversation-history/date/{date}")
 async def admin_history_delete_date(date: str, request: Request):
     _require_admin(request)
     deleted = conversation_history_store.delete_date_all(date)
     return {"date": date, "deleted_records": deleted}
+
+
+@app.post("/api/v1/admin/conversation-history/record/{record_id}/regenerate")
+async def admin_history_regenerate(record_id: str, request: Request):
+    _require_admin(request)
+    record = conversation_history_store.get_record_any(record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="History record not found")
+    rows = [
+        m for m in record.get("chat_messages", [])[-120:]
+        if (m.get("original") or m.get("translation") or m.get("shown_text"))
+    ]
+    if not rows:
+        raise HTTPException(status_code=400, detail="No full chat source to regenerate from")
+    try:
+        summary = _generate_conversation_summary(
+            rows,
+            record.get("participants", []),
+            record.get("participant_language", "en"),
+        )
+    except Exception as exc:
+        logger.error("Admin summary regeneration failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Summary regeneration failed")
+    updated = conversation_history_store.upsert_record_for_date(
+        owner_email=record["owner_email"],
+        room_id=record.get("room_id", ""),
+        participants=record.get("participants", []),
+        participant_emails=record.get("participant_emails", []),
+        participant_language=record.get("participant_language", "en"),
+        summary=summary,
+        messages=rows,
+        model=os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        summary_prompt_version=SUMMARY_PROMPT_VERSION,
+    )
+    return {"status": "regenerated", "record_id": updated["id"], "summary": summary}
 
 
 @app.post("/api/v1/admin/conversation-history/record/{record_id}/email")
