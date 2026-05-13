@@ -1303,13 +1303,15 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
         room["host_id"] = user_id
 
     room["conns"][user_id] = websocket
+    existing_info = room["info"].get(user_id, {})
     room["info"][user_id] = {
         "name": data["name"],
         "email": data.get("email", ""),
         "language": data["language"],
-        "is_host": is_host,
+        "is_host": is_host or bool(existing_info.get("is_host")),
         "mic_on": False,
         "camera_on": False,
+        "idle": False,
     }
 
     # Confirm join with full room snapshot
@@ -1321,6 +1323,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
             "is_host": bool(info.get("is_host")),
             "mic_on": bool(info.get("mic_on")),
             "camera_on": bool(info.get("camera_on")),
+            "idle": bool(info.get("idle")),
         }
 
     await websocket.send_json({
@@ -1337,6 +1340,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
         if uid != user_id:
             try:
                 await ws.send_json({"type": "user_joined", "user": new_user})
+                await ws.send_json({"type": "user_idle_status", "user_id": user_id, "is_idle": False})
             except Exception:
                 pass
 
@@ -1528,6 +1532,25 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                     except Exception:
                         pass
 
+            elif msg_type == "presence":
+                is_idle = bool(data.get("is_idle", False))
+                if user_id in room["info"]:
+                    room["info"][user_id]["idle"] = is_idle
+                    if is_idle:
+                        room["info"][user_id]["mic_on"] = False
+                        room["info"][user_id]["camera_on"] = False
+                for other_id, other_ws in list(room["conns"].items()):
+                    if not other_ws:
+                        continue
+                    try:
+                        await other_ws.send_json({
+                            "type": "user_idle_status",
+                            "user_id": user_id,
+                            "is_idle": is_idle,
+                        })
+                    except Exception:
+                        pass
+
             elif msg_type in ("webrtc_offer", "webrtc_answer", "webrtc_ice"):
                 target_id = data.get("target_id")
                 if target_id and target_id in room["conns"]:
@@ -1557,6 +1580,17 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
             if user_id in room["info"]:
                 room["info"][user_id]["mic_on"] = False
                 room["info"][user_id]["camera_on"] = False
+                room["info"][user_id]["idle"] = True
+            for uid, ws in list(room["conns"].items()):
+                if ws:
+                    try:
+                        await ws.send_json({
+                            "type": "user_idle_status",
+                            "user_id": user_id,
+                            "is_idle": True,
+                        })
+                    except Exception:
+                        pass
             if not room["conns"]:
                 room["empty_since"] = time.time()
             return

@@ -1712,7 +1712,8 @@ function _buildCard(uid, user) {
   const color = convColorFor(uid);
 
   const card = document.createElement("div");
-  card.className = "conv-participant-card" + (isMe ? " me" : "");
+  card.className =
+    "conv-participant-card" + (isMe ? " me" : "") + (user.idle ? " idle" : "");
   card.id = `conv-card-${uid}`;
   card.dataset.uid = uid;
 
@@ -1851,6 +1852,23 @@ function convUpdateChipMic(userId, isOn) {
 function convUpdateChipCam(userId, isOn) {
   const dot = document.getElementById(`conv-cam-dot-${userId}`);
   if (dot) dot.className = "conv-participant-cam-dot" + (isOn ? " on" : "");
+}
+
+function convSetUserIdle(userId, isIdle) {
+  if (convUsers[userId]) {
+    convUsers[userId].idle = isIdle;
+    if (isIdle) {
+      convUsers[userId].mic_on = false;
+      convUsers[userId].camera_on = false;
+      convClearTyping(userId);
+    }
+  }
+  const card = document.getElementById(`conv-card-${userId}`);
+  card?.classList.toggle("idle", isIdle);
+  if (isIdle) {
+    convUpdateChipMic(userId, false);
+    convUpdateChipCam(userId, false);
+  }
 }
 
 // Re-paginate when the window resizes (column count may change)
@@ -2156,6 +2174,7 @@ function convHandleMessage(msg) {
           language: u.language,
           is_host: u.is_host,
           mic_on: u.mic_on || false,
+          idle: !!u.idle,
         };
       });
       convRenderParticipants();
@@ -2168,6 +2187,7 @@ function convHandleMessage(msg) {
         language: msg.user.language,
         is_host: msg.user.is_host,
         mic_on: false,
+        idle: !!msg.user.idle,
       };
       convRenderParticipants();
       convAddSystemMsg(`${msg.user.name} joined the room.`);
@@ -2230,6 +2250,10 @@ function convHandleMessage(msg) {
     case "user_mic_status":
       if (convUsers[msg.user_id]) convUsers[msg.user_id].mic_on = msg.is_on;
       convUpdateChipMic(msg.user_id, msg.is_on);
+      break;
+
+    case "user_idle_status":
+      convSetUserIdle(msg.user_id, !!msg.is_idle);
       break;
 
     case "user_camera_status":
@@ -2665,6 +2689,23 @@ function _onIosSttDrop() {
   _iosSttWs = null;
   if (_iosMicActive) _scheduleIosSttReconnect();
 }
+
+function convSendPresence(isIdle) {
+  if (!convUserId) return;
+  convSetUserIdle(convUserId, isIdle);
+  if (isIdle) {
+    if (convIsListening) convStopListening();
+    if (_iosMicActive) convStopIosMic();
+  }
+  if (convWs?.readyState === WebSocket.OPEN) {
+    convWs.send(JSON.stringify({ type: "presence", is_idle: isIdle }));
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!convUserId) return;
+  convSendPresence(document.hidden);
+});
 
 // Reconnect only the STT WebSocket — mic stays on, audio pipeline keeps running.
 function _scheduleIosSttReconnect() {
