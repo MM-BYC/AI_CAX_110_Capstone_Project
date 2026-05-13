@@ -383,10 +383,6 @@ function showSignupModal(plan = "trial") {
             <i data-lucide="arrow-left"></i>
             <span>Back</span>
           </button>
-          <div class="signup-step-row">
-            <span class="signup-step active">1 Account</span>
-            <span class="signup-step active">2 Trial</span>
-          </div>
           <h2>Create your account</h2>
           <p>${getPlanLabel(plan)} plan selected. Your trial starts today. Payment information is skipped for testing.</p>
         </div>
@@ -563,11 +559,6 @@ function showAuthModal(mode = "login") {
 
       <section class="auth-card landing-auth-card" aria-label="${isLogin ? "Login" : isPricing ? "Plans and account creation" : "Reset password"}">
         <div class="auth-header">
-          <div class="auth-mode-switch">
-            <button type="button" class="${isPricing ? "active" : ""}" onclick="showAuthModal('pricing')">Plans</button>
-            <button type="button" class="${isCancel ? "active" : ""}" onclick="showAuthModal('cancel')">Cancel Plan</button>
-            <button type="button" class="${isLogin ? "active" : ""}" onclick="showAuthModal('login')">Login</button>
-          </div>
           <h2>${isLogin ? "Welcome back" : isPricing ? "Choose a plan" : isCancel ? "Cancel subscription" : "Reset password"}</h2>
           <p>${isLogin ? "Sign in to open your conversation workspace." : isPricing ? "Select a plan, create your account, and start your trial." : isCancel ? "Refunds are available within 10 days after your first paid charge." : "Enter your email to receive a reset link."}</p>
         </div>
@@ -1803,7 +1794,6 @@ function _buildCard(uid, user) {
   const langBadge = document.createElement("span");
   langBadge.className = "conv-lang-badge conv-card-lang-badge";
   langBadge.textContent = LANG_NAMES[user.language] || user.language.toUpperCase();
-  langBadge.style.background = color;
 
   const camDot = document.createElement("div");
   camDot.className = "conv-participant-cam-dot" + (user.camera_on ? " on" : "");
@@ -1890,7 +1880,14 @@ function convRenderParticipants() {
 
 function convUpdateChipMic(userId, isOn) {
   const card = document.getElementById(`conv-card-${userId}`);
-  if (card) card.classList.toggle("speaking", isOn);
+  if (card) {
+    card.classList.toggle("speaking", isOn);
+    if (isOn) {
+      card.style.setProperty("--conv-speaking-intensity", "0.7");
+    } else {
+      card.style.removeProperty("--conv-speaking-intensity");
+    }
+  }
   const dot = document.getElementById(`conv-mic-dot-${userId}`);
   if (dot) dot.className = "conv-participant-mic-dot" + (isOn ? " on" : "");
 }
@@ -2822,6 +2819,11 @@ async function _convStartIosMicInner() {
       console.log(
         `[mic] frames=${_frameCount} peakRMS=${_peakRms.toFixed(4)} curRMS=${rms.toFixed(4)}`,
       );
+    }
+    const intensity = Math.min(1, Math.max(0, (rms - NOISE_GATE_RMS) / 0.08));
+    const localCard = document.getElementById(`conv-card-${convUserId}`);
+    if (localCard && localCard.classList.contains("speaking")) {
+      localCard.style.setProperty("--conv-speaking-intensity", intensity.toFixed(3));
     }
     const i16 = new Int16Array(f32.length); // initialized to zeros
     if (rms >= NOISE_GATE_RMS) {
