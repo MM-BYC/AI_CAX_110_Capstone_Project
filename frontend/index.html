@@ -486,9 +486,15 @@
                 <i data-lucide="clipboard-list"></i>
                 <span id="convSummaryTitle">Conversation Summary</span>
               </div>
-              <button type="button" class="conv-summary-close" id="convSummaryClose">
-                <i data-lucide="x"></i>
-              </button>
+              <div class="conv-summary-header-actions">
+                <button type="button" class="conv-summary-save" id="convSummarySaveBtn" style="display:none">
+                  <i data-lucide="save"></i>
+                  <span>Save</span>
+                </button>
+                <button type="button" class="conv-summary-close" id="convSummaryClose">
+                  <i data-lucide="x"></i>
+                </button>
+              </div>
             </div>
             <div class="conv-summary-body" id="convSummaryBody"></div>
           </div>

@@ -1653,10 +1653,12 @@ const convSummaryModal = document.getElementById("convSummaryModal");
 const convSummaryTitle = document.getElementById("convSummaryTitle");
 const convSummaryClose = document.getElementById("convSummaryClose");
 const convSummaryBody = document.getElementById("convSummaryBody");
+const convSummarySaveBtn = document.getElementById("convSummarySaveBtn");
 const convHistoryBtn = document.getElementById("convHistoryBtn");
 const convAdminBtn = document.getElementById("convAdminBtn");
 let convAdminToken = sessionStorage.getItem("history_admin_token") || "";
 let convAdminEmail = sessionStorage.getItem("history_admin_email") || "";
+let convLastSummaryPayload = null;
 // convCamPreview / convCamVideo removed — local camera shown in own carousel card
 
 function syncConversationNameField() {
@@ -3191,12 +3193,26 @@ function convRenderSummary(summary) {
   convSummaryBody.innerHTML = convSummaryHtml(summary);
 }
 
+function convBuildSummaryPayload(messages, summary = null) {
+  const participants = Object.values(convUsers).map((u) => u.name).filter(Boolean);
+  return {
+    messages,
+    participants,
+    participant_emails: currentUserEmail ? [currentUserEmail] : [],
+    target_language: convSummaryLanguage(),
+    room_id: convRoomId || convRoomCode?.textContent || "",
+    ...(summary ? { summary } : {}),
+  };
+}
+
 async function convOpenSummary() {
   if (!convSummaryModal || !convSummaryBody) return;
   if (!convRequireLogin()) return;
   const copy = convSummaryCopy();
   convSummaryModal.style.display = "flex";
   if (convSummaryTitle) convSummaryTitle.textContent = copy.title;
+  if (convSummarySaveBtn) convSummarySaveBtn.style.display = "none";
+  convLastSummaryPayload = null;
   convSummaryBody.innerHTML = `<p>${escapeHtml(copy.preparing)}</p>`;
   lucide.createIcons({ nodes: [convSummaryModal] });
 
@@ -3208,24 +3224,19 @@ async function convOpenSummary() {
 
   convSetSummaryLoading(true);
   try {
-    const participants = Object.values(convUsers).map((u) => u.name).filter(Boolean);
-    const targetLanguage = convSummaryLanguage();
     const res = await fetch(`${API_BASE}/api/v1/conversation/summary`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${currentUserToken || ""}`,
       },
-      body: JSON.stringify({
-        messages,
-        participants,
-        participant_emails: currentUserEmail ? [currentUserEmail] : [],
-        target_language: targetLanguage,
-        room_id: convRoomId || convRoomCode?.textContent || "",
-      }),
+      body: JSON.stringify(convBuildSummaryPayload(messages)),
     });
     if (!res.ok) throw new Error((await res.json()).detail || copy.requestFailed);
-    convRenderSummary(await res.json());
+    const summary = await res.json();
+    convLastSummaryPayload = convBuildSummaryPayload(messages, summary);
+    convRenderSummary(summary);
+    if (convSummarySaveBtn) convSummarySaveBtn.style.display = "inline-flex";
   } catch (e) {
     convSummaryBody.innerHTML = `<p>${escapeHtml(e.message || copy.failed)}</p>`;
   } finally {
@@ -3233,7 +3244,39 @@ async function convOpenSummary() {
   }
 }
 
+async function convSaveCurrentSummary() {
+  if (!convRequireLogin() || !convLastSummaryPayload) return;
+  if (!convSummarySaveBtn) return;
+  convSummarySaveBtn.disabled = true;
+  const label = convSummarySaveBtn.querySelector("span");
+  const previous = label?.textContent || "Save";
+  if (label) label.textContent = "Saving...";
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/conversation/history/save`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${currentUserToken || ""}`,
+      },
+      body: JSON.stringify(convLastSummaryPayload),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || "Save failed");
+    const saved = await res.json();
+    if (label) label.textContent = "Saved";
+    convSummarySaveBtn.title = `Saved ${saved.local_date}`;
+    setTimeout(() => {
+      if (label) label.textContent = previous;
+    }, 1500);
+  } catch (err) {
+    alert(err.message || "Save failed");
+    if (label) label.textContent = previous;
+  } finally {
+    convSummarySaveBtn.disabled = false;
+  }
+}
+
 convSummaryBtn?.addEventListener("click", convOpenSummary);
+convSummarySaveBtn?.addEventListener("click", convSaveCurrentSummary);
 convSummaryClose?.addEventListener("click", () => {
   convSummaryModal.style.display = "none";
 });

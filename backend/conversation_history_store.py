@@ -35,6 +35,7 @@ def _load() -> dict:
         data = {}
     return {
         "records": data.get("records", []),
+        "full_chats": data.get("full_chats", []),
         "settings": {
             "retention_days": int(
                 data.get("settings", {}).get("retention_days", DEFAULT_RETENTION_DAYS)
@@ -51,6 +52,10 @@ def _records():
     return mongo_store.collection("conversation_history")
 
 
+def _full_chat_records():
+    return mongo_store.collection("conversation_full_chat")
+
+
 def _settings():
     return mongo_store.collection("app_settings")
 
@@ -63,6 +68,11 @@ def ensure_indexes() -> None:
         coll.create_index([("id", 1)], unique=True)
         coll.create_index([("owner_email", 1), ("local_date", 1)])
         coll.create_index([("created_at_ts", 1)])
+        full_chat = _full_chat_records()
+        if full_chat is not None:
+            full_chat.create_index([("summary_record_id", 1)], unique=True)
+            full_chat.create_index([("owner_email", 1), ("local_date", 1)])
+            full_chat.create_index([("created_at_ts", 1)])
     except Exception:
         pass
 
@@ -105,11 +115,16 @@ def purge_expired(now_ts: float | None = None) -> int:
     coll = _records()
     if coll is not None:
         result = coll.delete_many({"created_at_ts": {"$lt": cutoff}})
-        return int(result.deleted_count)
+        deleted = int(result.deleted_count)
+        full_chat = _full_chat_records()
+        if full_chat is not None:
+            deleted += int(full_chat.delete_many({"created_at_ts": {"$lt": cutoff}}).deleted_count)
+        return deleted
 
     data = _load()
     before = len(data["records"])
     data["records"] = [r for r in data["records"] if r.get("created_at_ts", 0) >= cutoff]
+    data["full_chats"] = [r for r in data.get("full_chats", []) if r.get("created_at_ts", 0) >= cutoff]
     _save(data)
     return before - len(data["records"])
 
@@ -156,6 +171,118 @@ def save_record(
         data["records"].append(record)
         _save(data)
     return record
+
+
+def upsert_record_for_date(
+    *,
+    owner_email: str,
+    room_id: str,
+    participants: list[str],
+    participant_emails: list[str],
+    participant_language: str,
+    summary: dict,
+    messages: list[dict],
+    model: str,
+    summary_prompt_version: str,
+) -> dict:
+    ensure_indexes()
+    purge_expired()
+    now = time.time()
+    owner_email = owner_email.lower()
+    local_date = _utc_date(now)
+    query = {"owner_email": owner_email, "local_date": local_date}
+    if room_id:
+        query["room_id"] = room_id
+
+    existing = None
+    coll = _records()
+    if coll is not None:
+        existing = mongo_store.strip_id(coll.find_one(query))
+    else:
+        for item in _load()["records"]:
+            if _match_record(item, query):
+                existing = item
+                break
+
+    record = {
+        "id": (existing or {}).get("id") or uuid.uuid4().hex,
+        "owner_email": owner_email,
+        "room_id": room_id,
+        "local_date": local_date,
+        "created_at": (existing or {}).get("created_at") or _now_iso(),
+        "created_at_ts": (existing or {}).get("created_at_ts") or now,
+        "updated_at": _now_iso(),
+        "updated_at_ts": now,
+        "participants": participants,
+        "participant_emails": _unique_emails(participant_emails),
+        "participant_language": participant_language,
+        "summary": summary,
+        "chat_messages": messages,
+        "metadata": {
+            "message_count": len(messages),
+            "model": model,
+            "summary_prompt_version": summary_prompt_version,
+            "source": "conversation_chat_board",
+            "save_mode": "manual_upsert_by_owner_date_room",
+        },
+    }
+    if coll is not None:
+        coll.replace_one(query, dict(record), upsert=True)
+    else:
+        data = _load()
+        replaced = False
+        for idx, item in enumerate(data["records"]):
+            if _match_record(item, query):
+                data["records"][idx] = record
+                replaced = True
+                break
+        if not replaced:
+            data["records"].append(record)
+        _save(data)
+    upsert_full_chat_for_record(record, messages)
+    return record
+
+
+def upsert_full_chat_for_record(summary_record: dict, messages: list[dict]) -> dict:
+    chat_record = {
+        "id": f"chat_{summary_record['id']}",
+        "summary_record_id": summary_record["id"],
+        "owner_email": summary_record["owner_email"],
+        "room_id": summary_record.get("room_id", ""),
+        "local_date": summary_record["local_date"],
+        "created_at": summary_record.get("created_at"),
+        "created_at_ts": summary_record.get("created_at_ts"),
+        "updated_at": summary_record.get("updated_at") or _now_iso(),
+        "updated_at_ts": summary_record.get("updated_at_ts") or time.time(),
+        "participants": summary_record.get("participants", []),
+        "participant_emails": summary_record.get("participant_emails", []),
+        "chat_messages": messages,
+        "metadata": {
+            "message_count": len(messages),
+            "source": "conversation_chat_board_truth_source",
+            "save_mode": "manual_upsert_by_summary_record",
+        },
+    }
+    coll = _full_chat_records()
+    if coll is not None:
+        coll.replace_one(
+            {"summary_record_id": summary_record["id"]},
+            dict(chat_record),
+            upsert=True,
+        )
+    else:
+        data = _load()
+        full_chats = data.setdefault("full_chats", [])
+        replaced = False
+        for idx, item in enumerate(full_chats):
+            if item.get("summary_record_id") == summary_record["id"]:
+                full_chats[idx] = chat_record
+                replaced = True
+                break
+        if not replaced:
+            full_chats.append(chat_record)
+        _save(data)
+    return chat_record
 
 
 def list_dates(owner_email: str, start_date: str = "", end_date: str = "") -> list[dict]:
@@ -257,11 +384,24 @@ def delete_date_all(date: str) -> int:
 def _delete_query(query: dict) -> int:
     coll = _records()
     if coll is not None:
+        existing = [mongo_store.strip_id(d) for d in coll.find(query)]
+        summary_ids = [d["id"] for d in existing if d and d.get("id")]
         result = coll.delete_many(query)
-        return int(result.deleted_count)
+        deleted = int(result.deleted_count)
+        full_chat = _full_chat_records()
+        if full_chat is not None and summary_ids:
+            deleted += int(full_chat.delete_many({"summary_record_id": {"$in": summary_ids}}).deleted_count)
+        return deleted
     data = _load()
     before = len(data["records"])
+    deleted_summary_ids = [
+        r.get("id") for r in data["records"] if _match_record(r, query) and r.get("id")
+    ]
     data["records"] = [r for r in data["records"] if not _match_record(r, query)]
+    data["full_chats"] = [
+        r for r in data.get("full_chats", [])
+        if r.get("summary_record_id") not in deleted_summary_ids
+    ]
     _save(data)
     return before - len(data["records"])
 

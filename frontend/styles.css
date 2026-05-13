@@ -1680,6 +1680,37 @@ footer p {
   color: #6366f1;
 }
 
+.conv-summary-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.conv-summary-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 32px;
+  border: 1px solid #16a34a;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #166534;
+  cursor: pointer;
+  padding: 0 0.65rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.conv-summary-save:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.conv-summary-save svg {
+  width: 15px;
+  height: 15px;
+}
+
 .conv-summary-close {
   background: none;
   border: none;

@@ -567,6 +567,10 @@ class ConversationSummaryRequest(BaseModel):
     room_id: str = ""
 
 
+class ConversationHistorySaveRequest(ConversationSummaryRequest):
+    summary: dict
+
+
 class HistoryDateRangeRequest(BaseModel):
     start_date: str = ""
     end_date: str = ""
@@ -725,6 +729,25 @@ def _extract_json_object(text: str) -> dict:
     return json.loads(raw)
 
 
+def _history_participants(
+    *,
+    owner_email: str,
+    room_id: str,
+    participants: list[str],
+    participant_emails: list[str],
+) -> tuple[list[str], list[str]]:
+    room_info = _rooms.get(room_id, {}).get("info", {}) if room_id else {}
+    emails = list(participant_emails or [])
+    names = list(participants or [])
+    for info in room_info.values():
+        if info.get("email"):
+            emails.append(info["email"])
+        if info.get("name") and info["name"] not in names:
+            names.append(info["name"])
+    emails.append(owner_email)
+    return names, emails
+
+
 @app.post("/api/v1/conversation/summary")
 async def conversation_summary(body: ConversationSummaryRequest, request: Request):
     rows = [
@@ -796,37 +819,45 @@ async def conversation_summary(body: ConversationSummaryRequest, request: Reques
             max_tokens=1800,
         )
         content = response.choices[0].message.content
-        summary = _extract_json_object(content)
-        try:
-            owner_email = _bearer_email(request)
-            room_info = _rooms.get(body.room_id, {}).get("info", {}) if body.room_id else {}
-            participant_emails = list(body.participant_emails or [])
-            participant_names = list(body.participants or [])
-            for info in room_info.values():
-                if info.get("email"):
-                    participant_emails.append(info["email"])
-                if info.get("name") and info["name"] not in participant_names:
-                    participant_names.append(info["name"])
-            participant_emails.append(owner_email)
-            conversation_history_store.save_record(
-                owner_email=owner_email,
-                room_id=body.room_id,
-                participants=participant_names,
-                participant_emails=participant_emails,
-                participant_language=body.target_language,
-                summary=summary,
-                messages=[m.model_dump() for m in rows],
-                model=model,
-                summary_prompt_version=SUMMARY_PROMPT_VERSION,
-            )
-        except HTTPException:
-            logger.info("Conversation summary generated without authenticated history save")
-        except Exception as save_exc:
-            logger.warning("Conversation history save failed: %s", save_exc)
-        return summary
+        return _extract_json_object(content)
     except Exception as exc:
         logger.error("Conversation summary failed: %s", exc)
         raise HTTPException(status_code=500, detail="Conversation summary failed")
+
+
+@app.post("/api/v1/conversation/history/save")
+async def conversation_history_save(body: ConversationHistorySaveRequest, request: Request):
+    owner_email = _bearer_email(request)
+    rows = [
+        m for m in body.messages[-120:]
+        if (m.original or m.translation or m.shown_text).strip()
+    ]
+    if not rows:
+        raise HTTPException(status_code=400, detail="No conversation messages to save")
+    participants, participant_emails = _history_participants(
+        owner_email=owner_email,
+        room_id=body.room_id,
+        participants=body.participants,
+        participant_emails=body.participant_emails,
+    )
+    record = conversation_history_store.upsert_record_for_date(
+        owner_email=owner_email,
+        room_id=body.room_id,
+        participants=participants,
+        participant_emails=participant_emails,
+        participant_language=body.target_language,
+        summary=body.summary,
+        messages=[m.model_dump() for m in rows],
+        model=os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        summary_prompt_version=SUMMARY_PROMPT_VERSION,
+    )
+    return {
+        "status": "saved",
+        "record_id": record["id"],
+        "full_chat_record_id": f"chat_{record['id']}",
+        "local_date": record["local_date"],
+        "updated_at": record.get("updated_at") or record.get("created_at"),
+    }
 
 
 def _format_history_summary_lines(record: dict) -> list[str]:
