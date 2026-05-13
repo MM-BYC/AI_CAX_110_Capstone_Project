@@ -1762,7 +1762,7 @@ function _buildCard(uid, user) {
 
   const langBadge = document.createElement("span");
   langBadge.className = "conv-lang-badge conv-card-lang-badge";
-  langBadge.textContent = user.language.toUpperCase();
+  langBadge.textContent = LANG_NAMES[user.language] || user.language.toUpperCase();
   langBadge.style.background = color;
 
   const camDot = document.createElement("div");

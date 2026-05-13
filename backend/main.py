@@ -1292,6 +1292,12 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
     room["empty_since"] = None
 
     user_id = _gen_user_id()
+    join_email = data.get("email", "")
+    if join_email:
+        for existing_id, info in list(room["info"].items()):
+            if info.get("email") == join_email and existing_id not in room["conns"]:
+                user_id = existing_id
+                break
     is_host = room["host_id"] is None
     if is_host:
         room["host_id"] = user_id
@@ -1546,6 +1552,15 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
         user_was_host = room.get("host_id") == user_id
 
         room["conns"].pop(user_id, None)
+
+        if not explicit_leave:
+            if user_id in room["info"]:
+                room["info"][user_id]["mic_on"] = False
+                room["info"][user_id]["camera_on"] = False
+            if not room["conns"]:
+                room["empty_since"] = time.time()
+            return
+
         room["info"].pop(user_id, None)
 
         if user_was_host:
