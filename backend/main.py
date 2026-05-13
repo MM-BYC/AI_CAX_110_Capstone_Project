@@ -270,6 +270,29 @@ def _b64url_json(data: dict) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
 
+def _env_diagnostic(name: str) -> dict:
+    raw = os.getenv(name)
+    value = raw or ""
+    stripped = value.strip()
+    return {
+        "name": name,
+        "present": raw is not None,
+        "raw_length": len(value),
+        "trimmed_length": len(stripped),
+        "leading_space": value != value.lstrip(),
+        "trailing_space": value != value.rstrip(),
+        "blank_after_trim": stripped == "",
+    }
+
+
+def _livekit_env_diagnostics() -> list[dict]:
+    return [
+        _env_diagnostic("LIVEKIT_URL"),
+        _env_diagnostic("LIVEKIT_API_KEY"),
+        _env_diagnostic("LIVEKIT_API_SECRET"),
+    ]
+
+
 def _livekit_token(identity: str, name: str, room_id: str) -> str:
     api_key = os.getenv("LIVEKIT_API_KEY", "").strip()
     api_secret = os.getenv("LIVEKIT_API_SECRET", "").strip()
@@ -279,7 +302,11 @@ def _livekit_token(identity: str, name: str, room_id: str) -> str:
     if not api_secret:
         missing.append("LIVEKIT_API_SECRET")
     if missing:
-        logger.error("LiveKit configuration missing: %s", ", ".join(missing))
+        logger.error(
+            "LiveKit configuration missing: %s diagnostics=%s",
+            ", ".join(missing),
+            json.dumps(_livekit_env_diagnostics(), ensure_ascii=False),
+        )
         raise HTTPException(
             status_code=503,
             detail=f"LiveKit missing environment variable(s): {', '.join(missing)}",
@@ -689,7 +716,10 @@ async def livekit_video_token(room_id: str, identity: str, name: str, request: R
     _bearer_email(request)
     livekit_url = os.getenv("LIVEKIT_URL", "").strip()
     if not livekit_url:
-        logger.error("LiveKit configuration missing: LIVEKIT_URL")
+        logger.error(
+            "LiveKit configuration missing: LIVEKIT_URL diagnostics=%s",
+            json.dumps(_livekit_env_diagnostics(), ensure_ascii=False),
+        )
         raise HTTPException(
             status_code=503,
             detail="LiveKit missing environment variable(s): LIVEKIT_URL",
@@ -700,6 +730,13 @@ async def livekit_video_token(room_id: str, identity: str, name: str, request: R
         "url": livekit_url,
         "token": _livekit_token(identity[:128], name[:128] or identity[:128], room_id[:128]),
     }
+
+
+@app.get("/api/livekit/diagnostics")
+async def livekit_diagnostics(request: Request):
+    """Report LiveKit env var shape without exposing any secret values."""
+    _bearer_email(request)
+    return {"livekit_env": _livekit_env_diagnostics()}
 
 
 # ── Enterprise Vocabulary API  (/api/v1/vocabulary) ───────────────────────────
