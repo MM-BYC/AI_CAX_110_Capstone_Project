@@ -1006,11 +1006,6 @@ footer p {
   height: 12px;
 }
 
-.conv-leave-btn {
-  padding: 0.35rem 0.75rem;
-  font-size: 0.78rem;
-}
-
 /* ── Participants chips bar ── */
 /* ── Participant carousel ────────────────────────────────────────────────── */
 .conv-carousel-wrapper {
@@ -1816,6 +1811,21 @@ footer p {
   gap: 0.65rem;
 }
 
+.conv-history-list-title {
+  margin: 0.35rem 0 0.15rem;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #111827;
+}
+
+.conv-admin-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.9rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid #e5e7eb;
+}
+
 .conv-history-date {
   display: grid;
   gap: 0.25rem;
@@ -2345,16 +2355,6 @@ footer p {
 }
 #convActive .conv-invite-btn:hover {
   background: #a78bfa;
-  color: #fff;
-}
-#convActive .conv-leave-btn {
-  background: #2d2d30;
-  color: #e4e4e7;
-  border-color: #3a3a3c;
-}
-#convActive .conv-leave-btn:hover {
-  background: #ef4444;
-  border-color: #ef4444;
   color: #fff;
 }
 #convActive .btn.conv-vocab-btn {
@@ -3176,7 +3176,6 @@ footer p {
   }
 
   #convActive .conv-invite-btn,
-  #convActive .conv-leave-btn,
   #convActive .btn.conv-vocab-btn {
     padding: 0.3rem 0.45rem;
     font-size: 0.72rem;

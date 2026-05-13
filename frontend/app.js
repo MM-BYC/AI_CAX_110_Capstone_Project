@@ -1638,7 +1638,6 @@ const convJoinBtn = document.getElementById("convJoinBtn");
 const convRoomInput = document.getElementById("convRoomInput");
 const convRoomCode = document.getElementById("convRoomCode");
 const convCopyCodeBtn = document.getElementById("convCopyCodeBtn");
-const convLeaveBtn = document.getElementById("convLeaveBtn");
 // convParticipantsBar removed — replaced by carousel
 const convMessages = document.getElementById("convMessages");
 const convMicBtn = document.getElementById("convMicBtn");
@@ -3527,8 +3526,15 @@ function convAdminPanelHtml(retentionDays = 90) {
         <i data-lucide="search"></i><span>List History</span>
       </button>
     </div>
+    <p class="conv-history-list-title">List Conversation History:</p>
+    <p class="conv-history-meta">Click the date to show full summary report.</p>
     <div id="convAdminHistoryList" class="conv-history-list">
       <p>Choose a date range to list saved conversation histories.</p>
+    </div>
+    <div class="conv-admin-footer">
+      <button type="button" class="btn btn-secondary" id="convAdminCancelBtn">
+        <i data-lucide="x"></i><span>Cancel</span>
+      </button>
     </div>
   `;
 }
@@ -3547,6 +3553,9 @@ async function convOpenHistoryAdmin() {
     convShowSummaryModal(`Admin - ${convAdminEmail}`, convAdminPanelHtml(data.retention_days || 90));
     document.getElementById("convAdminRetentionSaveBtn")?.addEventListener("click", convAdminSaveRetention);
     document.getElementById("convAdminHistorySearchBtn")?.addEventListener("click", convAdminLoadHistoryDates);
+    document.getElementById("convAdminCancelBtn")?.addEventListener("click", () => {
+      convSummaryModal.style.display = "none";
+    });
     await convAdminLoadHistoryDates();
   } catch (err) {
     convAdminToken = "";
@@ -3963,14 +3972,6 @@ convNameInput.addEventListener("keydown", (e) => {
 });
 
 syncConversationNameField();
-
-convLeaveBtn.addEventListener("click", () => {
-  // Explicit leave: tell the server so the room can be torn down (if host)
-  // or the user can be removed (if participant). Without this message a
-  // close is treated as a transient WS drop and the room stays alive.
-  sendConversationLeave();
-  convReset();
-});
 
 convCopyCodeBtn.addEventListener("click", () => {
   navigator.clipboard.writeText(convRoomCode.textContent).then(() => {
