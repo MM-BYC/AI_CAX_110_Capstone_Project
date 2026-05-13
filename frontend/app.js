@@ -2295,7 +2295,7 @@ async function convConnect(roomId, isCreator = false) {
       convHandleDisconnect();
     } else {
       convCreateBtn.disabled = false;
-      convCreateBtn.querySelector("span").textContent = "Create Room";
+      convCreateBtn.querySelector("span").textContent = "Create New Room";
       if (event.code !== 1000)
         alert("Could not connect to server. Please try again.");
     }
@@ -2318,7 +2318,7 @@ function convHandleMessage(msg) {
         );
         convRoomId = "";
         convCreateBtn.disabled = false;
-        convCreateBtn.querySelector("span").textContent = "Create Room";
+        convCreateBtn.querySelector("span").textContent = "Create New Room";
       }
       break;
 
@@ -4293,7 +4293,7 @@ function convReset() {
   if (convSummaryBody) convSummaryBody.innerHTML = "";
   convShowScreen(convSetup);
   convCreateBtn.disabled = false;
-  convCreateBtn.querySelector("span").textContent = "Create Room";
+  convCreateBtn.querySelector("span").textContent = "Create New Room";
 }
 
 // ── Create / Join buttons ──────────────────────────────────────────────────
@@ -4312,21 +4312,21 @@ convCreateBtn.addEventListener("click", async () => {
     const res = await fetch(`${API_BASE}/create_room`);
     if (!res.ok) {
       convCreateBtn.disabled = false;
-      convCreateBtn.querySelector("span").textContent = "Create Room";
+      convCreateBtn.querySelector("span").textContent = "Create New Room";
       alert(`Backend error (${res.status}). Is the server running?`);
       return;
     }
     const data = await res.json();
     if (!data.room_id) {
       convCreateBtn.disabled = false;
-      convCreateBtn.querySelector("span").textContent = "Create Room";
+      convCreateBtn.querySelector("span").textContent = "Create New Room";
       alert("Invalid response from server.");
       return;
     }
     await convConnect(data.room_id, true);
   } catch (e) {
     convCreateBtn.disabled = false;
-    convCreateBtn.querySelector("span").textContent = "Create Room";
+    convCreateBtn.querySelector("span").textContent = "Create New Room";
     alert(`Failed to create room: ${e.message}`);
   }
 });

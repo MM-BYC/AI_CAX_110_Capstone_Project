@@ -880,34 +880,41 @@ footer p {
 }
 
 .conv-actions {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
   gap: 0.75rem;
 }
 
-.conv-actions .btn-primary {
+.conv-action-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.85rem;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.conv-action-panel p {
+  color: #64748b;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.conv-action-panel label {
+  color: #475569;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.conv-actions .btn-primary,
+.conv-actions .btn-secondary {
   width: 100%;
   justify-content: center;
   padding: 0.7rem;
-}
-
-.conv-divider {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #9ca3af;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0;
-  font-weight: 600;
-}
-
-.conv-divider::before,
-.conv-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: #e5e7eb;
 }
 
 .conv-join-row {
@@ -919,6 +926,7 @@ footer p {
   flex: 1;
   text-transform: uppercase;
   letter-spacing: 0;
+  min-width: 0;
 }
 
 /* ── Room header bar ── */
@@ -3462,6 +3470,10 @@ footer p {
     gap: 1rem;
   }
 
+  .conv-actions {
+    grid-template-columns: 1fr;
+  }
+
   .account-welcome {
     max-width: 100%;
     white-space: normal;
@@ -3470,7 +3482,7 @@ footer p {
 
   .conv-join-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 1fr;
     width: 100%;
   }
 

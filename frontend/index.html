@@ -367,19 +367,23 @@
               </div>
 
               <div class="conv-actions">
-                <button type="button" class="btn btn-primary" id="convCreateBtn">
-                  <i data-lucide="plus-circle"></i>
-                  <span>Create Room</span>
-                </button>
-
-                <div class="conv-divider">Or join existing</div>
-
-                <div class="conv-join-row">
-                  <input type="text" id="convRoomInput" placeholder="Room code…" maxlength="6" inputmode="numeric" pattern="[0-9]*">
-                  <button type="button" class="btn btn-secondary" id="convJoinBtn">
-                    <i data-lucide="log-in"></i>
-                    <span>Join</span>
+                <div class="conv-action-panel">
+                  <button type="button" class="btn btn-primary" id="convCreateBtn">
+                    <i data-lucide="plus-circle"></i>
+                    <span>Create New Room</span>
                   </button>
+                  <p>Start a secure room and invite participants.</p>
+                </div>
+
+                <div class="conv-action-panel conv-join-panel">
+                  <label for="convRoomInput">Room Code</label>
+                  <div class="conv-join-row">
+                    <input type="text" id="convRoomInput" placeholder="Enter room code…" maxlength="6" inputmode="numeric" pattern="[0-9]*">
+                    <button type="button" class="btn btn-secondary" id="convJoinBtn">
+                      <i data-lucide="log-in"></i>
+                      <span>Join Existing Room</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
