@@ -2556,7 +2556,7 @@ footer p {
 }
 
 .landing-hero {
-  color: #ffffff;
+  color: #2d8cff;
   padding: clamp(2rem, 5vw, 4.5rem);
   background:
     linear-gradient(160deg, rgba(9, 19, 39, 0.88), rgba(28, 77, 112, 0.84)),
@@ -2604,7 +2604,7 @@ footer p {
 .landing-copy {
   max-width: 580px;
   margin: 1.3rem 0 0;
-  color: rgba(255, 255, 255, 0.82);
+  color: #2d8cff;
   font-size: 1.05rem;
   line-height: 1.75;
 }
@@ -2637,7 +2637,7 @@ footer p {
 
 .landing-proof span {
   margin-top: 0.25rem;
-  color: rgba(255, 255, 255, 0.72);
+  color: #2d8cff;
   font-size: 0.76rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -2654,7 +2654,7 @@ footer p {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  color: rgba(255, 255, 255, 0.9);
+  color: #2d8cff;
   font-size: 0.86rem;
 }
 
@@ -2672,6 +2672,7 @@ footer p {
 .landing-auth-card {
   max-width: none;
   min-height: 680px;
+  background: #4a4d52;
   border: none;
   border-radius: 0;
   box-shadow: none;
@@ -2686,13 +2687,13 @@ footer p {
 .auth-header h2 {
   font-size: 1.7rem;
   font-weight: 800;
-  color: #111827;
+  color: #ffffff;
   margin-bottom: 0.5rem;
 }
 
 .auth-header p {
   font-size: 0.9rem;
-  color: #6b7280;
+  color: #e5e7eb;
 }
 
 .auth-mode-switch {
@@ -2845,7 +2846,7 @@ footer p {
 
 .pricing-login-prompt {
   text-align: center;
-  color: #64748b;
+  color: #e5e7eb;
   font-size: 0.85rem;
 }
 
