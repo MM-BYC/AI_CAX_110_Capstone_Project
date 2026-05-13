@@ -4,6 +4,7 @@ import asyncio
 import base64
 import queue as _queue
 import random
+import secrets
 import string
 import logging
 import tempfile
@@ -137,6 +138,7 @@ import users_store  # noqa: E402
 import pricing_store  # noqa: E402
 import mongo_store  # noqa: E402
 import email_service  # noqa: E402
+import conversation_history_store  # noqa: E402
 import style_profiler  # noqa: E402
 import security  # noqa: E402
 import voice_clone  # noqa: E402  # standalone XTTS-v2 voice cloning module
@@ -144,6 +146,7 @@ import voice_clone  # noqa: E402  # standalone XTTS-v2 voice cloning module
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 _summary_client = None
+SUMMARY_PROMPT_VERSION = "meeting-minutes-v2"
 
 SUMMARY_LANG_NAMES = {
     "en": "English", "es": "Spanish", "fr": "French", "de": "German",
@@ -246,6 +249,33 @@ def _check_trial_access(email: str):
             }
         )
     return True
+
+
+def _bearer_email(request: Request) -> str:
+    auth = request.headers.get("Authorization", "")
+    if not auth.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Login required")
+    email = auth.split(" ", 1)[1].strip().lower()
+    if not email or not users_store.get_user(email):
+        raise HTTPException(status_code=401, detail="Invalid login")
+    _check_trial_access(email)
+    return email
+
+
+def _admin_token() -> str:
+    secret = os.getenv("ADMIN_PASSWORD", "").strip()
+    if not secret:
+        secret = os.getenv("TRANSLATE_API_KEY", "").strip() or "local-admin"
+    return secrets.token_urlsafe(12) + "." + str(abs(hash(secret)) % 10_000_000)
+
+
+_active_admin_tokens: set[str] = set()
+
+
+def _require_admin(request: Request) -> None:
+    token = request.headers.get("X-Admin-Token", "").strip()
+    if not token or token not in _active_admin_tokens:
+        raise HTTPException(status_code=403, detail="Admin login required")
 
 def _format_trial_charge_date(trial_ends_at: float) -> str:
     return time.strftime("%Y-%m-%d", time.localtime(trial_ends_at))
@@ -532,6 +562,25 @@ class ConversationSummaryRequest(BaseModel):
     messages: list[ConversationSummaryMessage]
     participants: list[str] = []
     target_language: str = "en"
+    room_id: str = ""
+
+
+class HistoryDateRangeRequest(BaseModel):
+    start_date: str = ""
+    end_date: str = ""
+
+
+class HistoryEmailRequest(BaseModel):
+    recipient: str
+    content_type: str = "both"
+
+
+class AdminLoginRequest(BaseModel):
+    password: str
+
+
+class RetentionRequest(BaseModel):
+    retention_days: int
 
 
 _ROOM_ID_ALPHABET = "0123456789"
@@ -668,7 +717,7 @@ def _extract_json_object(text: str) -> dict:
 
 
 @app.post("/api/v1/conversation/summary")
-async def conversation_summary(body: ConversationSummaryRequest):
+async def conversation_summary(body: ConversationSummaryRequest, request: Request):
     rows = [
         m for m in body.messages[-120:]
         if (m.original or m.translation or m.shown_text).strip()
@@ -693,8 +742,10 @@ async def conversation_summary(body: ConversationSummaryRequest):
     target_language = SUMMARY_LANG_NAMES.get(body.target_language, body.target_language or "English")
 
     prompt = (
-        "Fill the existing Conversation Summary modal from the chat board transcript below. "
-        "Use the messages as the source of truth for what transpired on the conversation board. "
+        "You are writing professional meeting minutes from a live conversation chat board. "
+        "Use the chat board transcript as the source of truth, but do not merely restate each message. "
+        "Synthesize what happened like a human editor: combine repeated points, preserve the intent, "
+        "use neutral business language, and make each bullet useful to someone who was not present. "
         f"Write every user-visible JSON value in {target_language}. "
         "Keep JSON keys exactly in English as specified. "
         "Return valid JSON only. The JSON must map exactly to these predefined sections: "
@@ -702,32 +753,220 @@ async def conversation_summary(body: ConversationSummaryRequest):
         "action_items array of objects with owner, task, deliverable, due_date; "
         "follow_ups array of objects with owner, with_whom, reason, timing; "
         "second_meeting string; reconvene_notes array of strings. "
+        "For main_goal, write one concise sentence describing the purpose or topic of the exchange; "
+        "use the local-language equivalent of 'Not identified' only when no purpose can be reasonably inferred. "
+        "For important_discussions, write 1-5 editorial bullets covering the substantive topics discussed. "
+        "For takeaways, write 1-5 outcome-oriented bullets explaining what was learned, agreed, clarified, or left unresolved. "
+        "For reconvene_notes, write concise notes about unresolved issues, missing decisions, or why no further meeting is needed. "
         "If the chat is a language or translation check, capture the language identification or usage under "
         "important_discussions and takeaways even when there is no business meeting goal. "
         "Use the local-language equivalent of 'Not identified' for unknown string fields. "
-        "Return empty arrays for action_items or follow_ups when no explicit task, owner, follow-up, or timing is stated. "
-        "Do not invent details not supported by the chat board transcript.\n\n"
+        "Create action_items only when a participant explicitly accepts or is assigned work; do not turn observations into tasks. "
+        "Create follow_ups only when someone explicitly needs to contact or respond to someone else. "
+        "Use exact dates only if stated; otherwise use the local-language equivalent of 'Not identified'. "
+        "Do not invent facts, decisions, owners, deadlines, or meetings not supported by the chat board transcript. "
+        "Do not quote the transcript unless a short exact phrase is necessary for clarity.\n\n"
         f"Participants: {participants}\n\nChat board transcript:\n{transcript}"
     )
 
     try:
+        model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
         response = _get_summary_client().chat.completions.create(
-            model=os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            model=model,
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a precise executive meeting summarizer. Return JSON only.",
+                    "content": (
+                        "You are a senior meeting-minutes editor. Produce concise, professional, "
+                        "evidence-based minutes as JSON only."
+                    ),
                 },
                 {"role": "user", "content": prompt},
             ],
             temperature=0,
-            max_tokens=1400,
+            max_tokens=1800,
         )
         content = response.choices[0].message.content
-        return _extract_json_object(content)
+        summary = _extract_json_object(content)
+        try:
+            owner_email = _bearer_email(request)
+            conversation_history_store.save_record(
+                owner_email=owner_email,
+                room_id=body.room_id,
+                participants=body.participants,
+                participant_language=body.target_language,
+                summary=summary,
+                messages=[m.model_dump() for m in rows],
+                model=model,
+                summary_prompt_version=SUMMARY_PROMPT_VERSION,
+            )
+        except HTTPException:
+            logger.info("Conversation summary generated without authenticated history save")
+        except Exception as save_exc:
+            logger.warning("Conversation history save failed: %s", save_exc)
+        return summary
     except Exception as exc:
         logger.error("Conversation summary failed: %s", exc)
         raise HTTPException(status_code=500, detail="Conversation summary failed")
+
+
+def _format_history_summary_lines(record: dict) -> list[str]:
+    summary = record.get("summary", {})
+    lines = [
+        "Summary",
+        f"Main Goal: {summary.get('main_goal', 'Not identified')}",
+        "",
+        "Important Discussions:",
+        *[f"- {item}" for item in summary.get("important_discussions", [])],
+        "",
+        "Takeaways:",
+        *[f"- {item}" for item in summary.get("takeaways", [])],
+        "",
+        "Action Items:",
+    ]
+    action_items = summary.get("action_items", [])
+    lines.extend(
+        [
+            f"- {i.get('owner', 'Not identified')}: {i.get('task', 'Not identified')} "
+            f"(Deliverable: {i.get('deliverable', 'Not identified')}; Due: {i.get('due_date', 'Not identified')})"
+            for i in action_items
+        ]
+        or ["- Not identified"]
+    )
+    lines.extend(["", "Follow-ups:"])
+    follow_ups = summary.get("follow_ups", [])
+    lines.extend(
+        [
+            f"- {i.get('owner', 'Not identified')} -> {i.get('with_whom', 'Not identified')}: "
+            f"{i.get('reason', 'Not identified')} (Timing: {i.get('timing', 'Not identified')})"
+            for i in follow_ups
+        ]
+        or ["- Not identified"]
+    )
+    lines.extend(
+        [
+            "",
+            f"Second Meeting: {summary.get('second_meeting', 'Not identified')}",
+            "",
+            "Reconvene Notes:",
+            *[f"- {item}" for item in summary.get("reconvene_notes", [])],
+        ]
+    )
+    return lines
+
+
+def _format_history_chat_lines(record: dict) -> list[str]:
+    lines = ["Full Chat Source:"]
+    for m in record.get("chat_messages", []):
+        text = m.get("shown_text") or m.get("original") or m.get("translation") or ""
+        lines.append(f"- {m.get('speaker', 'Unknown')}: {text}")
+        if m.get("original") and m.get("original") != text:
+            lines.append(f"  Original: {m.get('original')}")
+        if m.get("translation") and m.get("translation") != text:
+            lines.append(f"  Translation shown: {m.get('translation')}")
+    return lines
+
+
+def _format_history_email(record: dict, content_type: str = "both") -> str:
+    content_type = content_type if content_type in {"both", "summary", "chat"} else "both"
+    lines = [
+        "AI Translate conversation history",
+        "",
+        f"Conversation Date: {record.get('local_date', 'Not identified')}",
+        f"Created: {record.get('created_at', 'Not identified')}",
+        f"Room: {record.get('room_id') or 'Not identified'}",
+        f"Participants: {', '.join(record.get('participants', [])) or 'Not identified'}",
+        f"Included Content: {content_type}",
+        "",
+    ]
+    if content_type in {"both", "summary"}:
+        lines.extend(_format_history_summary_lines(record))
+    if content_type == "both":
+        lines.append("")
+    if content_type in {"both", "chat"}:
+        lines.extend(_format_history_chat_lines(record))
+    return "\n".join(lines)
+
+
+@app.get("/api/v1/conversation/history/dates")
+async def conversation_history_dates(request: Request, start_date: str = "", end_date: str = ""):
+    owner_email = _bearer_email(request)
+    return {
+        "retention_days": conversation_history_store.get_retention_days(),
+        "dates": conversation_history_store.list_dates(owner_email, start_date, end_date),
+    }
+
+
+@app.get("/api/v1/conversation/history/record/{record_id}")
+async def conversation_history_record(record_id: str, request: Request):
+    owner_email = _bearer_email(request)
+    record = conversation_history_store.get_record(owner_email, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="History record not found")
+    return record
+
+
+@app.get("/api/v1/conversation/history/date/{date}")
+async def conversation_history_by_date(date: str, request: Request):
+    owner_email = _bearer_email(request)
+    return {"date": date, "records": conversation_history_store.list_records_for_date(owner_email, date)}
+
+
+@app.delete("/api/v1/conversation/history/date/{date}")
+async def conversation_history_delete_date(date: str, request: Request):
+    owner_email = _bearer_email(request)
+    deleted = conversation_history_store.delete_date(owner_email, date)
+    return {"date": date, "deleted_records": deleted}
+
+
+@app.post("/api/v1/conversation/history/record/{record_id}/email")
+async def conversation_history_email(record_id: str, body: HistoryEmailRequest, request: Request):
+    owner_email = _bearer_email(request)
+    record = conversation_history_store.get_record(owner_email, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="History record not found")
+    content_type = body.content_type if body.content_type in {"both", "summary", "chat"} else "both"
+    subject_content = {
+        "both": "summary and full chat",
+        "summary": "summary",
+        "chat": "full chat",
+    }[content_type]
+    sent = email_service.send_email(
+        body.recipient,
+        f"AI Translate {subject_content} - {record.get('local_date', '')}",
+        _format_history_email(record, content_type),
+    )
+    return {"status": "sent", "delivery": sent.get("delivery", "unknown")}
+
+
+@app.post("/api/v1/admin/login")
+async def admin_login(body: AdminLoginRequest):
+    expected = os.getenv("ADMIN_PASSWORD", "").strip()
+    if not expected:
+        expected = os.getenv("TRANSLATE_API_KEY", "").strip()
+    if not expected:
+        raise HTTPException(status_code=503, detail="ADMIN_PASSWORD is not configured")
+    if not secrets.compare_digest(body.password, expected):
+        raise HTTPException(status_code=401, detail="Invalid admin password")
+    token = _admin_token()
+    _active_admin_tokens.add(token)
+    return {
+        "status": "success",
+        "admin_token": token,
+        "retention_days": conversation_history_store.get_retention_days(),
+    }
+
+
+@app.get("/api/v1/admin/conversation-history/retention")
+async def admin_get_retention(request: Request):
+    _require_admin(request)
+    return {"retention_days": conversation_history_store.get_retention_days()}
+
+
+@app.put("/api/v1/admin/conversation-history/retention")
+async def admin_set_retention(body: RetentionRequest, request: Request):
+    _require_admin(request)
+    return conversation_history_store.set_retention_days(body.retention_days)
 
 
 # ── Translation cache stats (API-first observability) ─────────────────────────

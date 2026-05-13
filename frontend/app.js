@@ -1653,6 +1653,8 @@ const convSummaryModal = document.getElementById("convSummaryModal");
 const convSummaryTitle = document.getElementById("convSummaryTitle");
 const convSummaryClose = document.getElementById("convSummaryClose");
 const convSummaryBody = document.getElementById("convSummaryBody");
+const convHistoryBtn = document.getElementById("convHistoryBtn");
+const convAdminBtn = document.getElementById("convAdminBtn");
 // convCamPreview / convCamVideo removed — local camera shown in own carousel card
 
 function syncConversationNameField() {
@@ -3169,9 +3171,9 @@ function convMessagesForSummary() {
   return rows;
 }
 
-function convRenderSummary(summary) {
+function convSummaryHtml(summary) {
   const sectionCopy = convSummarySectionCopy();
-  convSummaryBody.innerHTML = `
+  return `
     <section><h3>${escapeHtml(sectionCopy.mainGoal)}</h3><p>${escapeHtml(summary.main_goal || sectionCopy.notIdentified)}</p></section>
     <section><h3>${escapeHtml(sectionCopy.importantDiscussions)}</h3>${convSummaryList(summary.important_discussions)}</section>
     <section><h3>${escapeHtml(sectionCopy.takeaways)}</h3>${convSummaryList(summary.takeaways)}</section>
@@ -3182,8 +3184,13 @@ function convRenderSummary(summary) {
   `;
 }
 
+function convRenderSummary(summary) {
+  convSummaryBody.innerHTML = convSummaryHtml(summary);
+}
+
 async function convOpenSummary() {
   if (!convSummaryModal || !convSummaryBody) return;
+  if (!convRequireLogin()) return;
   const copy = convSummaryCopy();
   convSummaryModal.style.display = "flex";
   if (convSummaryTitle) convSummaryTitle.textContent = copy.title;
@@ -3202,11 +3209,15 @@ async function convOpenSummary() {
     const targetLanguage = convSummaryLanguage();
     const res = await fetch(`${API_BASE}/api/v1/conversation/summary`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${currentUserToken || ""}`,
+      },
       body: JSON.stringify({
         messages,
         participants,
         target_language: targetLanguage,
+        room_id: convRoomId || convRoomCode?.textContent || "",
       }),
     });
     if (!res.ok) throw new Error((await res.json()).detail || copy.requestFailed);
@@ -3225,6 +3236,209 @@ convSummaryClose?.addEventListener("click", () => {
 convSummaryModal?.addEventListener("click", (e) => {
   if (e.target === convSummaryModal) convSummaryModal.style.display = "none";
 });
+
+function convHistoryHeaders(extra = {}) {
+  return {
+    ...extra,
+    Authorization: `Bearer ${currentUserToken || ""}`,
+  };
+}
+
+function convRequireLogin() {
+  if (currentUserToken) return true;
+  showAuthModal("login");
+  return false;
+}
+
+function convShowSummaryModal(title, html) {
+  if (!convSummaryModal || !convSummaryBody) return;
+  convSummaryModal.style.display = "flex";
+  if (convSummaryTitle) convSummaryTitle.textContent = title;
+  convSummaryBody.innerHTML = html;
+  lucide.createIcons({ nodes: [convSummaryModal] });
+}
+
+function convHistoryDateRangeHtml() {
+  const today = new Date().toISOString().slice(0, 10);
+  return `
+    <div class="conv-history-toolbar">
+      <label>From <input type="date" id="convHistoryStart"></label>
+      <label>To <input type="date" id="convHistoryEnd" value="${today}"></label>
+      <button type="button" class="btn btn-secondary" id="convHistorySearchBtn">
+        <i data-lucide="search"></i><span>List</span>
+      </button>
+    </div>
+    <div id="convHistoryList" class="conv-history-list">
+      <p>Choose a date range to list saved chat summaries.</p>
+    </div>
+  `;
+}
+
+async function convOpenHistory() {
+  if (!convRequireLogin()) return;
+  convShowSummaryModal("Conversation History", convHistoryDateRangeHtml());
+  document.getElementById("convHistorySearchBtn")?.addEventListener("click", convLoadHistoryDates);
+  await convLoadHistoryDates();
+}
+
+async function convLoadHistoryDates() {
+  const list = document.getElementById("convHistoryList");
+  if (!list) return;
+  const params = new URLSearchParams();
+  const start = document.getElementById("convHistoryStart")?.value || "";
+  const end = document.getElementById("convHistoryEnd")?.value || "";
+  if (start) params.set("start_date", start);
+  if (end) params.set("end_date", end);
+  list.innerHTML = "<p>Loading history...</p>";
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/conversation/history/dates?${params}`, {
+      headers: convHistoryHeaders(),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || "Could not load history");
+    const data = await res.json();
+    const dates = Array.isArray(data.dates) ? data.dates : [];
+    if (!dates.length) {
+      list.innerHTML = "<p>No saved conversation history found for that range.</p>";
+      return;
+    }
+    list.innerHTML = dates.map((item) => `
+      <button type="button" class="conv-history-date" data-date="${escapeHtml(item.date)}">
+        <strong>${escapeHtml(item.date)}</strong>
+        <span>${escapeHtml(String(item.count))} saved summar${item.count === 1 ? "y" : "ies"}</span>
+        <small>${escapeHtml((item.participants || []).join(", ") || "No participants listed")}</small>
+      </button>
+    `).join("");
+    list.querySelectorAll(".conv-history-date").forEach((btn) => {
+      btn.addEventListener("click", () => convOpenHistoryDate(btn.dataset.date));
+    });
+  } catch (err) {
+    list.innerHTML = `<p>${escapeHtml(err.message || "Could not load history")}</p>`;
+  }
+}
+
+async function convOpenHistoryDate(date) {
+  if (!date || !convRequireLogin()) return;
+  convShowSummaryModal(`Conversation History - ${date}`, "<p>Loading saved summary...</p>");
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/conversation/history/date/${encodeURIComponent(date)}`, {
+      headers: convHistoryHeaders(),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || "Could not load saved summary");
+    const data = await res.json();
+    const records = Array.isArray(data.records) ? data.records : [];
+    if (!records.length) {
+      convSummaryBody.innerHTML = "<p>No history remains for this date.</p>";
+      return;
+    }
+    convSummaryBody.innerHTML = `
+      <div class="conv-history-toolbar">
+        <button type="button" class="btn btn-secondary" id="convHistoryBackBtn">
+          <i data-lucide="arrow-left"></i><span>Back</span>
+        </button>
+        <button type="button" class="btn btn-secondary danger" id="convHistoryDeleteDateBtn">
+          <i data-lucide="trash-2"></i><span>Delete date</span>
+        </button>
+      </div>
+      <div class="conv-history-records">
+        ${records.map((record) => `
+          <section class="conv-history-record">
+            <div class="conv-history-record-head">
+              <strong>${escapeHtml(record.created_at || record.local_date || date)}</strong>
+              <button type="button" class="btn btn-secondary conv-history-email-btn" data-record-id="${escapeHtml(record.id)}">
+                <i data-lucide="mail"></i><span>Email</span>
+              </button>
+            </div>
+            <p class="conv-history-meta">Room ${escapeHtml(record.room_id || "Not identified")} · ${escapeHtml((record.participants || []).join(", ") || "No participants listed")} · ${escapeHtml(String(record.metadata?.message_count || 0))} chat messages</p>
+            ${convSummaryHtml(record.summary || {})}
+          </section>
+        `).join("")}
+      </div>
+    `;
+    document.getElementById("convHistoryBackBtn")?.addEventListener("click", convOpenHistory);
+    document.getElementById("convHistoryDeleteDateBtn")?.addEventListener("click", () => convDeleteHistoryDate(date));
+    convSummaryBody.querySelectorAll(".conv-history-email-btn").forEach((btn) => {
+      btn.addEventListener("click", () => convEmailHistoryRecord(btn.dataset.recordId));
+    });
+    lucide.createIcons({ nodes: [convSummaryModal] });
+  } catch (err) {
+    convSummaryBody.innerHTML = `<p>${escapeHtml(err.message || "Could not load saved summary")}</p>`;
+  }
+}
+
+async function convDeleteHistoryDate(date) {
+  if (!confirm(`Delete all saved summaries and full chat sources for ${date}?`)) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/conversation/history/date/${encodeURIComponent(date)}`, {
+      method: "DELETE",
+      headers: convHistoryHeaders(),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || "Delete failed");
+    await convOpenHistory();
+  } catch (err) {
+    alert(err.message || "Delete failed");
+  }
+}
+
+async function convEmailHistoryRecord(recordId) {
+  const recipient = prompt("Email conversation history to:");
+  if (!recipient) return;
+  const choice = prompt(
+    "What should be emailed?\n1 = Summary and full chat\n2 = Summary only\n3 = Full chat only",
+    "1",
+  );
+  if (!choice) return;
+  const contentType =
+    choice.trim() === "2" ? "summary" : choice.trim() === "3" ? "chat" : "both";
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/conversation/history/record/${encodeURIComponent(recordId)}/email`, {
+      method: "POST",
+      headers: convHistoryHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ recipient: recipient.trim(), content_type: contentType }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || "Email failed");
+    alert("History email queued.");
+  } catch (err) {
+    alert(err.message || "Email failed");
+  }
+}
+
+async function convOpenHistoryAdmin() {
+  const password = prompt("Admin password");
+  if (!password) return;
+  try {
+    const login = await fetch(`${API_BASE}/api/v1/admin/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!login.ok) throw new Error((await login.json()).detail || "Admin login failed");
+    const data = await login.json();
+    sessionStorage.setItem("history_admin_token", data.admin_token);
+    const next = prompt("Retention days for chat summary history:", String(data.retention_days || 90));
+    if (!next) return;
+    const retentionDays = Number(next);
+    if (!Number.isInteger(retentionDays) || retentionDays < 1) {
+      alert("Enter a whole number of days.");
+      return;
+    }
+    const res = await fetch(`${API_BASE}/api/v1/admin/conversation-history/retention`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Admin-Token": data.admin_token,
+      },
+      body: JSON.stringify({ retention_days: retentionDays }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || "Could not update retention");
+    const saved = await res.json();
+    alert(`Retention updated to ${saved.retention_days} days. Purged records: ${saved.purged_records || 0}.`);
+  } catch (err) {
+    alert(err.message || "Admin update failed");
+  }
+}
+
+convHistoryBtn?.addEventListener("click", convOpenHistory);
+convAdminBtn?.addEventListener("click", convOpenHistoryAdmin);
 
 // ── Camera start / stop ────────────────────────────────────────────────────
 async function convStartCamera() {
