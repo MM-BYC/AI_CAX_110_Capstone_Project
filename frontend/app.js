@@ -1307,7 +1307,7 @@ let convWs = null;
 let convRoomId = null;
 let convUserId = null; // this session's user_id assigned by server
 let convIsHost = false;
-let convUsers = {}; // user_id → {name, language, is_host, mic_on, camera_on}
+let convUsers = {}; // user_id → {name, language, is_host, mic_on, camera_on, idle, idle_since}
 let convTranscript = [];
 let convIsListening = false;
 let convRecognition = null;
@@ -1713,6 +1713,7 @@ const _CARD_ROWS = 20; // effectively unlimited — all tiles show in one page
 
 let _carouselPage = 0;
 const _carouselCards = []; // ordered DOM elements; order = join order
+const _participantIdleTimers = {};
 
 function _carouselCols() {
   const n = _carouselCards.length || 1;
@@ -1776,6 +1777,11 @@ function _buildCard(uid, user) {
   nameTxt.className = "conv-card-name-txt";
   nameTxt.textContent = user.name + (isMe ? " (You)" : "");
 
+  const idleTimer = document.createElement("span");
+  idleTimer.className = "conv-card-idle-timer";
+  idleTimer.id = `conv-idle-timer-${uid}`;
+  idleTimer.textContent = user.idle ? convFormatIdleElapsed(user.idle_since) : "";
+
   const langBadge = document.createElement("span");
   langBadge.className = "conv-lang-badge conv-card-lang-badge";
   langBadge.textContent = LANG_NAMES[user.language] || user.language.toUpperCase();
@@ -1787,6 +1793,7 @@ function _buildCard(uid, user) {
 
   nameBar.appendChild(micDot);
   nameBar.appendChild(nameTxt);
+  nameBar.appendChild(idleTimer);
   nameBar.appendChild(langBadge);
   nameBar.appendChild(camDot);
 
@@ -1840,16 +1847,22 @@ function _carouselRenderPage() {
 }
 
 function convRenderParticipants() {
+  convMergeDuplicateParticipants();
+
   // Add cards for new participants (preserves existing DOM nodes with live video)
   Object.entries(convUsers).forEach(([uid, user]) => {
     if (!_carouselCards.find((c) => c.dataset.uid === uid)) {
       _carouselCards.push(_buildCard(uid, user));
     }
+    document.getElementById(`conv-card-${uid}`)?.classList.toggle("idle", !!user.idle);
+    if (user.idle) convStartIdleTimer(uid);
+    else convStopIdleTimer(uid);
   });
 
   // Remove cards for departed participants
   for (let i = _carouselCards.length - 1; i >= 0; i--) {
     if (!convUsers[_carouselCards[i].dataset.uid]) {
+      convStopIdleTimer(_carouselCards[i].dataset.uid);
       _carouselCards.splice(i, 1);
     }
   }
@@ -1869,10 +1882,86 @@ function convUpdateChipCam(userId, isOn) {
   if (dot) dot.className = "conv-participant-cam-dot" + (isOn ? " on" : "");
 }
 
-function convSetUserIdle(userId, isIdle) {
+function convNormalizeIdleSince(idleSince) {
+  const parsed = Number(idleSince);
+  if (!Number.isFinite(parsed) || parsed <= 0) return Date.now();
+  return parsed > 100000000000 ? parsed : parsed * 1000;
+}
+
+function convFormatIdleElapsed(idleSince) {
+  const startedAt = convNormalizeIdleSince(idleSince);
+  const totalSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours}h ${remainingMinutes}m`;
+  }
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function convUpdateIdleTimer(userId) {
+  const timer = document.getElementById(`conv-idle-timer-${userId}`);
+  if (!timer || !convUsers[userId]?.idle) return;
+  timer.textContent = convFormatIdleElapsed(convUsers[userId].idle_since);
+}
+
+function convStartIdleTimer(userId) {
+  if (!convUsers[userId]) return;
+  if (!convUsers[userId].idle_since) convUsers[userId].idle_since = Date.now();
+  convUpdateIdleTimer(userId);
+  clearInterval(_participantIdleTimers[userId]);
+  _participantIdleTimers[userId] = setInterval(() => convUpdateIdleTimer(userId), 1000);
+}
+
+function convStopIdleTimer(userId) {
+  clearInterval(_participantIdleTimers[userId]);
+  delete _participantIdleTimers[userId];
+  const timer = document.getElementById(`conv-idle-timer-${userId}`);
+  if (timer) timer.textContent = "";
+}
+
+function convParticipantsMatch(a, b) {
+  return (
+    a &&
+    b &&
+    a.name === b.name &&
+    a.language === b.language &&
+    (!a.email || !b.email || a.email === b.email)
+  );
+}
+
+function convRemoveParticipantCard(userId) {
+  convStopIdleTimer(userId);
+  webrtcOnUserLeft(userId);
+  convClearTyping(userId);
+  const index = _carouselCards.findIndex((c) => c.dataset.uid === userId);
+  if (index >= 0) _carouselCards.splice(index, 1);
+  document.getElementById(`conv-card-${userId}`)?.remove();
+}
+
+function convMergeDuplicateParticipants() {
+  const entries = Object.entries(convUsers);
+  entries.forEach(([uid, user]) => {
+    if (!user || user.idle) return;
+    entries.forEach(([otherUid, other]) => {
+      if (otherUid === uid || !other?.idle) return;
+      if (convParticipantsMatch(user, other)) {
+        convRemoveParticipantCard(otherUid);
+        delete convUsers[otherUid];
+      }
+    });
+  });
+}
+
+function convSetUserIdle(userId, isIdle, idleSince = null) {
   const wasIdle = !!convUsers[userId]?.idle;
   if (convUsers[userId]) {
     convUsers[userId].idle = isIdle;
+    convUsers[userId].idle_since = isIdle
+      ? convNormalizeIdleSince(idleSince || convUsers[userId].idle_since || Date.now())
+      : null;
     if (isIdle) {
       convUsers[userId].mic_on = false;
       convUsers[userId].camera_on = false;
@@ -1884,6 +1973,9 @@ function convSetUserIdle(userId, isIdle) {
   if (isIdle) {
     convUpdateChipMic(userId, false);
     convUpdateChipCam(userId, false);
+    convStartIdleTimer(userId);
+  } else {
+    convStopIdleTimer(userId);
   }
   if (wasIdle && !isIdle && userId !== convUserId) {
     showToast(`${convUsers[userId]?.name || "Participant"} is back online.`, "success");
@@ -2131,6 +2223,7 @@ async function convConnect(roomId, isCreator = false) {
         email: currentUserEmail || "",
         language: lang,
         is_creator: _convWasCreator,
+        previous_user_id: convUserId || "",
       }),
     );
   };
@@ -2193,7 +2286,9 @@ function convHandleMessage(msg) {
           language: u.language,
           is_host: u.is_host,
           mic_on: u.mic_on || false,
+          camera_on: u.camera_on || false,
           idle: !!u.idle,
+          idle_since: u.idle_since || null,
         };
       });
       convRenderParticipants();
@@ -2201,21 +2296,36 @@ function convHandleMessage(msg) {
       break;
 
     case "user_joined":
+      Object.entries(convUsers).forEach(([existingId, existingUser]) => {
+        if (
+          existingId !== msg.user.user_id &&
+          existingUser?.idle &&
+          convParticipantsMatch(existingUser, msg.user)
+        ) {
+          convRemoveParticipantCard(existingId);
+          delete convUsers[existingId];
+        }
+      });
       convUsers[msg.user.user_id] = {
         name: msg.user.name,
         language: msg.user.language,
         is_host: msg.user.is_host,
         mic_on: false,
+        camera_on: msg.user.camera_on || false,
         idle: !!msg.user.idle,
+        idle_since: msg.user.idle_since || null,
       };
       convRenderParticipants();
-      convAddSystemMsg(`${msg.user.name} joined the room.`);
-      webrtcOnUserJoined(msg.user.user_id);
+      if (!msg.user.idle) {
+        convAddSystemMsg(`${msg.user.name} joined the room.`);
+        webrtcOnUserJoined(msg.user.user_id);
+      }
       break;
 
     case "user_left":
       webrtcOnUserLeft(msg.user_id);
       convClearTyping(msg.user_id);
+      convStopIdleTimer(msg.user_id);
       delete convUsers[msg.user_id];
       convRenderParticipants();
       convAddSystemMsg(`${msg.name} left the room.`);
@@ -2272,7 +2382,7 @@ function convHandleMessage(msg) {
       break;
 
     case "user_idle_status":
-      convSetUserIdle(msg.user_id, !!msg.is_idle);
+      convSetUserIdle(msg.user_id, !!msg.is_idle, msg.idle_since || null);
       break;
 
     case "user_camera_status":
@@ -2711,13 +2821,16 @@ function _onIosSttDrop() {
 
 function convSendPresence(isIdle) {
   if (!convUserId) return;
-  convSetUserIdle(convUserId, isIdle);
+  const idleSince = isIdle
+    ? convUsers[convUserId]?.idle_since || Date.now()
+    : null;
+  convSetUserIdle(convUserId, isIdle, idleSince);
   if (isIdle) {
     if (convIsListening) convStopListening();
     if (_iosMicActive) convStopIosMic();
   }
   if (convWs?.readyState === WebSocket.OPEN) {
-    convWs.send(JSON.stringify({ type: "presence", is_idle: isIdle }));
+    convWs.send(JSON.stringify({ type: "presence", is_idle: isIdle, idle_since: idleSince }));
   }
 }
 
@@ -4085,6 +4198,7 @@ function convReset() {
   convUsers = {};
   convTranscript = [];
   // Reset carousel, colour and typing state for next session
+  Object.keys(_participantIdleTimers).forEach((userId) => convStopIdleTimer(userId));
   _carouselCards.length = 0;
   _carouselPage = 0;
   const _track = document.getElementById("convCarouselTrack");

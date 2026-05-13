@@ -1358,13 +1358,38 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
     room = _rooms[room_id]
     room["empty_since"] = None
 
-    user_id = _gen_user_id()
+    generated_user_id = _gen_user_id()
+    user_id = generated_user_id
+    previous_user_id = data.get("previous_user_id", "")
     join_email = data.get("email", "")
-    if join_email:
+    join_name = data.get("name", "")
+    join_language = data.get("language", "")
+
+    if previous_user_id and previous_user_id in room["info"]:
+        user_id = previous_user_id
+    elif join_email:
         for existing_id, info in list(room["info"].items()):
-            if info.get("email") == join_email and existing_id not in room["conns"]:
+            if info.get("email") == join_email and (existing_id not in room["conns"] or info.get("idle")):
                 user_id = existing_id
                 break
+    if user_id == generated_user_id and join_name and join_language:
+        matching_idle_ids = [
+            existing_id
+            for existing_id, info in list(room["info"].items())
+            if (
+                info.get("idle")
+                and info.get("name") == join_name
+                and info.get("language") == join_language
+            )
+        ]
+        if len(matching_idle_ids) == 1:
+            user_id = matching_idle_ids[0]
+
+    old_ws = room["conns"].get(user_id)
+    if old_ws is not None and old_ws is not websocket:
+        room["conns"].pop(user_id, None)
+
+    reconnected_existing_user = user_id != generated_user_id
     is_host = room["host_id"] is None
     if is_host:
         room["host_id"] = user_id
@@ -1379,6 +1404,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
         "mic_on": False,
         "camera_on": False,
         "idle": False,
+        "idle_since": None,
     }
 
     # Confirm join with full room snapshot
@@ -1391,13 +1417,14 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
             "mic_on": bool(info.get("mic_on")),
             "camera_on": bool(info.get("camera_on")),
             "idle": bool(info.get("idle")),
+            "idle_since": info.get("idle_since"),
         }
 
     await websocket.send_json({
         "type": "joined",
         "user_id": user_id,
         "room": room_id,
-        "is_host": is_host,
+        "is_host": bool(room["info"][user_id].get("is_host")),
         "users": [_public_user(uid, info) for uid, info in room["info"].items()],
     })
 
@@ -1406,8 +1433,14 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
     for uid, ws in list(room["conns"].items()):
         if uid != user_id:
             try:
-                await ws.send_json({"type": "user_joined", "user": new_user})
-                await ws.send_json({"type": "user_idle_status", "user_id": user_id, "is_idle": False})
+                if not reconnected_existing_user:
+                    await ws.send_json({"type": "user_joined", "user": new_user})
+                await ws.send_json({
+                    "type": "user_idle_status",
+                    "user_id": user_id,
+                    "is_idle": False,
+                    "idle_since": None,
+                })
             except Exception:
                 pass
 
@@ -1415,6 +1448,8 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
     try:
         while True:
             raw = await websocket.receive_text()
+            if room["conns"].get(user_id) is not websocket:
+                break
             data = json.loads(raw)
             msg_type = data.get("type")
 
@@ -1603,6 +1638,9 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                 is_idle = bool(data.get("is_idle", False))
                 if user_id in room["info"]:
                     room["info"][user_id]["idle"] = is_idle
+                    room["info"][user_id]["idle_since"] = (
+                        room["info"][user_id].get("idle_since") or time.time()
+                    ) if is_idle else None
                     if is_idle:
                         room["info"][user_id]["mic_on"] = False
                         room["info"][user_id]["camera_on"] = False
@@ -1614,6 +1652,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                             "type": "user_idle_status",
                             "user_id": user_id,
                             "is_idle": is_idle,
+                            "idle_since": room["info"].get(user_id, {}).get("idle_since"),
                         })
                     except Exception:
                         pass
@@ -1641,6 +1680,9 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
         user_name = (room["info"].get(user_id) or {}).get("name", "Someone")
         user_was_host = room.get("host_id") == user_id
 
+        if room["conns"].get(user_id) is not websocket:
+            return
+
         room["conns"].pop(user_id, None)
 
         if not explicit_leave:
@@ -1648,6 +1690,9 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                 room["info"][user_id]["mic_on"] = False
                 room["info"][user_id]["camera_on"] = False
                 room["info"][user_id]["idle"] = True
+                room["info"][user_id]["idle_since"] = (
+                    room["info"][user_id].get("idle_since") or time.time()
+                )
             for uid, ws in list(room["conns"].items()):
                 if ws:
                     try:
@@ -1655,6 +1700,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                             "type": "user_idle_status",
                             "user_id": user_id,
                             "is_idle": True,
+                            "idle_since": room["info"].get(user_id, {}).get("idle_since"),
                         })
                     except Exception:
                         pass

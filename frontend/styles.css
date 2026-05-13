@@ -1079,18 +1079,21 @@ footer p {
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
 }
 
-.conv-participant-card.idle .conv-card-box {
-  border-color: #facc15 !important;
-  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.32);
+.conv-participant-card.idle .conv-card-name-txt {
+  color: #facc15;
 }
 
-.conv-participant-card.idle .conv-card-name-bar {
-  background: rgba(250, 204, 21, 0.88);
+.conv-card-idle-timer {
+  display: none;
+  flex: 0 0 auto;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #facc15;
+  white-space: nowrap;
 }
 
-.conv-participant-card.idle .conv-card-name-txt,
-.conv-participant-card.idle .conv-card-lang-badge {
-  color: #111827;
+.conv-participant-card.idle .conv-card-idle-timer {
+  display: inline-flex;
 }
 
 /* Initials placeholder (shown when cam off) */
@@ -2531,11 +2534,6 @@ footer p {
 #convActive .conv-participant-card.speaking .conv-card-box {
   border-color: #22c55e !important;
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
-}
-
-#convActive .conv-participant-card.idle .conv-card-box {
-  border-color: #facc15 !important;
-  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.34);
 }
 
 /* ── Transcript panel ── */
