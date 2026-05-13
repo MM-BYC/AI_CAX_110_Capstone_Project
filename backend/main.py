@@ -273,8 +273,17 @@ def _b64url_json(data: dict) -> str:
 def _livekit_token(identity: str, name: str, room_id: str) -> str:
     api_key = os.getenv("LIVEKIT_API_KEY", "").strip()
     api_secret = os.getenv("LIVEKIT_API_SECRET", "").strip()
-    if not api_key or not api_secret:
-        raise HTTPException(status_code=503, detail="LiveKit is not configured")
+    missing = []
+    if not api_key:
+        missing.append("LIVEKIT_API_KEY")
+    if not api_secret:
+        missing.append("LIVEKIT_API_SECRET")
+    if missing:
+        logger.error("LiveKit configuration missing: %s", ", ".join(missing))
+        raise HTTPException(
+            status_code=503,
+            detail=f"LiveKit missing environment variable(s): {', '.join(missing)}",
+        )
 
     now = int(time.time())
     header = {"alg": "HS256", "typ": "JWT"}
@@ -680,7 +689,11 @@ async def livekit_video_token(room_id: str, identity: str, name: str, request: R
     _bearer_email(request)
     livekit_url = os.getenv("LIVEKIT_URL", "").strip()
     if not livekit_url:
-        raise HTTPException(status_code=503, detail="LiveKit is not configured")
+        logger.error("LiveKit configuration missing: LIVEKIT_URL")
+        raise HTTPException(
+            status_code=503,
+            detail="LiveKit missing environment variable(s): LIVEKIT_URL",
+        )
     if not room_id or not identity:
         raise HTTPException(status_code=400, detail="room_id and identity are required")
     return {
