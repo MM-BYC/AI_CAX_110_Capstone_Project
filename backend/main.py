@@ -10,6 +10,7 @@ import logging
 import tempfile
 import threading
 import time
+import hashlib
 from collections import deque
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -139,6 +140,7 @@ import pricing_store  # noqa: E402
 import mongo_store  # noqa: E402
 import email_service  # noqa: E402
 import conversation_history_store  # noqa: E402
+import admin_store  # noqa: E402
 import style_profiler  # noqa: E402
 import security  # noqa: E402
 import voice_clone  # noqa: E402  # standalone XTTS-v2 voice cloning module
@@ -262,20 +264,19 @@ def _bearer_email(request: Request) -> str:
     return email
 
 
-def _admin_token() -> str:
-    secret = os.getenv("ADMIN_PASSWORD", "").strip()
-    if not secret:
-        secret = os.getenv("TRANSLATE_API_KEY", "").strip() or "local-admin"
-    return secrets.token_urlsafe(12) + "." + str(abs(hash(secret)) % 10_000_000)
+_active_admin_tokens: dict[str, dict] = {}
 
 
-_active_admin_tokens: set[str] = set()
+def _hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
 
 
-def _require_admin(request: Request) -> None:
+def _require_admin(request: Request) -> dict:
     token = request.headers.get("X-Admin-Token", "").strip()
-    if not token or token not in _active_admin_tokens:
+    admin = _active_admin_tokens.get(token)
+    if not token or not admin:
         raise HTTPException(status_code=403, detail="Admin login required")
+    return admin
 
 def _format_trial_charge_date(trial_ends_at: float) -> str:
     return time.strftime("%Y-%m-%d", time.localtime(trial_ends_at))
@@ -561,6 +562,7 @@ class ConversationSummaryMessage(BaseModel):
 class ConversationSummaryRequest(BaseModel):
     messages: list[ConversationSummaryMessage]
     participants: list[str] = []
+    participant_emails: list[str] = []
     target_language: str = "en"
     room_id: str = ""
 
@@ -571,11 +573,18 @@ class HistoryDateRangeRequest(BaseModel):
 
 
 class HistoryEmailRequest(BaseModel):
-    recipient: str
+    recipient: str = ""
     content_type: str = "both"
 
 
+class AdminSignupRequest(BaseModel):
+    email: str
+    password: str
+    role: str = "admin"
+
+
 class AdminLoginRequest(BaseModel):
+    email: str
     password: str
 
 
@@ -790,10 +799,20 @@ async def conversation_summary(body: ConversationSummaryRequest, request: Reques
         summary = _extract_json_object(content)
         try:
             owner_email = _bearer_email(request)
+            room_info = _rooms.get(body.room_id, {}).get("info", {}) if body.room_id else {}
+            participant_emails = list(body.participant_emails or [])
+            participant_names = list(body.participants or [])
+            for info in room_info.values():
+                if info.get("email"):
+                    participant_emails.append(info["email"])
+                if info.get("name") and info["name"] not in participant_names:
+                    participant_names.append(info["name"])
+            participant_emails.append(owner_email)
             conversation_history_store.save_record(
                 owner_email=owner_email,
                 room_id=body.room_id,
-                participants=body.participants,
+                participants=participant_names,
+                participant_emails=participant_emails,
                 participant_language=body.target_language,
                 summary=summary,
                 messages=[m.model_dump() for m in rows],
@@ -867,7 +886,13 @@ def _format_history_chat_lines(record: dict) -> list[str]:
     return lines
 
 
-def _format_history_email(record: dict, content_type: str = "both") -> str:
+def _format_history_email(
+    record: dict,
+    content_type: str = "both",
+    *,
+    admin_email: str = "",
+    cc: list[str] | None = None,
+) -> str:
     content_type = content_type if content_type in {"both", "summary", "chat"} else "both"
     lines = [
         "AI Translate conversation history",
@@ -876,6 +901,9 @@ def _format_history_email(record: dict, content_type: str = "both") -> str:
         f"Created: {record.get('created_at', 'Not identified')}",
         f"Room: {record.get('room_id') or 'Not identified'}",
         f"Participants: {', '.join(record.get('participants', [])) or 'Not identified'}",
+        f"Participant Emails: {', '.join(record.get('participant_emails', [])) or 'Not identified'}",
+        f"To/From Admin: {admin_email or 'Not identified'}",
+        f"Cc Participants: {', '.join(cc or []) or 'None'}",
         f"Included Content: {content_type}",
         "",
     ]
@@ -925,6 +953,8 @@ async def conversation_history_email(record_id: str, body: HistoryEmailRequest, 
     record = conversation_history_store.get_record(owner_email, record_id)
     if not record:
         raise HTTPException(status_code=404, detail="History record not found")
+    if not body.recipient.strip():
+        raise HTTPException(status_code=400, detail="Recipient email is required")
     content_type = body.content_type if body.content_type in {"both", "summary", "chat"} else "both"
     subject_content = {
         "both": "summary and full chat",
@@ -939,22 +969,90 @@ async def conversation_history_email(record_id: str, body: HistoryEmailRequest, 
     return {"status": "sent", "delivery": sent.get("delivery", "unknown")}
 
 
+@app.post("/api/v1/admin/signup")
+async def admin_signup(body: AdminSignupRequest):
+    if not body.email.strip() or not body.password:
+        raise HTTPException(status_code=400, detail="Admin email and password are required")
+    admin = admin_store.create_admin(
+        body.email,
+        _hash_password(body.password),
+        role=body.role or "admin",
+    )
+    if not admin:
+        raise HTTPException(status_code=400, detail="Admin account already exists")
+    return {
+        "status": "success",
+        "email": admin["email"],
+        "role": admin.get("role", "admin"),
+        "privileges": admin.get("privileges", {}),
+    }
+
+
 @app.post("/api/v1/admin/login")
 async def admin_login(body: AdminLoginRequest):
-    expected = os.getenv("ADMIN_PASSWORD", "").strip()
-    if not expected:
-        expected = os.getenv("TRANSLATE_API_KEY", "").strip()
-    if not expected:
-        raise HTTPException(status_code=503, detail="ADMIN_PASSWORD is not configured")
-    if not secrets.compare_digest(body.password, expected):
+    admin = admin_store.get_admin(body.email)
+    if not admin or not secrets.compare_digest(admin.get("password_hash", ""), _hash_password(body.password)):
         raise HTTPException(status_code=401, detail="Invalid admin password")
-    token = _admin_token()
-    _active_admin_tokens.add(token)
+    token = secrets.token_urlsafe(32)
+    _active_admin_tokens[token] = {
+        "email": admin["email"],
+        "role": admin.get("role", "admin"),
+        "privileges": admin.get("privileges", {}),
+    }
     return {
         "status": "success",
         "admin_token": token,
+        "email": admin["email"],
+        "role": admin.get("role", "admin"),
+        "privileges": admin.get("privileges", {}),
         "retention_days": conversation_history_store.get_retention_days(),
     }
+
+
+@app.get("/api/v1/admin/conversation-history/dates")
+async def admin_history_dates(request: Request, start_date: str = "", end_date: str = ""):
+    _require_admin(request)
+    return {
+        "retention_days": conversation_history_store.get_retention_days(),
+        "dates": conversation_history_store.list_all_dates(start_date, end_date),
+    }
+
+
+@app.get("/api/v1/admin/conversation-history/date/{date}")
+async def admin_history_by_date(date: str, request: Request):
+    _require_admin(request)
+    return {"date": date, "records": conversation_history_store.list_all_records_for_date(date)}
+
+
+@app.delete("/api/v1/admin/conversation-history/date/{date}")
+async def admin_history_delete_date(date: str, request: Request):
+    _require_admin(request)
+    deleted = conversation_history_store.delete_date_all(date)
+    return {"date": date, "deleted_records": deleted}
+
+
+@app.post("/api/v1/admin/conversation-history/record/{record_id}/email")
+async def admin_history_email(record_id: str, body: HistoryEmailRequest, request: Request):
+    admin = _require_admin(request)
+    record = conversation_history_store.get_record_any(record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="History record not found")
+    content_type = body.content_type if body.content_type in {"both", "summary", "chat"} else "both"
+    subject_content = {
+        "both": "summary and full chat",
+        "summary": "summary",
+        "chat": "full chat",
+    }[content_type]
+    admin_email = admin["email"]
+    cc = [e for e in record.get("participant_emails", []) if e.lower() != admin_email.lower()]
+    sent = email_service.send_email(
+        admin_email,
+        f"AI Translate {subject_content} - {record.get('local_date', '')}",
+        _format_history_email(record, content_type, admin_email=admin_email, cc=cc),
+        cc=cc,
+        from_email=admin_email,
+    )
+    return {"status": "sent", "delivery": sent.get("delivery", "unknown"), "cc": cc}
 
 
 @app.get("/api/v1/admin/conversation-history/retention")
@@ -965,7 +1063,9 @@ async def admin_get_retention(request: Request):
 
 @app.put("/api/v1/admin/conversation-history/retention")
 async def admin_set_retention(body: RetentionRequest, request: Request):
-    _require_admin(request)
+    admin = _require_admin(request)
+    if not admin.get("privileges", {}).get("maintain_retention_days"):
+        raise HTTPException(status_code=403, detail="Admin lacks retention privilege")
     return conversation_history_store.set_retention_days(body.retention_days)
 
 
@@ -1168,6 +1268,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
     room["conns"][user_id] = websocket
     room["info"][user_id] = {
         "name": data["name"],
+        "email": data.get("email", ""),
         "language": data["language"],
         "is_host": is_host,
         "mic_on": False,
@@ -1175,16 +1276,26 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
     }
 
     # Confirm join with full room snapshot
+    def _public_user(uid: str, info: dict) -> dict:
+        return {
+            "user_id": uid,
+            "name": info.get("name", ""),
+            "language": info.get("language", "en"),
+            "is_host": bool(info.get("is_host")),
+            "mic_on": bool(info.get("mic_on")),
+            "camera_on": bool(info.get("camera_on")),
+        }
+
     await websocket.send_json({
         "type": "joined",
         "user_id": user_id,
         "room": room_id,
         "is_host": is_host,
-        "users": [{"user_id": uid, **info} for uid, info in room["info"].items()],
+        "users": [_public_user(uid, info) for uid, info in room["info"].items()],
     })
 
     # Announce arrival to everyone already in the room
-    new_user = {"user_id": user_id, **room["info"][user_id]}
+    new_user = _public_user(user_id, room["info"][user_id])
     for uid, ws in list(room["conns"].items()):
         if uid != user_id:
             try:

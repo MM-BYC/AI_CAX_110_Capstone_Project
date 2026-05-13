@@ -119,6 +119,7 @@ def save_record(
     owner_email: str,
     room_id: str,
     participants: list[str],
+    participant_emails: list[str],
     participant_language: str,
     summary: dict,
     messages: list[dict],
@@ -136,6 +137,7 @@ def save_record(
         "created_at": _now_iso(),
         "created_at_ts": now,
         "participants": participants,
+        "participant_emails": _unique_emails(participant_emails),
         "participant_language": participant_language,
         "summary": summary,
         "chat_messages": messages,
@@ -159,6 +161,15 @@ def save_record(
 def list_dates(owner_email: str, start_date: str = "", end_date: str = "") -> list[dict]:
     purge_expired()
     query = {"owner_email": owner_email.lower()}
+    return _list_dates_query(query, start_date, end_date)
+
+
+def list_all_dates(start_date: str = "", end_date: str = "") -> list[dict]:
+    purge_expired()
+    return _list_dates_query({}, start_date, end_date)
+
+
+def _list_dates_query(query: dict, start_date: str = "", end_date: str = "") -> list[dict]:
     date_query = {}
     if start_date:
         date_query["$gte"] = start_date
@@ -182,18 +193,29 @@ def list_dates(owner_email: str, start_date: str = "", end_date: str = "") -> li
             continue
         item = grouped.setdefault(
             date,
-            {"date": date, "count": 0, "latest_created_at": "", "participants": []},
+            {"date": date, "count": 0, "latest_created_at": "", "participants": [], "participant_emails": []},
         )
         item["count"] += 1
         item["latest_created_at"] = max(item["latest_created_at"], doc.get("created_at", ""))
         for p in doc.get("participants", []):
             if p and p not in item["participants"]:
                 item["participants"].append(p)
+        for e in doc.get("participant_emails", []):
+            if e and e not in item["participant_emails"]:
+                item["participant_emails"].append(e)
     return sorted(grouped.values(), key=lambda r: r["date"], reverse=True)
 
 
 def list_records_for_date(owner_email: str, date: str) -> list[dict]:
     query = {"owner_email": owner_email.lower(), "local_date": date}
+    return _list_records_query(query)
+
+
+def list_all_records_for_date(date: str) -> list[dict]:
+    return _list_records_query({"local_date": date})
+
+
+def _list_records_query(query: dict) -> list[dict]:
     coll = _records()
     if coll is not None:
         docs = coll.find(query).sort("created_at_ts", -1)
@@ -206,6 +228,14 @@ def list_records_for_date(owner_email: str, date: str) -> list[dict]:
 
 def get_record(owner_email: str, record_id: str) -> dict | None:
     query = {"owner_email": owner_email.lower(), "id": record_id}
+    return _get_record_query(query)
+
+
+def get_record_any(record_id: str) -> dict | None:
+    return _get_record_query({"id": record_id})
+
+
+def _get_record_query(query: dict) -> dict | None:
     coll = _records()
     if coll is not None:
         return mongo_store.strip_id(coll.find_one(query))
@@ -217,6 +247,14 @@ def get_record(owner_email: str, record_id: str) -> dict | None:
 
 def delete_date(owner_email: str, date: str) -> int:
     query = {"owner_email": owner_email.lower(), "local_date": date}
+    return _delete_query(query)
+
+
+def delete_date_all(date: str) -> int:
+    return _delete_query({"local_date": date})
+
+
+def _delete_query(query: dict) -> int:
     coll = _records()
     if coll is not None:
         result = coll.delete_many(query)
@@ -235,6 +273,7 @@ def _summary_record(record: dict) -> dict:
         "local_date": record.get("local_date"),
         "created_at": record.get("created_at"),
         "participants": record.get("participants", []),
+        "participant_emails": record.get("participant_emails", []),
         "participant_language": record.get("participant_language", ""),
         "summary": record.get("summary", {}),
         "metadata": record.get("metadata", {}),
@@ -253,3 +292,15 @@ def _match_record(record: dict, query: dict) -> bool:
         if actual != expected:
             return False
     return True
+
+
+def _unique_emails(emails: list[str]) -> list[str]:
+    seen = set()
+    result = []
+    for email in emails:
+        email = (email or "").strip().lower()
+        if not email or email in seen:
+            continue
+        seen.add(email)
+        result.append(email)
+    return result

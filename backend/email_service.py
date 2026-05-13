@@ -24,9 +24,19 @@ def _append_outbox(message: dict) -> None:
     OUTBOX_FILE.write_text(json.dumps(messages, indent=2))
 
 
-def send_email(to_email: str, subject: str, body: str) -> dict:
+def send_email(
+    to_email: str,
+    subject: str,
+    body: str,
+    *,
+    cc: list[str] | None = None,
+    from_email: str = "",
+) -> dict:
+    cc = [e.strip() for e in (cc or []) if e and e.strip()]
     message = {
         "to": to_email,
+        "cc": cc,
+        "from": from_email,
         "subject": subject,
         "body": body,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -45,8 +55,10 @@ def send_email(to_email: str, subject: str, body: str) -> dict:
     use_tls = os.getenv("SMTP_TLS", "true").lower() != "false"
 
     email = EmailMessage()
-    email["From"] = sender
+    email["From"] = from_email.strip() or sender
     email["To"] = to_email
+    if cc:
+        email["Cc"] = ", ".join(cc)
     email["Subject"] = subject
     email.set_content(body)
 
