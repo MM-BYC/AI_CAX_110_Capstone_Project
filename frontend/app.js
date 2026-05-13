@@ -2280,6 +2280,45 @@ function convHandleMessage(msg) {
   }
 }
 
+async function convMicPermissionState() {
+  if (!navigator.permissions?.query) return "unknown";
+  try {
+    const status = await navigator.permissions.query({ name: "microphone" });
+    return status.state || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function convBlockedMicMessage() {
+  return (
+    "Microphone permission is blocked for this site.\n\n" +
+    "Browser check:\n" +
+    "  Click the lock icon in the address bar\n" +
+    "  → Site Settings → Microphone → Allow → reload the page.\n\n" +
+    "macOS check:\n" +
+    "  System Settings → Privacy & Security → Microphone\n" +
+    "  → make sure your browser is toggled ON."
+  );
+}
+
+function convMicUnavailableMessage(permissionState = "unknown") {
+  if (permissionState === "denied") return convBlockedMicMessage();
+  if (_isSafari) {
+    return (
+      "Microphone could not start.\n\n" +
+      "Safari can block the mic when another tab, window, or app is already using it. " +
+      "Close other mic sessions, reload this page, then tap the mic again.\n\n" +
+      "If Safari asks for microphone permission, choose Allow."
+    );
+  }
+  return (
+    "Microphone could not start.\n\n" +
+    "If the browser asks for permission, choose Allow. If it does not ask, reload the page " +
+    "and check the lock icon in the address bar for microphone settings."
+  );
+}
+
 // ── Mic start / stop ───────────────────────────────────────────────────────
 async function convStartListening() {
   if (!SpeechRecognition) {
@@ -2293,6 +2332,12 @@ async function convStartListening() {
       "Microphone access requires a secure connection.\n\n" +
         "Open this app via HTTPS or http://localhost instead of a plain HTTP address.",
     );
+    return;
+  }
+
+  const permissionState = await convMicPermissionState();
+  if (permissionState === "denied") {
+    alert(convBlockedMicMessage());
     return;
   }
 
@@ -2349,26 +2394,10 @@ async function convStartListening() {
     convRecognition.start();
   };
 
-  convRecognition.onerror = (e) => {
+  convRecognition.onerror = async (e) => {
     if (e.error === "not-allowed") {
       convStopListening();
-      const safariNote = _isSafari
-        ? "Safari limitation detected:\n" +
-          "  Safari allows only ONE tab to use the mic at a time.\n" +
-          "  If another tab in this Safari window is using the mic,\n" +
-          "  that tab blocks all others.\n\n" +
-          "  ► In production (different devices / phones), this is not an issue.\n\n"
-        : "";
-      alert(
-        "Microphone blocked — browser cannot access the mic.\n\n" +
-          safariNote +
-          "macOS check:\n" +
-          "  System Settings → Privacy & Security → Microphone\n" +
-          "  → make sure your browser is toggled ON\n\n" +
-          "Browser check:\n" +
-          "  Click the lock icon in the address bar\n" +
-          "  → Site Settings → Microphone → Allow → reload the page.",
-      );
+      alert(convMicUnavailableMessage(await convMicPermissionState()));
     } else if (e.error === "service-not-allowed") {
       // On Safari/iOS, "service-not-allowed" has two causes:
       // 1. Page is served over plain HTTP (not HTTPS) — Safari blocks STT on HTTP
