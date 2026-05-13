@@ -536,8 +536,8 @@ function showAuthModal(mode = "login") {
           <span class="landing-brand-mark"><i data-lucide="languages"></i></span>
           <span>AI Translate</span>
         </div>
-        <h1>Real-time translation for live conversations.</h1>
-        <p class="landing-copy">Create secure rooms, invite participants, and keep multilingual discussions moving with speech, text, and media translation in one workspace.</p>
+        <h1>Speak Live. One Room. Real-Time Meetings, Locally Translated.</h1>
+        <p class="landing-copy">Create secure rooms, invite participants, and let everyone follow the discussion in their own selected language across speech, text, and shared media.</p>
         <div class="landing-proof">
           <div><strong>16</strong><span>Languages</span></div>
           <div><strong>Conversation</strong><span>Rooms</span></div>
