@@ -287,6 +287,18 @@ function logout() {
   endBrowserSession({ showLogin: true, notifyRoom: true });
 }
 
+function prepareConversationPageExit() {
+  // A refresh, tab close, or dropped mobile browser session is not a logout.
+  // Do local media cleanup only; the server will mark this participant idle
+  // from the WebSocket close while everyone else stays in the room.
+  try {
+    convStopListening();
+    convStopIosMic();
+    convStopCamera();
+    livekitDisconnectVideo();
+  } catch {}
+}
+
 function updateAuthHeader() {
   document.querySelectorAll(".app-logout-btn").forEach((btn) => {
     btn.style.display = currentUserToken ? "inline-flex" : "none";
@@ -5266,10 +5278,5 @@ window.addEventListener("DOMContentLoaded", () => {
   updateAuthHeader();
 });
 
-window.addEventListener("pagehide", () => {
-  endBrowserSession();
-});
-
-window.addEventListener("beforeunload", () => {
-  endBrowserSession();
-});
+window.addEventListener("pagehide", prepareConversationPageExit);
+window.addEventListener("beforeunload", prepareConversationPageExit);
