@@ -2616,10 +2616,12 @@ function convStopListening() {
   if (!_isSafari) webrtcStopAudio();
 }
 
-// ── iOS mic — AudioContext → ScriptProcessorNode → Google STT streaming ─────
+// ── Conversation mic — AudioContext → ScriptProcessorNode → Google STT ─────
 // Raw LINEAR16 PCM is streamed continuously to /ws/stt/. Final transcripts
-// from Google Cloud Speech are injected directly into the translation
-// pipeline — no chunked HTTP calls needed.
+// from Google Cloud Speech are injected directly into the translation pipeline.
+// This is the primary path for conversation mode across Android Chrome,
+// iPhone Safari, iPhone Chrome, and desktop browsers so language handling is
+// consistent for Tagalog and every supported participant language.
 
 let _iosMicStream = null;
 let _iosAudioCtx = null;
@@ -2630,13 +2632,21 @@ let _iosStarting = false; // guard against double-tap race
 let _iosSttReconnectCount = 0;
 const _IOS_STT_MAX_RECONNECT = 6;
 
+function convCanUseBackendStt() {
+  return !!(
+    navigator.mediaDevices?.getUserMedia &&
+    (window.AudioContext || window.webkitAudioContext) &&
+    window.WebSocket
+  );
+}
+
 async function convStartIosMic() {
   if (_iosStarting || _iosMicActive) return;
   _iosStarting = true;
   try {
     await _convStartIosMicInner();
   } catch (err) {
-    console.error("[iOS mic] unexpected error during startup:", err);
+    console.error("[conversation mic] unexpected error during startup:", err);
     _iosMicStream?.getTracks().forEach((t) => t.stop());
     _iosMicStream = null;
     _iosAudioCtx?.close();
@@ -2667,9 +2677,7 @@ async function _convStartIosMicInner() {
     });
   } catch {
     _micTrace("Tap to speak");
-    alert(
-      "Microphone access denied.\n\nSettings → Safari → Microphone → Allow, then reload.",
-    );
+    alert(convMicUnavailableMessage(await convMicPermissionState()));
     return;
   }
   _micTrace("Mic granted, building audio context…");
@@ -2686,7 +2694,7 @@ async function _convStartIosMicInner() {
 
   const lang = convUsers[convUserId]?.language || convLangSelect.value || "en";
   const wsUrl = _buildIosSttWsUrl();
-  console.log("[mic] WS URL:", wsUrl);
+  console.log(`[mic] STT language=${lang} WS URL:`, wsUrl);
   _iosSttWs = new WebSocket(wsUrl);
   _iosSttWs.binaryType = "arraybuffer";
 
@@ -2699,7 +2707,7 @@ async function _convStartIosMicInner() {
 
   if (!opened) {
     _micTrace("Tap to speak");
-    console.error("[iOS mic] STT WS failed to open");
+    console.error("[conversation mic] STT WS failed to open");
     alert(
       "Could not connect to transcription service.\n\nCheck that API keys are set on Render.",
     );
@@ -2729,7 +2737,7 @@ async function _convStartIosMicInner() {
 
   if (!_iosSttWs || _iosSttWs.readyState !== WebSocket.OPEN) {
     _micTrace("Tap to speak");
-    console.error("[iOS mic] STT WS closed immediately:", _sttCloseReason);
+    console.error("[conversation mic] STT WS closed immediately:", _sttCloseReason);
     alert(
       "Mic connection failed — server closed immediately.\n\n" +
         (_sttCloseReason
@@ -2882,7 +2890,7 @@ function _reconnectIosSttWs() {
 
 convMicBtn.addEventListener("click", () => {
   _unlockTts();
-  if (_isIOS) {
+  if (convCanUseBackendStt()) {
     if (_iosMicActive) {
       convStopIosMic();
     } else {

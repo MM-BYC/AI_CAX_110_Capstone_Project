@@ -1406,6 +1406,10 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
         "idle": False,
         "idle_since": None,
     }
+    logger.info(
+        "Conversation join: room=%s user=%s name=%r language=%s reconnected=%s",
+        room_id, user_id, data["name"], data["language"], reconnected_existing_user,
+    )
 
     # Confirm join with full room snapshot
     def _public_user(uid: str, info: dict) -> dict:
@@ -1937,15 +1941,23 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str,
         await websocket.close(code=1011, reason="Google STT credentials not configured")
         return
 
-    lang_code = _GOOGLE_LANG.get(language, "en-US")
-
     # Cache the speaker's display name so inject_speech can still label
     # broadcasts if the speaker's conversation WS drops mid-session
     # (e.g. after a Render redeploy wipes _rooms).
     _cached_room = _rooms.get(room_id)
     speaker_name = ""
     if _cached_room:
-        speaker_name = (_cached_room["info"].get(user_id) or {}).get("name", "")
+        speaker_info = _cached_room["info"].get(user_id) or {}
+        speaker_name = speaker_info.get("name", "")
+        room_language = speaker_info.get("language")
+        if room_language and room_language != language:
+            logger.warning(
+                "STT language override: room=%s user=%s client_lang=%s room_lang=%s",
+                room_id, user_id, language, room_language,
+            )
+            language = room_language
+
+    lang_code = _GOOGLE_LANG.get(language, "en-US")
 
     logger.info("STT session opening: room=%s user=%s requested_lang=%s lang=%s rate=%d",
                 room_id, user_id, language, lang_code, sample_rate)
