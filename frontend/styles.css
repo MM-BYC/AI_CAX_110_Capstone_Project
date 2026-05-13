@@ -2689,10 +2689,10 @@ footer p {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
+  gap: 0.7rem;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 2.5rem;
+  padding: clamp(1rem, 3vh, 2rem);
   font-family:
     "Inter", "Lato", "Open Sans", "Helvetica Neue", "Segoe UI", system-ui,
     sans-serif;
@@ -2713,6 +2713,7 @@ footer p {
 
 .landing-shell {
   width: min(1120px, 100%);
+  max-height: calc(100dvh - 4.2rem);
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(380px, 0.78fr);
   align-items: stretch;
@@ -2725,7 +2726,7 @@ footer p {
 
 .landing-hero {
   color: #172033;
-  padding: clamp(2rem, 5vw, 4.5rem);
+  padding: clamp(1.5rem, 3.4vw, 3.2rem);
   background:
     linear-gradient(150deg, rgba(255, 255, 255, 0.92), rgba(224, 242, 254, 0.72) 48%, rgba(204, 251, 241, 0.58)),
     url("https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1400&q=80") center / cover;
@@ -2734,7 +2735,7 @@ footer p {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 680px;
+  min-height: min(620px, calc(100dvh - 4.2rem));
 }
 
 .landing-brand {
@@ -2745,7 +2746,7 @@ footer p {
   font-size: 1rem;
   font-weight: 900;
   letter-spacing: 0.01em;
-  margin-bottom: 2.2rem;
+  margin-bottom: clamp(1rem, 2.2vh, 1.7rem);
 }
 
 .landing-brand-mark {
@@ -2768,7 +2769,7 @@ footer p {
 .landing-hero h1 {
   max-width: 620px;
   color: #101827;
-  font-size: 4.15rem;
+  font-size: clamp(2.8rem, 5.4vw, 3.85rem);
   line-height: 1;
   letter-spacing: 0;
   margin: 0;
@@ -2777,12 +2778,12 @@ footer p {
 
 .landing-copy {
   max-width: 580px;
-  margin: 1.3rem 0 0;
+  margin: clamp(0.8rem, 1.8vh, 1.1rem) 0 0;
   color: #243244;
   font-size: 1.08rem;
   line-height: 1.7;
   width: fit-content;
-  padding: 0.85rem 1rem;
+  padding: 0.72rem 0.9rem;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 8px;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(240, 253, 250, 0.82));
@@ -2793,7 +2794,7 @@ footer p {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
-  margin-top: 2.2rem;
+  margin-top: clamp(1rem, 2.2vh, 1.6rem);
   max-width: 560px;
 }
 
@@ -2801,7 +2802,7 @@ footer p {
   border: 1px solid rgba(15, 118, 110, 0.16);
   background: rgba(255, 255, 255, 0.68);
   border-radius: 8px;
-  padding: 0.9rem;
+  padding: 0.72rem 0.8rem;
   box-shadow: 0 12px 26px rgba(15, 23, 42, 0.08);
 }
 
@@ -2812,7 +2813,7 @@ footer p {
 
 .landing-proof strong {
   color: #101827;
-  font-size: 1.35rem;
+  font-size: 1.18rem;
   line-height: 1.1;
 }
 
@@ -2827,8 +2828,8 @@ footer p {
 .landing-feature-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.7rem;
-  margin-top: 1.4rem;
+  gap: 0.55rem;
+  margin-top: clamp(0.8rem, 1.8vh, 1.1rem);
 }
 
 .landing-feature-list span {
@@ -2853,12 +2854,14 @@ footer p {
 
 .landing-auth-card {
   max-width: none;
-  min-height: 680px;
+  min-height: min(620px, calc(100dvh - 4.2rem));
+  max-height: calc(100dvh - 4.2rem);
+  overflow-y: auto;
   background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
   border: none;
   border-radius: 0;
   box-shadow: none;
-  padding: clamp(1.5rem, 4vw, 3rem);
+  padding: clamp(1.25rem, 2.7vw, 2.2rem);
   justify-content: flex-start;
 }
 
@@ -2875,7 +2878,7 @@ footer p {
 }
 
 .auth-header h2 {
-  font-size: 1.7rem;
+  font-size: 1.52rem;
   font-weight: 800;
   color: #101827;
   margin-bottom: 0.5rem;
@@ -2894,7 +2897,7 @@ footer p {
   background: #eef2f7;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  margin-bottom: 1.4rem;
+  margin-bottom: 1rem;
 }
 
 .auth-mode-switch button {
@@ -2906,7 +2909,7 @@ footer p {
   font: inherit;
   font-size: 0.82rem;
   font-weight: 800;
-  padding: 0.62rem 0.75rem;
+  padding: 0.52rem 0.65rem;
 }
 
 .auth-mode-switch button.active {
@@ -2924,8 +2927,8 @@ footer p {
 .auth-tab-body {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  min-height: 28rem;
+  gap: 1rem;
+  min-height: 0;
 }
 
 .auth-input-group {
@@ -3021,7 +3024,7 @@ footer p {
 .pricing-plans {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 0.75rem;
+  gap: 0.55rem;
   margin: 0.25rem 0 0.25rem;
   text-align: left;
 }
@@ -3029,7 +3032,7 @@ footer p {
 .pricing-continue {
   width: 100%;
   justify-content: center;
-  min-height: 46px;
+  min-height: 42px;
   margin-top: 0.25rem;
   font-weight: 800;
 }
@@ -3044,7 +3047,7 @@ footer p {
   background: #f8fafc;
   border: 1px solid #dbe3ef;
   border-radius: 8px;
-  padding: 1rem;
+  padding: 0.78rem 0.85rem;
   position: relative;
   transition:
     background 0.18s ease,
@@ -3089,10 +3092,10 @@ footer p {
 }
 
 .price {
-  font-size: 1.45rem;
+  font-size: 1.28rem;
   font-weight: 800;
   color: #111827;
-  margin: 0.45rem 0;
+  margin: 0.3rem 0;
 }
 
 .price span {
