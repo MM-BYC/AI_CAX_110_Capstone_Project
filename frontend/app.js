@@ -1755,7 +1755,6 @@ function _buildCard(uid, user) {
   // ── Square video box ──────────────────────────────────────────
   const box = document.createElement("div");
   box.className = "conv-card-box";
-  box.style.borderColor = color;
 
   // Initials placeholder (shown when camera is off). Uniform Space Gray
   // background for all participants — the per-participant palette color is

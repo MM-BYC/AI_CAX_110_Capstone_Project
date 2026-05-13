@@ -1071,12 +1071,19 @@ footer p {
   border-radius: 10px;
   overflow: hidden;
   background: #111827;
-  border: 2px solid #6366f1; /* overridden inline per participant */
-  transition: border-color 0.2s;
+  border: 2px solid #a3e635;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 .conv-participant-card.speaking .conv-card-box {
   border-color: #ef4444 !important;
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+}
+
+.conv-participant-card.idle .conv-card-box {
+  border-color: #e11d48;
+  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.24);
 }
 
 .conv-participant-card.idle .conv-card-name-txt {
@@ -1094,6 +1101,22 @@ footer p {
 
 .conv-participant-card.idle .conv-card-idle-timer {
   display: inline-flex;
+}
+
+.conv-participant-card.idle .conv-card-placeholder {
+  animation: idleInitialPulse 1s ease-in-out infinite;
+}
+
+@keyframes idleInitialPulse {
+  0%,
+  100% {
+    color: #ffffff;
+    opacity: 1;
+  }
+  50% {
+    color: #e11d48;
+    opacity: 0.42;
+  }
 }
 
 /* Initials placeholder (shown when cam off) */
@@ -2526,6 +2549,7 @@ footer p {
   width: 100%;
   height: 100%;
   border-radius: 8px;
+  border-color: #a3e635;
 }
 #convActive .conv-card-placeholder {
   font-size: 4rem;
@@ -2534,6 +2558,11 @@ footer p {
 #convActive .conv-participant-card.speaking .conv-card-box {
   border-color: #22c55e !important;
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+}
+
+#convActive .conv-participant-card.idle .conv-card-box {
+  border-color: #e11d48;
+  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.26);
 }
 
 /* ── Transcript panel ── */
