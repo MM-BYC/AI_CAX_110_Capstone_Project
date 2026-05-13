@@ -927,6 +927,28 @@ footer p {
   text-transform: uppercase;
   letter-spacing: 0;
   min-width: 0;
+  padding: 0.65rem 0 0.45rem;
+  border: none;
+  border-bottom: 2px solid #cbd5e1;
+  border-radius: 0;
+  background: transparent;
+  color: #111827;
+  font: inherit;
+  font-size: 0.96rem;
+  outline: none;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.conv-join-row input::placeholder {
+  color: #94a3b8;
+  text-transform: none;
+}
+
+.conv-join-row input:focus {
+  border-bottom-color: #0f766e;
+  box-shadow: 0 2px 0 rgba(15, 118, 110, 0.14);
 }
 
 /* ── Room header bar ── */
