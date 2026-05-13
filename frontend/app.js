@@ -2300,6 +2300,7 @@ function convHandleMessage(msg) {
       });
       convRenderParticipants();
       convShowScreen(convActive);
+      livekitConnectVideo();
       break;
 
     case "user_joined":
@@ -2325,12 +2326,11 @@ function convHandleMessage(msg) {
       convRenderParticipants();
       if (!msg.user.idle) {
         convAddSystemMsg(`${msg.user.name} joined the room.`);
-        webrtcOnUserJoined(msg.user.user_id);
       }
       break;
 
     case "user_left":
-      webrtcOnUserLeft(msg.user_id);
+      livekitDetachRemoteVideo(msg.user_id);
       convClearTyping(msg.user_id);
       convStopIdleTimer(msg.user_id);
       delete convUsers[msg.user_id];
@@ -4135,10 +4135,17 @@ async function convStartCamera() {
   convSetCamUI(true);
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "camera_status", is_on: true }));
-  webrtcStartVideo(stream);
+  try {
+    await livekitPublishVideo(stream);
+  } catch (err) {
+    console.error("[LiveKit] publish camera:", err);
+    showToast(err.message || "Could not start video broadcast.", "error");
+    convStopCamera();
+  }
 }
 
 function convStopCamera() {
+  livekitUnpublishVideo();
   if (convCamStream) {
     convCamStream.getTracks().forEach((t) => t.stop());
     convCamStream = null;
@@ -4155,7 +4162,6 @@ function convStopCamera() {
   convSetCamUI(false);
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "camera_status", is_on: false }));
-  webrtcStopVideo();
 }
 
 function convSetCamUI(isOn) {
@@ -4193,6 +4199,7 @@ function convReset() {
   convStopListening();
   convStopIosMic();
   convStopCamera();
+  livekitDisconnectVideo();
   convSpeakCancel();
   for (const timeoutId of _voiceAwaiting.values()) clearTimeout(timeoutId);
   _voiceAwaiting.clear();
@@ -4473,6 +4480,178 @@ convKeyboardInput.addEventListener("input", () => {
 
 // Stop typing indicator when user clicks/tabs away from the field
 convKeyboardInput.addEventListener("blur", () => _typingStop());
+
+// ── LiveKit video transport ───────────────────────────────────────────────
+// LiveKit replaces the previous peer-to-peer video mesh. Audio/STT translation
+// remains on the existing app pipeline.
+
+let lkRoom = null;
+let lkConnecting = false;
+let lkVideoPublication = null;
+
+function livekitClient() {
+  return window.LivekitClient || null;
+}
+
+function livekitVideoReady() {
+  return !!livekitClient()?.Room;
+}
+
+async function livekitConnectVideo() {
+  if (!convRoomId || !convUserId || lkConnecting) return;
+  if (lkRoom?.state === "connected") return;
+  if (!livekitVideoReady()) {
+    showToast("Video service could not load. Refresh and try again.", "error");
+    return;
+  }
+  if (!currentUserToken) {
+    showToast("Login is required for video.", "error");
+    return;
+  }
+
+  lkConnecting = true;
+  try {
+    const name = convUsers[convUserId]?.name || getAuthenticatedDisplayName() || convUserId;
+    const params = new URLSearchParams({
+      room_id: convRoomId,
+      identity: convUserId,
+      name,
+    });
+    const res = await fetch(`${API_BASE}/api/livekit/token?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${currentUserToken}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || "LiveKit video is unavailable");
+
+    const LK = livekitClient();
+    const room = new LK.Room({
+      adaptiveStream: true,
+      dynacast: true,
+      videoCaptureDefaults: {
+        resolution: LK.VideoPresets?.h540?.resolution,
+      },
+      publishDefaults: {
+        simulcast: true,
+      },
+    });
+
+    room
+      .on(LK.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        livekitAttachRemoteVideo(participant.identity, track);
+      })
+      .on(LK.RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+        livekitDetachRemoteVideo(participant.identity, track);
+      })
+      .on(LK.RoomEvent.ParticipantDisconnected, (participant) => {
+        livekitDetachRemoteVideo(participant.identity);
+      })
+      .on(LK.RoomEvent.Disconnected, () => {
+        lkVideoPublication = null;
+      });
+
+    await room.connect(data.url, data.token, { autoSubscribe: true });
+    lkRoom = room;
+    livekitAttachExistingRemoteVideos();
+  } catch (err) {
+    console.error("[LiveKit] connect:", err);
+    showToast(err.message || "Video service unavailable.", "error");
+  } finally {
+    lkConnecting = false;
+  }
+}
+
+function livekitAttachExistingRemoteVideos() {
+  if (!lkRoom) return;
+  lkRoom.remoteParticipants?.forEach((participant) => {
+    participant.trackPublications?.forEach((publication) => {
+      if (publication?.track) {
+        livekitAttachRemoteVideo(participant.identity, publication.track);
+      }
+    });
+  });
+}
+
+function livekitAttachRemoteVideo(userId, track) {
+  if (!track || userId === convUserId) return;
+  const LK = livekitClient();
+  const isVideo =
+    track.kind === "video" ||
+    track.kind === LK?.Track?.Kind?.Video ||
+    track.source === LK?.Track?.Source?.Camera;
+  if (!isVideo) return;
+
+  const vid = document.getElementById(`conv-card-vid-${userId}`);
+  const ph = document.getElementById(`conv-card-ph-${userId}`);
+  if (!vid) {
+    setTimeout(() => livekitAttachRemoteVideo(userId, track), 250);
+    return;
+  }
+  try {
+    track.attach(vid);
+    vid.autoplay = true;
+    vid.playsInline = true;
+    vid.muted = true;
+    vid.style.display = "block";
+    if (ph) ph.style.display = "none";
+    vid.play?.().catch(() => {});
+  } catch (err) {
+    console.error("[LiveKit] attach remote video:", err);
+  }
+}
+
+function livekitDetachRemoteVideo(userId, track = null) {
+  const vid = document.getElementById(`conv-card-vid-${userId}`);
+  const ph = document.getElementById(`conv-card-ph-${userId}`);
+  if (track) {
+    try {
+      if (vid) track.detach(vid);
+      else track.detach();
+    } catch {}
+  }
+  if (vid) {
+    vid.srcObject = null;
+    vid.style.display = "";
+  }
+  if (ph) ph.style.display = "";
+}
+
+async function livekitPublishVideo(stream) {
+  await livekitConnectVideo();
+  if (!lkRoom || lkRoom.state !== "connected") {
+    throw new Error("LiveKit video room is not connected");
+  }
+  const track = stream.getVideoTracks()[0];
+  if (!track) return;
+  const LK = livekitClient();
+  lkVideoPublication = await lkRoom.localParticipant.publishTrack(track, {
+    source: LK?.Track?.Source?.Camera,
+    name: `camera-${convUserId}`,
+    simulcast: true,
+  });
+}
+
+async function livekitUnpublishVideo() {
+  if (!lkRoom || !lkVideoPublication) return;
+  try {
+    const track = lkVideoPublication.track || convCamStream?.getVideoTracks()[0];
+    if (track) {
+      lkRoom.localParticipant.unpublishTrack(track, false);
+    }
+  } catch (err) {
+    console.warn("[LiveKit] unpublish video:", err);
+  } finally {
+    lkVideoPublication = null;
+  }
+}
+
+function livekitDisconnectVideo() {
+  try {
+    lkRoom?.disconnect();
+  } catch {}
+  lkRoom = null;
+  lkConnecting = false;
+  lkVideoPublication = null;
+}
 
 // ── WebRTC Module ─────────────────────────────────────────────────────────
 const WEBRTC_ICE = [

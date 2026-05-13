@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 import base64
+import hmac
 import queue as _queue
 import random
 import secrets
@@ -262,6 +263,43 @@ def _bearer_email(request: Request) -> str:
         raise HTTPException(status_code=401, detail="Invalid login")
     _check_trial_access(email)
     return email
+
+
+def _b64url_json(data: dict) -> str:
+    raw = json.dumps(data, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _livekit_token(identity: str, name: str, room_id: str) -> str:
+    api_key = os.getenv("LIVEKIT_API_KEY", "").strip()
+    api_secret = os.getenv("LIVEKIT_API_SECRET", "").strip()
+    if not api_key or not api_secret:
+        raise HTTPException(status_code=503, detail="LiveKit is not configured")
+
+    now = int(time.time())
+    header = {"alg": "HS256", "typ": "JWT"}
+    payload = {
+        "iss": api_key,
+        "sub": identity,
+        "name": name,
+        "nbf": now - 10,
+        "exp": now + 60 * 60,
+        "video": {
+            "room": room_id,
+            "roomJoin": True,
+            "canPublish": True,
+            "canSubscribe": True,
+            "canPublishData": False,
+        },
+    }
+    signing_input = f"{_b64url_json(header)}.{_b64url_json(payload)}"
+    sig = hmac.new(
+        api_secret.encode("utf-8"),
+        signing_input.encode("ascii"),
+        hashlib.sha256,
+    ).digest()
+    signature = base64.urlsafe_b64encode(sig).rstrip(b"=").decode("ascii")
+    return f"{signing_input}.{signature}"
 
 
 _active_admin_tokens: dict[str, dict] = {}
@@ -634,6 +672,21 @@ async def create_room():
     # and become its host.
     _rooms[room_id] = {"conns": {}, "info": {}, "host_id": None, "empty_since": time.time(), "speaking": {}}
     return {"room_id": room_id}
+
+
+@app.get("/api/livekit/token")
+async def livekit_video_token(room_id: str, identity: str, name: str, request: Request):
+    """Issue a short-lived LiveKit token for conversation video only."""
+    _bearer_email(request)
+    livekit_url = os.getenv("LIVEKIT_URL", "").strip()
+    if not livekit_url:
+        raise HTTPException(status_code=503, detail="LiveKit is not configured")
+    if not room_id or not identity:
+        raise HTTPException(status_code=400, detail="room_id and identity are required")
+    return {
+        "url": livekit_url,
+        "token": _livekit_token(identity[:128], name[:128] or identity[:128], room_id[:128]),
+    }
 
 
 # ── Enterprise Vocabulary API  (/api/v1/vocabulary) ───────────────────────────

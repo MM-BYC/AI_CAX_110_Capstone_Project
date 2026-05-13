@@ -132,13 +132,13 @@ def _prune_rate_windows() -> None:
 
 # ── Security headers ──────────────────────────────────────────────────────────
 # Content-Security-Policy designed for this SPA:
-#   • scripts from self + unpkg (Lucide CDN) + inline (lucide.createIcons call)
+#   • scripts from self + unpkg/jsDelivr CDNs + inline (lucide.createIcons call)
 #   • styles from self + Google Fonts + inline
 #   • connect to self + any ws:/wss: (WebSocket, same origin enforced at app level)
 #   • media from self + blob: (camera/mic streams)
 _CSP = (
     "default-src 'self'; "
-    "script-src 'self' https://unpkg.com 'unsafe-inline'; "
+    "script-src 'self' https://unpkg.com https://cdn.jsdelivr.net 'unsafe-inline'; "
     "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
     "font-src 'self' https://fonts.gstatic.com; "
     "connect-src 'self' wss: ws:; "
