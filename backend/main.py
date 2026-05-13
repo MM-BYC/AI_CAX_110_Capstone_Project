@@ -1527,6 +1527,16 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
             "idle_since": info.get("idle_since"),
         }
 
+    async def _broadcast_room_snapshot():
+        snapshot = [_public_user(uid, info) for uid, info in room["info"].items()]
+        for _, ws in list(room["conns"].items()):
+            if not ws:
+                continue
+            try:
+                await ws.send_json({"type": "room_snapshot", "users": snapshot})
+            except Exception:
+                pass
+
     await websocket.send_json({
         "type": "joined",
         "user_id": user_id,
@@ -1763,6 +1773,13 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                         })
                     except Exception:
                         pass
+                await _broadcast_room_snapshot()
+
+            elif msg_type == "sync_users":
+                await websocket.send_json({
+                    "type": "room_snapshot",
+                    "users": [_public_user(uid, info) for uid, info in room["info"].items()],
+                })
 
             elif msg_type in ("webrtc_offer", "webrtc_answer", "webrtc_ice"):
                 target_id = data.get("target_id")
@@ -1791,29 +1808,6 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
             return
 
         room["conns"].pop(user_id, None)
-
-        if not explicit_leave:
-            if user_id in room["info"]:
-                room["info"][user_id]["mic_on"] = False
-                room["info"][user_id]["camera_on"] = False
-                room["info"][user_id]["idle"] = True
-                room["info"][user_id]["idle_since"] = (
-                    room["info"][user_id].get("idle_since") or time.time()
-                )
-            for uid, ws in list(room["conns"].items()):
-                if ws:
-                    try:
-                        await ws.send_json({
-                            "type": "user_idle_status",
-                            "user_id": user_id,
-                            "is_idle": True,
-                            "idle_since": room["info"].get(user_id, {}).get("idle_since"),
-                        })
-                    except Exception:
-                        pass
-            if not room["conns"]:
-                room["empty_since"] = time.time()
-            return
 
         room["info"].pop(user_id, None)
 
@@ -1846,6 +1840,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                     await ws.send_json({"type": "user_left", "user_id": user_id, "name": user_name})
                 except Exception:
                     pass
+        await _broadcast_room_snapshot()
 
         if not room["conns"]:
             room["empty_since"] = time.time()

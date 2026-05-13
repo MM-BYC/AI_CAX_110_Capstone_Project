@@ -1954,6 +1954,7 @@ function convParticipantsMatch(a, b) {
 function convRemoveParticipantCard(userId) {
   convStopIdleTimer(userId);
   webrtcOnUserLeft(userId);
+  livekitDetachRemoteVideo(userId);
   convClearTyping(userId);
   const index = _carouselCards.findIndex((c) => c.dataset.uid === userId);
   if (index >= 0) _carouselCards.splice(index, 1);
@@ -1998,6 +1999,34 @@ function convSetUserIdle(userId, isIdle, idleSince = null) {
   }
   if (wasIdle && !isIdle && userId !== convUserId) {
     showToast(`${convUsers[userId]?.name || "Participant"} is back online.`, "success");
+  }
+}
+
+function convApplyRoomSnapshot(users) {
+  const nextUsers = {};
+  (users || []).forEach((u) => {
+    nextUsers[u.user_id] = {
+      name: u.name,
+      language: u.language,
+      is_host: u.is_host,
+      mic_on: u.mic_on || false,
+      camera_on: u.camera_on || false,
+      idle: !!u.idle,
+      idle_since: u.idle_since || null,
+    };
+  });
+
+  Object.keys(convUsers).forEach((uid) => {
+    if (!nextUsers[uid]) convRemoveParticipantCard(uid);
+  });
+  convUsers = nextUsers;
+  convRenderParticipants();
+  livekitAttachExistingRemoteVideos();
+}
+
+function convRequestRoomSnapshot() {
+  if (convWs?.readyState === WebSocket.OPEN) {
+    convWs.send(JSON.stringify({ type: "sync_users" }));
   }
 }
 
@@ -2313,6 +2342,11 @@ function convHandleMessage(msg) {
       convRenderParticipants();
       convShowScreen(convActive);
       livekitConnectVideo();
+      convRequestRoomSnapshot();
+      break;
+
+    case "room_snapshot":
+      convApplyRoomSnapshot(msg.users || []);
       break;
 
     case "user_joined":
@@ -2864,6 +2898,11 @@ function convSendPresence(isIdle) {
 document.addEventListener("visibilitychange", () => {
   if (!convUserId) return;
   convSendPresence(document.hidden);
+  if (!document.hidden) convRequestRoomSnapshot();
+});
+
+window.addEventListener("focus", () => {
+  if (convUserId) convRequestRoomSnapshot();
 });
 
 // Reconnect only the STT WebSocket — mic stays on, audio pipeline keeps running.
