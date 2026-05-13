@@ -2688,7 +2688,7 @@ footer p {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0.7rem;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -2713,7 +2713,6 @@ footer p {
 
 .landing-shell {
   width: min(1120px, 100%);
-  max-height: calc(100dvh - 4.2rem);
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(380px, 0.78fr);
   align-items: stretch;
@@ -2722,6 +2721,7 @@ footer p {
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 34px 90px rgba(3, 7, 18, 0.34);
+  flex: 0 0 auto;
 }
 
 .landing-hero {
@@ -2855,7 +2855,7 @@ footer p {
 .landing-auth-card {
   max-width: none;
   min-height: min(620px, calc(100dvh - 4.2rem));
-  max-height: calc(100dvh - 4.2rem);
+  max-height: none;
   overflow-y: auto;
   background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
   border: none;
