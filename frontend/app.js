@@ -89,10 +89,12 @@ const tabText = document.getElementById("tabText");
 const tabAudio = document.getElementById("tabAudio");
 const tabLive = document.getElementById("tabLive");
 const tabConv = document.getElementById("tabConv");
+const convAdminBtn = document.getElementById("convAdminBtn");
 const textTab = document.getElementById("textTab");
 const audioTab = document.getElementById("audioTab");
 const liveTab = document.getElementById("liveTab");
 const convTab = document.getElementById("convTab");
+const adminTab = document.getElementById("adminTab");
 
 // Live tab elements
 const liveSourceLang = document.getElementById("liveSourceLang");
@@ -172,11 +174,11 @@ dropZone.addEventListener("drop", (e) => {
 
 // ── Tab switching ───────────────────────────────────────────────────────────
 function showTab(active) {
-  [tabText, tabAudio, tabLive, tabConv].forEach((t) =>
-    t.classList.remove("active"),
+  [tabText, tabAudio, tabLive, tabConv, convAdminBtn].forEach((t) =>
+    t?.classList.remove("active"),
   );
-  [textTab, audioTab, liveTab, convTab].forEach((t) => {
-    t.style.display = "none";
+  [textTab, audioTab, liveTab, convTab, adminTab].forEach((t) => {
+    if (t) t.style.display = "none";
   });
   active.btn.classList.add("active");
   active.panel.style.display = "block";
@@ -1793,7 +1795,6 @@ const convSummaryClose = document.getElementById("convSummaryClose");
 const convSummaryBody = document.getElementById("convSummaryBody");
 const convSummarySaveBtn = document.getElementById("convSummarySaveBtn");
 const convHistoryBtn = document.getElementById("convHistoryBtn");
-const convAdminBtn = document.getElementById("convAdminBtn");
 let convAdminToken = sessionStorage.getItem("history_admin_token") || "";
 let convAdminEmail = sessionStorage.getItem("history_admin_email") || "";
 let convLastSummaryPayload = null;
@@ -3709,6 +3710,19 @@ function convShowSummaryModal(title, html) {
   lucide.createIcons({ nodes: [convSummaryModal] });
 }
 
+function convShowAdminPanel(title, html) {
+  if (!adminTab) return;
+  adminTab.innerHTML = `
+    <div class="admin-panel-wrap">
+      <div class="admin-panel-header">
+        <h2 class="admin-panel-title">${title}</h2>
+      </div>
+      <div class="admin-panel-body">${html}</div>
+    </div>
+  `;
+  lucide.createIcons({ nodes: [adminTab] });
+}
+
 function convHistoryDateRangeHtml() {
   const today = new Date().toISOString().slice(0, 10);
   return `
@@ -3872,7 +3886,7 @@ function convAdminAuthHtml(mode = "login") {
 }
 
 function convShowAdminAuth(mode = "login") {
-  convShowSummaryModal("Admin", convAdminAuthHtml(mode));
+  convShowAdminPanel("Admin", convAdminAuthHtml(mode));
   document.getElementById("convAdminLoginTab")?.addEventListener("click", () => convShowAdminAuth("login"));
   document.getElementById("convAdminCreateTab")?.addEventListener("click", () => convShowAdminAuth("create"));
   document.getElementById("convAdminSubmitBtn")?.addEventListener("click", () => convSubmitAdminAuth(mode));
@@ -3957,11 +3971,11 @@ async function convOpenHistoryAdmin() {
     });
     if (!res.ok) throw new Error((await res.json()).detail || "Admin login required");
     const data = await res.json();
-    convShowSummaryModal(`Admin - ${convAdminEmail}`, convAdminPanelHtml(data.retention_days || 90));
+    convShowAdminPanel(`Admin — ${convAdminEmail}`, convAdminPanelHtml(data.retention_days || 90));
     document.getElementById("convAdminRetentionSaveBtn")?.addEventListener("click", convAdminSaveRetention);
     document.getElementById("convAdminHistorySearchBtn")?.addEventListener("click", convAdminLoadHistoryDates);
     document.getElementById("convAdminCancelBtn")?.addEventListener("click", () => {
-      convSummaryModal.style.display = "none";
+      showTab({ btn: tabConv, panel: convTab });
     });
     await convAdminLoadHistoryDates();
   } catch (err) {
@@ -4035,7 +4049,7 @@ async function convAdminLoadHistoryDates() {
 
 async function convAdminOpenHistoryDate(date) {
   if (!date) return;
-  convShowSummaryModal(`Admin History - ${date}`, "<p>Loading saved summaries...</p>");
+  convShowAdminPanel(`Admin History — ${date}`, "<p>Loading saved summaries...</p>");
   try {
     const res = await fetch(`${API_BASE}/api/v1/admin/conversation-history/date/${encodeURIComponent(date)}`, {
       headers: convAdminHeaders(),
@@ -4043,7 +4057,8 @@ async function convAdminOpenHistoryDate(date) {
     if (!res.ok) throw new Error((await res.json()).detail || "Could not load date");
     const data = await res.json();
     const records = Array.isArray(data.records) ? data.records : [];
-    convSummaryBody.innerHTML = `
+    const adminBody = adminTab.querySelector(".admin-panel-body");
+    adminBody.innerHTML = `
       <div class="conv-history-toolbar">
         <button type="button" class="btn btn-secondary" id="convAdminBackBtn">
           <i data-lucide="arrow-left"></i><span>Back</span>
@@ -4083,18 +4098,18 @@ async function convAdminOpenHistoryDate(date) {
     `;
     document.getElementById("convAdminBackBtn")?.addEventListener("click", convOpenHistoryAdmin);
     document.getElementById("convAdminDeleteDateBtn")?.addEventListener("click", () => convAdminDeleteHistoryDate(date));
-    convSummaryBody.querySelectorAll(".conv-admin-email-btn").forEach((btn) => {
+    adminBody.querySelectorAll(".conv-admin-email-btn").forEach((btn) => {
       btn.addEventListener("click", () => convAdminEmailHistoryRecord(btn.dataset.recordId));
     });
-    convSummaryBody.querySelectorAll(".conv-admin-chat-btn").forEach((btn) => {
+    adminBody.querySelectorAll(".conv-admin-chat-btn").forEach((btn) => {
       btn.addEventListener("click", () => convAdminViewFullChat(btn.dataset.recordId, date));
     });
-    convSummaryBody.querySelectorAll(".conv-admin-regen-btn").forEach((btn) => {
+    adminBody.querySelectorAll(".conv-admin-regen-btn").forEach((btn) => {
       btn.addEventListener("click", () => convAdminRegenerateSummary(btn.dataset.recordId, date));
     });
-    lucide.createIcons({ nodes: [convSummaryModal] });
+    lucide.createIcons({ nodes: [adminTab] });
   } catch (err) {
-    convSummaryBody.innerHTML = `<p>${escapeHtml(err.message || "Could not load date")}</p>`;
+    if (adminTab) adminTab.querySelector(".admin-panel-body").innerHTML = `<p>${escapeHtml(err.message || "Could not load date")}</p>`;
   }
 }
 
@@ -4124,7 +4139,7 @@ async function convAdminViewFullChat(recordId, date) {
   try {
     const record = await convAdminFetchRecord(recordId);
     const rows = Array.isArray(record.chat_messages) ? record.chat_messages : [];
-    convShowSummaryModal(`Full Chat - ${record.local_date || date}`, `
+    convShowAdminPanel(`Full Chat — ${record.local_date || date}`, `
       <div class="conv-history-toolbar">
         <button type="button" class="btn btn-secondary" id="convAdminChatBackBtn">
           <i data-lucide="arrow-left"></i><span>Back</span>
@@ -4186,7 +4201,7 @@ function convAdminEmailChoiceHtml(recordId) {
 }
 
 async function convAdminEmailHistoryRecord(recordId) {
-  convShowSummaryModal("Email Conversation History", convAdminEmailChoiceHtml(recordId));
+  convShowAdminPanel("Email Conversation History", convAdminEmailChoiceHtml(recordId));
   document.getElementById("convAdminEmailCancelBtn")?.addEventListener("click", convOpenHistoryAdmin);
   document.getElementById("convAdminEmailSendBtn")?.addEventListener("click", async () => {
     const contentType = document.getElementById("convAdminEmailContent")?.value || "both";
@@ -4213,6 +4228,7 @@ async function convAdminSendHistoryEmail(recordId, contentType) {
 convHistoryBtn?.addEventListener("click", convOpenHistory);
 convAdminBtn?.addEventListener("click", () => {
   setMenuOpen(false);
+  _selectTab({ btn: convAdminBtn, panel: adminTab });
   convOpenHistoryAdmin();
 });
 
