@@ -21,9 +21,13 @@
           <i data-lucide="languages"></i>
           <h1>AI Translate</h1>
         </div>
+        <div class="trial-timer" id="trialTimer" aria-live="polite" style="display:none">
+          <i data-lucide="timer"></i>
+          <span id="trialTimerText">Trial</span>
+        </div>
         <button type="button" class="app-logout-btn" id="appLogoutBtn">
           <i data-lucide="log-out"></i>
-          <span>Leave</span>
+          <span>Logout</span>
         </button>
         <p class="subtitle">Real-time translation powered by Groq AI &amp; Whisper</p>
         <span class="badge">Multi-Agent System</span>
@@ -398,19 +402,24 @@
             <!-- Room header -->
             <div class="conv-room-bar">
               <div class="conv-room-bar-left">
-                <span class="conv-room-label">Room Code</span>
-                <span class="conv-room-code-inline" id="convRoomCode">------</span>
-                <button type="button" class="conv-copy-code-btn" id="convCopyCodeBtn" title="Copy room code">
-                  <i data-lucide="copy"></i>
-                </button>
-                <button type="button" class="conv-invite-btn" id="convInviteBtn" title="Invite participants">
-                  <i data-lucide="share-2"></i>
-                  <span>Invite</span>
-                </button>
-                <button type="button" class="conv-invite-btn" id="convCopyLinkBtn" title="Copy room link">
-                  <i data-lucide="link"></i>
-                  <span>Link</span>
-                </button>
+                <div class="conv-meeting-id">
+                  <span class="conv-room-label">Meeting ID</span>
+                  <span class="conv-room-code-inline" id="convRoomCode" data-room-code="">------</span>
+                </div>
+                <div class="conv-room-actions">
+                  <button type="button" class="conv-copy-code-btn" id="convCopyCodeBtn" title="Copy meeting ID">
+                    <i data-lucide="copy"></i>
+                    <span>Copy ID</span>
+                  </button>
+                  <button type="button" class="conv-invite-btn" id="convInviteBtn" title="Invite participants">
+                    <i data-lucide="user-plus"></i>
+                    <span>Invite</span>
+                  </button>
+                  <button type="button" class="conv-invite-btn" id="convCopyLinkBtn" title="Copy room link">
+                    <i data-lucide="link"></i>
+                    <span>Link</span>
+                  </button>
+                </div>
               </div>
               <div class="conv-room-bar-right">
                 <button type="button" class="btn btn-secondary conv-vocab-btn" id="convVocabBtn" title="Enterprise Vocabulary">
@@ -446,41 +455,71 @@
               <span id="voiceCloneBadgeText" style="font-size:0.72rem;padding:0.2rem 0.65rem;border-radius:999px;font-weight:600;letter-spacing:0.04em"></span>
             </div>
 
-            <!-- Mic + Camera + Summary buttons -->
-            <div class="conv-mic-bar">
-              <div class="conv-mic-slot">
-                <button type="button" class="conv-mic-btn" id="convMicBtn">
-                  <i data-lucide="mic-off"></i>
-                </button>
-                <span class="conv-mic-label" id="convMicLabel">Tap to speak</span>
-              </div>
-              <div class="conv-mic-slot">
-                <button type="button" class="conv-mic-btn" id="convCamBtn">
-                  <i data-lucide="video-off"></i>
-                </button>
-                <span class="conv-mic-label" id="convCamLabel">Tap for camera</span>
-              </div>
-              <div class="conv-mic-slot">
-                <button type="button" class="conv-mic-btn" id="convSummaryBtn">
-                  <i data-lucide="clipboard-list"></i>
-                </button>
-                <span class="conv-mic-label" id="convSummaryLabel">Summarize</span>
-              </div>
-              <div class="conv-mic-slot">
-                <button type="button" class="conv-mic-btn" id="convTtsBtn">
-                  <i data-lucide="volume-2"></i>
-                </button>
-                <span class="conv-mic-label" id="convTtsLabel">Speaker</span>
-              </div>
-            </div>
-
             <!-- Keyboard input -->
-            <div class="conv-keyboard-bar">
+            <div class="conv-keyboard-bar" id="convKeyboardBar">
               <input type="text" id="convKeyboardInput" class="conv-keyboard-input"
                      placeholder="Type a message…" maxlength="500" autocomplete="off" />
               <button type="button" class="conv-keyboard-send" id="convKeyboardSend" title="Send">
                 <i data-lucide="send"></i>
               </button>
+            </div>
+
+            <div class="conv-toolbar-popover conv-participants-popover" id="convParticipantsPopover" style="display:none">
+              <div class="conv-popover-title">Participants</div>
+              <div class="conv-participants-list" id="convParticipantsList"></div>
+            </div>
+
+            <div class="conv-toolbar-popover conv-more-popover" id="convMorePopover" style="display:none">
+              <button type="button" class="conv-more-action" id="convSummaryBtn">
+                <i data-lucide="clipboard-list"></i>
+                <span id="convSummaryLabel">Summarize</span>
+              </button>
+              <button type="button" class="conv-more-action" id="convTtsBtn">
+                <i data-lucide="volume-2"></i>
+                <span id="convTtsLabel">Speaker</span>
+              </button>
+              <button type="button" class="conv-more-action" id="convToolbarVocabBtn">
+                <i data-lucide="book-open"></i>
+                <span>Vocabulary</span>
+              </button>
+            </div>
+
+            <!-- Zoom-style meeting toolbar -->
+            <div class="conv-mic-bar">
+              <div class="conv-toolbar-left">
+                <button type="button" class="conv-toolbar-btn" id="convMicBtn">
+                  <i data-lucide="mic-off"></i>
+                  <span id="convMicLabel">Join Audio</span>
+                </button>
+                <button type="button" class="conv-toolbar-btn" id="convCamBtn">
+                  <i data-lucide="video-off"></i>
+                  <span id="convCamLabel">Video</span>
+                </button>
+              </div>
+
+              <div class="conv-toolbar-center">
+                <button type="button" class="conv-toolbar-btn" id="convParticipantsBtn">
+                  <i data-lucide="users"></i>
+                  <span id="convParticipantsLabel">Participants</span>
+                  <i data-lucide="chevron-up" class="conv-toolbar-caret"></i>
+                </button>
+                <button type="button" class="conv-toolbar-btn" id="convChatBtn">
+                  <i data-lucide="message-square"></i>
+                  <span>Chat</span>
+                </button>
+                <button type="button" class="conv-toolbar-btn" id="convMoreBtn">
+                  <i data-lucide="more-horizontal"></i>
+                  <span>More</span>
+                  <i data-lucide="chevron-up" class="conv-toolbar-caret"></i>
+                </button>
+              </div>
+
+              <div class="conv-toolbar-right">
+                <button type="button" class="conv-toolbar-btn conv-end-btn" id="convEndBtn">
+                  <i data-lucide="shield-x"></i>
+                  <span>End</span>
+                </button>
+              </div>
             </div>
 
           </div>

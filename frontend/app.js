@@ -227,6 +227,8 @@ const AUTH_STORAGE_KEYS = [
   "auth_token",
   "auth_first_name",
   "auth_last_name",
+  "auth_trial_ends_at",
+  "auth_is_subscriber",
 ];
 
 // Clear old persistent auth from earlier builds. Auth is now tab-session scoped.
@@ -236,6 +238,9 @@ let currentUserEmail = sessionStorage.getItem("auth_email") || null;
 let currentUserToken = sessionStorage.getItem("auth_token") || null;
 let currentUserFirstName = sessionStorage.getItem("auth_first_name") || "";
 let currentUserLastName = sessionStorage.getItem("auth_last_name") || "";
+let currentUserTrialEndsAt = Number(sessionStorage.getItem("auth_trial_ends_at")) || null;
+let currentUserIsSubscriber = sessionStorage.getItem("auth_is_subscriber") === "true";
+let trialTimerIntervalId = null;
 let _browserSessionEnding = false;
 
 function persistAuthSession(data) {
@@ -244,10 +249,18 @@ function persistAuthSession(data) {
   currentUserToken = data.access_token;
   currentUserFirstName = data.first_name || "";
   currentUserLastName = data.last_name || "";
+  currentUserTrialEndsAt = Number(data.trial_ends_at) || null;
+  currentUserIsSubscriber = Boolean(data.is_subscriber);
   sessionStorage.setItem("auth_email", currentUserEmail);
   sessionStorage.setItem("auth_token", currentUserToken);
   sessionStorage.setItem("auth_first_name", currentUserFirstName);
   sessionStorage.setItem("auth_last_name", currentUserLastName);
+  if (currentUserTrialEndsAt) {
+    sessionStorage.setItem("auth_trial_ends_at", String(currentUserTrialEndsAt));
+  } else {
+    sessionStorage.removeItem("auth_trial_ends_at");
+  }
+  sessionStorage.setItem("auth_is_subscriber", String(currentUserIsSubscriber));
 }
 
 function clearAuthSession() {
@@ -257,6 +270,9 @@ function clearAuthSession() {
   currentUserToken = null;
   currentUserFirstName = "";
   currentUserLastName = "";
+  currentUserTrialEndsAt = null;
+  currentUserIsSubscriber = false;
+  stopTrialTimer();
 }
 
 function sendConversationLeave() {
@@ -267,18 +283,28 @@ function sendConversationLeave() {
   }
 }
 
-function endBrowserSession({ showLogin = false, notifyRoom = false } = {}) {
+function endBrowserSession({ showLogin = false, notifyRoom = false, reload = false } = {}) {
   if (_browserSessionEnding) return;
   _browserSessionEnding = true;
-  if (notifyRoom) sendConversationLeave();
-  clearAuthSession();
-  if (typeof convReset === "function") convReset();
-  updateAuthHeader();
-  if (showLogin) showAuthModal("login");
+  try {
+    if (notifyRoom) sendConversationLeave();
+    clearAuthSession();
+    if (typeof convReset === "function") convReset();
+  } catch (err) {
+    console.warn("Session cleanup failed during logout", err);
+    clearAuthSession();
+  } finally {
+    updateAuthHeader();
+    if (reload) {
+      window.location.reload();
+      return;
+    }
+    if (showLogin) showAuthModal("login");
+  }
 }
 
 function logout() {
-  endBrowserSession({ showLogin: true, notifyRoom: true });
+  endBrowserSession({ showLogin: true, notifyRoom: true, reload: true });
 }
 
 function prepareConversationPageExit() {
@@ -298,13 +324,72 @@ function updateAuthHeader() {
     btn.style.display = currentUserToken ? "inline-flex" : "none";
     btn.onclick = logout;
   });
+  updateTrialTimer();
   syncConversationNameField();
+}
+
+function stopTrialTimer() {
+  if (trialTimerIntervalId) {
+    clearInterval(trialTimerIntervalId);
+    trialTimerIntervalId = null;
+  }
+}
+
+function formatTrialTimeRemaining(msRemaining) {
+  if (msRemaining <= 0) return "Trial ended";
+  const totalMinutes = Math.ceil(msRemaining / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `Trial: ${days}d ${hours}h left`;
+  if (hours > 0) return `Trial: ${hours}h ${minutes}m left`;
+  return `Trial: ${minutes}m left`;
+}
+
+function updateTrialTimer() {
+  const timer = document.getElementById("trialTimer");
+  const text = document.getElementById("trialTimerText");
+  if (!timer || !text) return;
+
+  if (!currentUserToken || currentUserIsSubscriber || !currentUserTrialEndsAt) {
+    timer.style.display = "none";
+    stopTrialTimer();
+    return;
+  }
+
+  const expiresAtMs = currentUserTrialEndsAt * 1000;
+  const msRemaining = expiresAtMs - Date.now();
+  text.textContent = formatTrialTimeRemaining(msRemaining);
+  timer.classList.toggle("expired", msRemaining <= 0);
+  timer.style.display = "inline-flex";
+
+  if (!trialTimerIntervalId) {
+    trialTimerIntervalId = setInterval(updateTrialTimer, 60000);
+  }
+}
+
+function formatRoomCodeForDisplay(code) {
+  const clean = String(code || "").replace(/\s+/g, "");
+  if (/^\d{6}$/.test(clean)) return `${clean.slice(0, 3)} ${clean.slice(3)}`;
+  return clean || "------";
+}
+
+function setConversationRoomCode(code) {
+  if (!convRoomCode) return;
+  const clean = String(code || "").replace(/\s+/g, "");
+  convRoomCode.dataset.roomCode = clean;
+  convRoomCode.textContent = formatRoomCodeForDisplay(clean);
+}
+
+function getConversationRoomCode() {
+  const stored = convRoomCode?.dataset?.roomCode;
+  return (stored || convRoomCode?.textContent || "").replace(/\s+/g, "").trim();
 }
 
 function routeToConversation() {
   if (typeof convReset === "function") convReset();
   if (convRoomInput) convRoomInput.value = "";
-  if (convRoomCode) convRoomCode.textContent = "------";
+  setConversationRoomCode("");
   showTab({ btn: tabConv, panel: convTab });
   setMenuOpen(false);
   showWelcomeMessage();
@@ -1858,6 +1943,16 @@ const convSummaryBtn = document.getElementById("convSummaryBtn");
 const convSummaryLabel = document.getElementById("convSummaryLabel");
 const convTtsBtn = document.getElementById("convTtsBtn");
 const convTtsLabel = document.getElementById("convTtsLabel");
+const convParticipantsBtn = document.getElementById("convParticipantsBtn");
+const convParticipantsLabel = document.getElementById("convParticipantsLabel");
+const convParticipantsPopover = document.getElementById("convParticipantsPopover");
+const convParticipantsList = document.getElementById("convParticipantsList");
+const convChatBtn = document.getElementById("convChatBtn");
+const convMoreBtn = document.getElementById("convMoreBtn");
+const convMorePopover = document.getElementById("convMorePopover");
+const convEndBtn = document.getElementById("convEndBtn");
+const convKeyboardBar = document.getElementById("convKeyboardBar");
+const convToolbarVocabBtn = document.getElementById("convToolbarVocabBtn");
 const convSummaryModal = document.getElementById("convSummaryModal");
 const convSummaryTitle = document.getElementById("convSummaryTitle");
 const convSummaryClose = document.getElementById("convSummaryClose");
@@ -2059,6 +2154,44 @@ function convRenderParticipants() {
   }
 
   _carouselRenderPage();
+  convRenderParticipantsPopover();
+}
+
+function convRenderParticipantsPopover() {
+  if (!convParticipantsList) return;
+  const users = Object.entries(convUsers);
+  if (convParticipantsLabel) {
+    convParticipantsLabel.textContent = `Participants${users.length ? ` (${users.length})` : ""}`;
+  }
+  if (!users.length) {
+    convParticipantsList.innerHTML = '<div class="conv-participant-row empty">No participants yet</div>';
+    return;
+  }
+  convParticipantsList.innerHTML = users
+    .map(([uid, user]) => {
+      const name = escapeHtml(user.name || "Guest");
+      const lang = escapeHtml((user.language || "").toUpperCase());
+      const self = uid === convUserId ? "You" : "";
+      const host = user.is_host ? "Host" : "";
+      const badges = [self, host].filter(Boolean).join(" · ");
+      const micIcon = user.mic_on ? "mic" : "mic-off";
+      const videoIcon = user.camera_on ? "video" : "video-off";
+      return `
+        <div class="conv-participant-row">
+          <span class="conv-participant-avatar">${name.charAt(0).toUpperCase()}</span>
+          <span class="conv-participant-meta">
+            <strong>${name}</strong>
+            <small>${badges || lang || "Participant"}</small>
+          </span>
+          <span class="conv-participant-status">
+            <i data-lucide="${micIcon}"></i>
+            <i data-lucide="${videoIcon}"></i>
+          </span>
+        </div>
+      `;
+    })
+    .join("");
+  lucide.createIcons({ nodes: [convParticipantsList] });
 }
 
 function convUpdateChipMic(userId, isOn) {
@@ -2072,11 +2205,13 @@ function convUpdateChipMic(userId, isOn) {
   }
   const dot = document.getElementById(`conv-mic-dot-${userId}`);
   if (dot) dot.className = "conv-participant-mic-dot" + (isOn ? " on" : "");
+  convRenderParticipantsPopover();
 }
 
 function convUpdateChipCam(userId, isOn) {
   const dot = document.getElementById(`conv-cam-dot-${userId}`);
   if (dot) dot.className = "conv-participant-cam-dot" + (isOn ? " on" : "");
+  convRenderParticipantsPopover();
 }
 
 
@@ -2398,9 +2533,8 @@ async function convSubmitCorrection(msg, newTranslation) {
 function convSetMicUI(isOn) {
   convMicBtn.classList.toggle("active", isOn);
   convMicBtn.innerHTML = isOn
-    ? '<i data-lucide="mic"></i>'
-    : '<i data-lucide="mic-off"></i>';
-  convMicLabel.textContent = isOn ? "Mic on — tap to mute" : "Tap to speak";
+    ? '<i data-lucide="mic"></i><span id="convMicLabel">Mute</span>'
+    : '<i data-lucide="mic-off"></i><span id="convMicLabel">Join Audio</span>';
   lucide.createIcons({ nodes: [convMicBtn] });
   if (convUserId && convUsers[convUserId]) {
     convUsers[convUserId].mic_on = isOn;
@@ -2483,7 +2617,7 @@ function convHandleMessage(msg) {
     case "joined":
       convUserId = msg.user_id;
       convIsHost = msg.is_host;
-      convRoomCode.textContent = msg.room;
+      setConversationRoomCode(msg.room);
       convUsers = {};
       msg.users.forEach((u) => {
         convUsers[u.user_id] = {
@@ -3639,7 +3773,7 @@ function convBuildSummaryPayload(messages, summary = null) {
     participants,
     participant_emails: currentUserEmail ? [currentUserEmail] : [],
     target_language: convSummaryLanguage(),
-    room_id: convRoomId || convRoomCode?.textContent || "",
+    room_id: convRoomId || getConversationRoomCode() || "",
     ...(summary ? { summary } : {}),
   };
 }
@@ -4405,11 +4539,8 @@ function convStopCamera() {
 function convSetCamUI(isOn) {
   convCamBtn.classList.toggle("active", isOn);
   convCamBtn.innerHTML = isOn
-    ? '<i data-lucide="video"></i>'
-    : '<i data-lucide="video-off"></i>';
-  convCamLabel.textContent = isOn
-    ? "Camera on — tap to stop"
-    : "Tap for camera";
+    ? '<i data-lucide="video"></i><span id="convCamLabel">Stop Video</span>'
+    : '<i data-lucide="video-off"></i><span id="convCamLabel">Video</span>';
   lucide.createIcons({ nodes: [convCamBtn] });
   if (convUserId && convUsers[convUserId]) {
     convUsers[convUserId].camera_on = isOn;
@@ -4419,6 +4550,60 @@ function convSetCamUI(isOn) {
 
 convCamBtn.addEventListener("click", () => {
   convCamOn ? convStopCamera() : convStartCamera();
+});
+
+function convCloseToolbarPopovers(except = null) {
+  if (except !== "participants" && convParticipantsPopover) {
+    convParticipantsPopover.style.display = "none";
+    convParticipantsBtn?.classList.remove("open");
+  }
+  if (except !== "more" && convMorePopover) {
+    convMorePopover.style.display = "none";
+    convMoreBtn?.classList.remove("open");
+  }
+}
+
+convParticipantsBtn?.addEventListener("click", () => {
+  const isOpen = convParticipantsPopover?.style.display === "block";
+  convCloseToolbarPopovers(isOpen ? null : "participants");
+  if (!convParticipantsPopover) return;
+  convRenderParticipantsPopover();
+  convParticipantsPopover.style.display = isOpen ? "none" : "block";
+  convParticipantsBtn.classList.toggle("open", !isOpen);
+});
+
+convChatBtn?.addEventListener("click", () => {
+  convCloseToolbarPopovers();
+  convKeyboardBar?.classList.toggle("open");
+  convChatBtn.classList.toggle("open", convKeyboardBar?.classList.contains("open"));
+  if (convKeyboardBar?.classList.contains("open")) convKeyboardInput?.focus();
+});
+
+convMoreBtn?.addEventListener("click", () => {
+  const isOpen = convMorePopover?.style.display === "flex";
+  convCloseToolbarPopovers(isOpen ? null : "more");
+  if (!convMorePopover) return;
+  convMorePopover.style.display = isOpen ? "none" : "flex";
+  convMoreBtn.classList.toggle("open", !isOpen);
+  lucide.createIcons({ nodes: [convMorePopover] });
+});
+
+convToolbarVocabBtn?.addEventListener("click", () => {
+  convCloseToolbarPopovers();
+  vocabOpen();
+});
+
+convEndBtn?.addEventListener("click", () => {
+  sendConversationLeave();
+  convReset();
+  showToast("You left the meeting.", "success");
+});
+
+document.addEventListener("click", (e) => {
+  if (!convActive?.contains(e.target)) return;
+  const insidePopover = e.target.closest(".conv-toolbar-popover");
+  const insideToolbarButton = e.target.closest("#convParticipantsBtn, #convMoreBtn");
+  if (!insidePopover && !insideToolbarButton) convCloseToolbarPopovers();
 });
 
 // ── Reset / disconnect ─────────────────────────────────────────────────────
@@ -4475,7 +4660,11 @@ function convReset() {
   _isTyping = false;
   convMessages.innerHTML =
     '<div class="conv-start-hint">Press your mic to start speaking</div>';
-  convRoomCode.textContent = "------";
+  setConversationRoomCode("");
+  convCloseToolbarPopovers();
+  convKeyboardBar?.classList.remove("open");
+  convChatBtn?.classList.remove("open");
+  convRenderParticipantsPopover();
   if (convRoomInput) convRoomInput.value = "";
   if (convSummaryModal) convSummaryModal.style.display = "none";
   if (convSummaryBody) convSummaryBody.innerHTML = "";
@@ -4521,7 +4710,7 @@ convCreateBtn.addEventListener("click", async () => {
 
 convJoinBtn.addEventListener("click", () => {
   _unlockTts(); // synchronous — user-gesture context
-  const roomId = convRoomInput.value.trim();
+  const roomId = convRoomInput.value.replace(/\s+/g, "").trim();
   if (!roomId) {
     convRoomInput.focus();
     return;
@@ -4544,10 +4733,10 @@ convNameInput.addEventListener("keydown", (e) => {
 syncConversationNameField();
 
 convCopyCodeBtn.addEventListener("click", () => {
-  navigator.clipboard.writeText(convRoomCode.textContent).then(() => {
+  navigator.clipboard.writeText(getConversationRoomCode()).then(() => {
     convCopyCodeBtn.title = "Copied!";
     setTimeout(() => {
-      convCopyCodeBtn.title = "Copy room code";
+      convCopyCodeBtn.title = "Copy meeting ID";
     }, 1500);
   });
 });
@@ -4572,12 +4761,12 @@ const INVITE_PLATFORMS = [
 ];
 
 function inviteText() {
-  const code = convRoomCode.textContent.trim();
+  const code = getConversationRoomCode();
   const url = window.location.origin + window.location.pathname;
   return `You're invited to a live AI Translate conversation!\n\nRoom Code: ${code}\nOpen the app: ${url}\n\nEnter the room code to join.`;
 }
 function inviteShort() {
-  const code = convRoomCode.textContent.trim();
+  const code = getConversationRoomCode();
   const url = window.location.origin + window.location.pathname;
   return `Join my AI Translate room! Code: ${code} | ${url}`;
 }

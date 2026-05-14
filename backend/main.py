@@ -546,6 +546,8 @@ async def login(body: LoginRequest):
         "first_name": user.get("first_name", ""),
         "last_name": user.get("last_name", ""),
         "access_token": user["email"],
+        "trial_ends_at": user.get("trial_ends_at"),
+        "is_subscriber": bool(user.get("is_subscriber")),
         "access": {"allowed": allowed, "reason": reason}
     }
 

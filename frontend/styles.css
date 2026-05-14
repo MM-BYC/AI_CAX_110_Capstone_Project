@@ -67,7 +67,7 @@ header {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
-  margin: 0;
+  margin: 0 auto 0 0;
 }
 
 .app-logout-btn {
@@ -76,7 +76,7 @@ header {
   justify-content: center;
   gap: 0.45rem;
   min-height: 36px;
-  margin-left: auto;
+  margin-left: 0;
   padding: 0 0.9rem;
   border: 1px solid #dc2626;
   border-radius: 8px;
@@ -120,6 +120,31 @@ header h1 {
   font-weight: 700;
   letter-spacing: 0;
   color: #ffffff;
+}
+
+.trial-timer {
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 32px;
+  padding: 0 0.75rem;
+  border: 1px solid rgba(96, 165, 250, 0.42);
+  border-radius: 8px;
+  background: rgba(37, 99, 235, 0.18);
+  color: #dbeafe;
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.trial-timer.expired {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(185, 28, 28, 0.22);
+  color: #fee2e2;
+}
+
+.trial-timer svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* Subtitle and badge are noise in Zoom-style chrome — hide them. */
@@ -169,7 +194,7 @@ header .badge {
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
-  margin: 0;
+  margin: 0 auto 0 0;
 }
 
 .logo svg {
@@ -991,72 +1016,111 @@ footer p {
 .conv-room-bar-left {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.conv-meeting-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 34px;
+  padding: 0.25rem 0.35rem 0.25rem 0.65rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #f8fafc;
+  min-width: 0;
+}
+
+.conv-room-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
 }
 
 .conv-room-label {
   font-size: 0.68rem;
-  font-weight: 600;
-  color: #9ca3af;
+  font-weight: 800;
+  color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .conv-room-code-inline {
-  font-family: monospace;
-  font-size: 1.05rem;
-  font-weight: 700;
-  letter-spacing: 0;
-  color: #6366f1;
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 0.45rem;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #111827;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
 }
 
 .conv-copy-code-btn {
-  background: none;
-  border: none;
-  color: #9ca3af;
-  cursor: pointer;
-  padding: 0.2rem 0.3rem;
-  border-radius: 6px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.3rem;
+  min-height: 32px;
+  padding: 0 0.65rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #374151;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
   transition:
     background 0.15s,
+    border-color 0.15s,
     color 0.15s;
 }
 .conv-copy-code-btn:hover {
-  background: #f3f4f6;
-  color: #374151;
+  background: #f8fafc;
+  border-color: #9ca3af;
+  color: #111827;
 }
 .conv-copy-code-btn svg {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
 }
 
 .conv-invite-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.25rem 0.65rem;
-  border-radius: 20px;
-  border: 1.5px solid #6366f1;
-  background: none;
-  color: #6366f1;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 32px;
+  padding: 0 0.7rem;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #374151;
+  font: inherit;
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
   transition:
     background 0.15s,
+    border-color 0.15s,
     color 0.15s;
-  margin-left: 0.25rem;
 }
 .conv-invite-btn:hover {
-  background: #6366f1;
-  color: #fff;
+  background: #f8fafc;
+  border-color: #9ca3af;
+  color: #111827;
 }
 .conv-invite-btn svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 
 /* ── Participants chips bar ── */
@@ -2582,6 +2646,7 @@ footer p {
 #convActive {
   display: flex;
   flex-direction: column;
+  position: relative;
   background: #1c1c1e;
   min-height: calc(100vh - 130px);
   margin: 0;
@@ -2591,34 +2656,44 @@ footer p {
 
 /* ── Top bar ── */
 #convActive .conv-room-bar {
-  background: #1c1c1e;
+  background: #1f1f21;
   border: none;
   border-bottom: 1px solid #2d2d30;
   border-radius: 0;
   margin-bottom: 0;
-  padding: 0.5rem 1rem;
+  padding: 0.55rem 1rem;
   box-shadow: none;
 }
+#convActive .conv-meeting-id {
+  border-color: #3a3a3c;
+  background: #2a2a2d;
+}
 #convActive .conv-room-label {
-  color: #8e8e93;
+  color: #a1a1aa;
 }
 #convActive .conv-room-code-inline {
-  color: #a78bfa;
+  background: #111113;
+  color: #f4f4f5;
 }
 #convActive .conv-copy-code-btn {
-  color: #8e8e93;
-}
-#convActive .conv-copy-code-btn:hover {
   background: #2d2d30;
+  border-color: #3a3a3c;
   color: #e4e4e7;
 }
+#convActive .conv-copy-code-btn:hover {
+  background: #3a3a3c;
+  border-color: #52525b;
+  color: #ffffff;
+}
 #convActive .conv-invite-btn {
-  border-color: #a78bfa;
-  color: #a78bfa;
+  background: #2d2d30;
+  border-color: #3a3a3c;
+  color: #e4e4e7;
 }
 #convActive .conv-invite-btn:hover {
-  background: #a78bfa;
-  color: #fff;
+  background: #3a3a3c;
+  border-color: #52525b;
+  color: #ffffff;
 }
 #convActive .btn.conv-vocab-btn {
   background: #2d2d30;
@@ -2734,43 +2809,217 @@ footer p {
   padding: 0.15rem 0;
 }
 
-/* ── Controls bar (visual only — handlers untouched) ── */
+/* ── Zoom-style meeting controls ── */
 #convActive .conv-mic-bar {
-  background: #1c1c1e;
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto minmax(90px, 1fr);
+  align-items: stretch;
+  gap: 0.75rem;
+  background: #1f1f21;
   border-top: 1px solid #2d2d30;
-  padding: 0.6rem 1rem;
+  padding: 0.5rem 0.8rem;
 }
-#convActive .conv-mic-btn {
-  background: #3a3a3c;
-  border-color: #48484a;
+#convActive .conv-toolbar-left,
+#convActive .conv-toolbar-center,
+#convActive .conv-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+#convActive .conv-toolbar-left {
+  justify-content: flex-start;
+}
+#convActive .conv-toolbar-center {
+  justify-content: center;
+}
+#convActive .conv-toolbar-right {
+  justify-content: flex-end;
+}
+#convActive .conv-toolbar-btn {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.18rem;
+  min-width: 72px;
+  height: 52px;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #f4f4f5;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.1;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+#convActive .conv-toolbar-btn:hover,
+#convActive .conv-toolbar-btn.open {
+  background: #2d2d30;
+  border-color: #3a3a3c;
+}
+#convActive .conv-toolbar-btn svg {
+  width: 20px;
+  height: 20px;
+}
+#convActive .conv-toolbar-btn.active {
+  color: #22c55e;
+}
+#convActive #convMicBtn:not(.active),
+#convActive #convCamBtn:not(.active) {
+  color: #f87171;
+}
+#convActive .conv-toolbar-caret {
+  position: absolute;
+  width: 10px !important;
+  height: 10px !important;
+  margin-top: -34px;
+  margin-left: 56px;
+  color: #a1a1aa;
+}
+#convActive .conv-end-btn {
+  min-width: 64px;
+  color: #ff6b6b;
+}
+#convActive .conv-end-btn:hover {
+  background: rgba(220, 38, 38, 0.16);
+  border-color: rgba(248, 113, 113, 0.32);
+  color: #fecaca;
+}
+#convActive .conv-toolbar-popover {
+  position: absolute;
+  right: 1rem;
+  bottom: 63px;
+  z-index: 35;
+  width: min(320px, calc(100% - 2rem));
+  max-height: 310px;
+  overflow: auto;
+  padding: 0.55rem;
+  border: 1px solid #3a3a3c;
+  border-radius: 8px;
+  background: #242427;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
+}
+#convActive .conv-participants-popover {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+}
+#convActive .conv-popover-title {
+  padding: 0.25rem 0.35rem 0.55rem;
+  color: #f4f4f5;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+#convActive .conv-participants-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+#convActive .conv-participant-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 42px;
+  padding: 0.35rem;
+  border-radius: 6px;
   color: #e4e4e7;
-  box-shadow: none;
 }
-#convActive .conv-mic-btn:hover:not(:disabled) {
-  background: #48484a;
-  border-color: #636366;
-  color: #fff;
-  transform: scale(1.05);
+#convActive .conv-participant-row:hover {
+  background: #2d2d30;
 }
-#convActive .conv-mic-btn.active {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.8);
-  color: #ef4444;
+#convActive .conv-participant-row.empty {
+  display: block;
+  color: #a1a1aa;
+  font-size: 0.78rem;
 }
-#convActive .conv-mic-btn.tts-off {
-  background: rgba(107, 114, 128, 0.12);
-  border-color: rgba(107, 114, 128, 0.4);
-  color: #71717a;
+#convActive .conv-participant-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #3a3a3c;
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 800;
 }
-#convActive .conv-mic-label {
-  color: #8e8e93;
+#convActive .conv-participant-meta {
+  min-width: 0;
+}
+#convActive .conv-participant-meta strong,
+#convActive .conv-participant-meta small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#convActive .conv-participant-meta strong {
+  font-size: 0.78rem;
+}
+#convActive .conv-participant-meta small {
+  color: #a1a1aa;
+  font-size: 0.66rem;
+}
+#convActive .conv-participant-status {
+  display: inline-flex;
+  gap: 0.35rem;
+  color: #a1a1aa;
+}
+#convActive .conv-participant-status svg {
+  width: 14px;
+  height: 14px;
+}
+#convActive .conv-more-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+#convActive .conv-more-action {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 0.55rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #f4f4f5;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: left;
+}
+#convActive .conv-more-action:hover {
+  background: #2d2d30;
+}
+#convActive .conv-more-action svg {
+  width: 17px;
+  height: 17px;
+}
+#convActive .conv-more-action.tts-off {
+  color: #a1a1aa;
 }
 
-/* ── Keyboard input ── */
+/* ── Chat drawer ── */
 #convActive .conv-keyboard-bar {
+  display: none;
   background: #1c1c1e;
   border-top: 1px solid #2d2d30;
   padding: 0.55rem 0.75rem;
+}
+#convActive .conv-keyboard-bar.open {
+  display: flex;
 }
 #convActive .conv-keyboard-input {
   background: #2d2d30;
@@ -4137,10 +4386,29 @@ footer p {
     justify-content: space-between;
   }
 
-  #convActive .conv-room-label {
-    display: none;
+  #convActive .conv-room-bar-left {
+    align-items: stretch;
+    flex-direction: column;
   }
 
+  #convActive .conv-meeting-id {
+    width: 100%;
+    justify-content: space-between;
+    padding: 0.35rem 0.45rem 0.35rem 0.65rem;
+  }
+
+  #convActive .conv-room-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+
+  #convActive .conv-room-code-inline {
+    font-size: 0.92rem;
+  }
+
+  #convActive .conv-copy-code-btn,
   #convActive .conv-invite-btn,
   #convActive .btn.conv-vocab-btn {
     padding: 0.3rem 0.45rem;
@@ -4163,29 +4431,41 @@ footer p {
   }
 
   #convActive .conv-mic-bar {
+    grid-template-columns: 1fr;
     gap: 0.3rem;
-    justify-content: space-around;
     padding: 0.5rem 0.4rem;
   }
 
-  #convActive .conv-mic-slot {
-    min-width: 0;
+  #convActive .conv-toolbar-left,
+  #convActive .conv-toolbar-center,
+  #convActive .conv-toolbar-right {
+    justify-content: center;
+    width: 100%;
+  }
+
+  #convActive .conv-toolbar-btn {
     flex: 1 1 0;
-  }
-
-  #convActive .conv-mic-btn {
-    width: 48px;
+    min-width: 0;
     height: 48px;
+    padding: 0.2rem 0.25rem;
+    font-size: 0.62rem;
   }
 
-  #convActive .conv-mic-btn svg {
-    width: 20px;
-    height: 20px;
+  #convActive .conv-toolbar-btn svg {
+    width: 18px;
+    height: 18px;
   }
 
-  #convActive .conv-mic-label {
-    max-width: 68px;
-    font-size: 0.64rem;
+  #convActive .conv-toolbar-caret {
+    display: none;
+  }
+
+  #convActive .conv-toolbar-popover {
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 154px;
+    width: auto;
+    transform: none;
   }
 
   #convActive .conv-keyboard-bar {
