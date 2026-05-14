@@ -283,7 +283,12 @@ function sendConversationLeave() {
   }
 }
 
-function endBrowserSession({ showLogin = false, notifyRoom = false, reload = false } = {}) {
+function endBrowserSession({
+  showLogin = false,
+  showLanding = false,
+  notifyRoom = false,
+  reload = false,
+} = {}) {
   if (_browserSessionEnding) return;
   _browserSessionEnding = true;
   try {
@@ -296,15 +301,17 @@ function endBrowserSession({ showLogin = false, notifyRoom = false, reload = fal
   } finally {
     updateAuthHeader();
     if (reload) {
-      window.location.reload();
+      const landingUrl = `${window.location.origin}${window.location.pathname}`;
+      window.location.replace(landingUrl);
       return;
     }
+    if (showLanding) showAuthModal("landing");
     if (showLogin) showAuthModal("login");
   }
 }
 
 function logout() {
-  endBrowserSession({ showLogin: true, notifyRoom: true, reload: true });
+  endBrowserSession({ showLanding: true, notifyRoom: true, reload: true });
 }
 
 function prepareConversationPageExit() {
