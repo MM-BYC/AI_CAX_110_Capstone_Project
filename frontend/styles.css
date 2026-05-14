@@ -3725,11 +3725,11 @@ footer p {
   width: 46px;
   height: 46px;
   border-radius: 10px;
-  background: rgba(27, 114, 232, 0.18);
+  background: #1a6fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #60a5fa;
+  color: #ffffff;
 }
 
 .lp-feat-icon svg {
