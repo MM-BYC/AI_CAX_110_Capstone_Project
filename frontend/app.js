@@ -622,7 +622,7 @@ function showAuthModal(mode = "login") {
 
         <section class="lp-bottom-cta">
           <h2>Start speaking across languages today</h2>
-          <p>Free trial included. No credit card required to start.</p>
+          <p>Free trial included.</p>
           <button type="button" class="lp-primary-btn" onclick="showAuthModal('pricing')">
             <i data-lucide="zap"></i>
             Try AI Translate Free
