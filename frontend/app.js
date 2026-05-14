@@ -411,9 +411,34 @@ function showSignupModal(plan = "trial") {
           </div>
         </div>
 
+        <div class="signup-panel">
+          <h3>Payment</h3>
+          <div class="billing-grid">
+            <div class="auth-input-group">
+              <label>Cardholder Name</label>
+              <input type="text" id="signupCardName" class="auth-input" placeholder="Name on card" autocomplete="cc-name">
+            </div>
+            <div class="auth-input-group">
+              <label>Card Number</label>
+              <input type="text" id="signupCardNumber" class="auth-input" placeholder="1234 5678 9012 3456" maxlength="19" inputmode="numeric" autocomplete="cc-number">
+            </div>
+            <div class="billing-row">
+              <div class="auth-input-group">
+                <label>Expiry</label>
+                <input type="text" id="signupCardExpiry" class="auth-input" placeholder="MM / YY" maxlength="7" inputmode="numeric" autocomplete="cc-exp">
+              </div>
+              <div class="auth-input-group">
+                <label>CVV</label>
+                <input type="text" id="signupCardCvv" class="auth-input" placeholder="123" maxlength="4" inputmode="numeric" autocomplete="cc-csc">
+              </div>
+            </div>
+          </div>
+          <p style="font-size:0.72rem;color:#9ca3af;margin-top:0.5rem">This is a test flow. No charges will be made.</p>
+        </div>
+
         <label class="billing-terms">
           <input type="checkbox" id="billingTerms">
-          <span>I acknowledge this is a test trial signup. No payment information is collected in this testing flow.</span>
+          <span>I acknowledge this is a test trial signup. No real payment is processed in this testing flow.</span>
         </label>
 
         <button id="billingSubmit" class="btn btn-primary auth-submit">Create Account and Start Trial</button>
@@ -422,6 +447,15 @@ function showSignupModal(plan = "trial") {
   `;
 
   lucide.createIcons({ nodes: [overlay] });
+
+  document.getElementById("signupCardNumber").addEventListener("input", (e) => {
+    const digits = e.target.value.replace(/\D/g, "").slice(0, 16);
+    e.target.value = digits.replace(/(.{4})/g, "$1 ").trim();
+  });
+  document.getElementById("signupCardExpiry").addEventListener("input", (e) => {
+    const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+    e.target.value = digits.length > 2 ? digits.slice(0, 2) + " / " + digits.slice(2) : digits;
+  });
 
   document.getElementById("billingBackBtn").onclick = () => showAuthModal("pricing");
   document.getElementById("billingSubmit").onclick = async () => {
@@ -454,7 +488,11 @@ function showSignupModal(plan = "trial") {
       accepted_terms: true,
       billing_address: {},
       payment_method: {
-        type: "test_trial_bypass",
+        type: "test_card",
+        card_name: document.getElementById("signupCardName").value.trim(),
+        card_number: document.getElementById("signupCardNumber").value.replace(/\s/g, ""),
+        card_expiry: document.getElementById("signupCardExpiry").value.trim(),
+        card_cvv: document.getElementById("signupCardCvv").value.trim(),
       },
     };
 
