@@ -12,7 +12,7 @@
 
 html {
   min-height: 100%;
-  background: #f4f6fa;
+  background: #0a1628;
 }
 
 body {
@@ -20,14 +20,11 @@ body {
     "Lato", "Open Sans", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
   color: #232333;
   min-height: 100vh;
-  /* Zoom-style: cool neutral light gray with a subtle Zoom-blue tint at the top. */
   background:
-    radial-gradient(
-      ellipse 90% 40% at 50% 0%,
-      rgba(45, 140, 255, 0.08) 0%,
-      transparent 60%
-    ),
-    #f4f6fa;
+    radial-gradient(ellipse at 20% 0%, rgba(27, 114, 232, 0.35), transparent 55%),
+    radial-gradient(ellipse at 80% 100%, rgba(0, 82, 212, 0.28), transparent 50%),
+    linear-gradient(160deg, #0a1628 0%, #0d3270 45%, #1558d6 100%);
+  background-attachment: fixed;
 }
 
 /* ── Layout ── */
@@ -48,8 +45,10 @@ header {
   height: 56px;
   margin: 0 -1.5rem 1.25rem;
   padding: 0 1rem;
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
+  background: rgba(10, 22, 40, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   text-align: left;
 }
 
@@ -109,7 +108,7 @@ header h1 {
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0;
-  color: #232333;
+  color: #ffffff;
 }
 
 /* Subtitle and badge are noise in Zoom-style chrome — hide them. */
@@ -125,17 +124,17 @@ header .badge {
   width: 36px;
   height: 36px;
   background: transparent;
-  border: 1px solid #d1d5db;
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 6px;
   cursor: pointer;
   align-items: center;
   justify-content: center;
-  color: #4d4d4d;
+  color: #ffffff;
   flex-shrink: 0;
 }
 
 .hamburger-btn:hover {
-  background: #f3f4f6;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .hamburger-btn svg {
@@ -167,7 +166,7 @@ header h1 {
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0;
-  color: #232333;
+  color: #ffffff;
 }
 
 .subtitle {
@@ -243,7 +242,7 @@ header h1 {
 
 .tab-btn:hover {
   background: #f3f4f6;
-  color: #232333;
+  color: #ffffff;
 }
 
 .tab-btn.active {
@@ -270,7 +269,7 @@ header h1 {
 .lang-group label {
   font-size: 0.7rem;
   font-weight: 600;
-  color: #6b7280;
+  color: #93c5fd;
   text-transform: uppercase;
   letter-spacing: 0;
 }
