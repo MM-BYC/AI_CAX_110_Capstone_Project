@@ -1600,6 +1600,7 @@ let convCamStream = null;
 let convCamOn = false;
 let _convReconnectAttempts = 0;
 let _convWasCreator = false;
+let _convIntentionalDisconnect = false;
 const _CONV_MAX_RECONNECTS = 3;
 
 // Persistent colour palette — one colour per participant (8 distinct)
@@ -2547,6 +2548,7 @@ function convSetMicUI(isOn) {
 async function convConnect(roomId, isCreator = false) {
   convRoomId = roomId;
   _convWasCreator = !!isCreator;
+  _convIntentionalDisconnect = false;
   syncConversationNameField();
   const name = getAuthenticatedDisplayName() || convNameInput.value.trim();
   const lang = convLangSelect.value;
@@ -2573,6 +2575,7 @@ async function convConnect(roomId, isCreator = false) {
   };
 
   convWs.onclose = (event) => {
+    if (_convIntentionalDisconnect) return;
     if (event.code !== 1000 && convUserId) {
       if (_convReconnectAttempts < _CONV_MAX_RECONNECTS) {
         _convReconnectAttempts++;
@@ -4595,6 +4598,7 @@ convToolbarVocabBtn?.addEventListener("click", () => {
 });
 
 convEndBtn?.addEventListener("click", () => {
+  _convIntentionalDisconnect = true;
   sendConversationLeave();
   convReset();
   showToast("You left the meeting.", "success");
@@ -4635,6 +4639,9 @@ function convReset() {
   _voiceCloneAvailable = null;
   _voiceCloneBadge("hidden");
   if (convWs) {
+    _convIntentionalDisconnect = true;
+    convWs.onclose = null;
+    convWs.onerror = null;
     convWs.close();
     convWs = null;
   }
