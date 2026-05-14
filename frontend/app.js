@@ -1946,6 +1946,16 @@ const convCopyCodeBtn = document.getElementById("convCopyCodeBtn");
 const convMessages = document.getElementById("convMessages");
 const convMicBtn = document.getElementById("convMicBtn");
 const convMicLabel = document.getElementById("convMicLabel");
+const convAudioPopover = document.getElementById("convAudioPopover");
+const convAudioJoinMenuBtn = document.getElementById("convAudioJoinMenuBtn");
+const convAudioTestMenuBtn = document.getElementById("convAudioTestMenuBtn");
+const convAudioModal = document.getElementById("convAudioModal");
+const convAudioCloseBtn = document.getElementById("convAudioCloseBtn");
+const convAudioJoinBtn = document.getElementById("convAudioJoinBtn");
+const convAudioTestSpeakerBtn = document.getElementById("convAudioTestSpeakerBtn");
+const convAudioTestMicBtn = document.getElementById("convAudioTestMicBtn");
+const convAudioTestStatus = document.getElementById("convAudioTestStatus");
+const convAudioAutoJoin = document.getElementById("convAudioAutoJoin");
 const convCamBtn = document.getElementById("convCamBtn");
 const convCamLabel = document.getElementById("convCamLabel");
 const convSummaryBtn = document.getElementById("convSummaryBtn");
@@ -2606,8 +2616,8 @@ async function convSubmitCorrection(msg, newTranslation) {
 function convSetMicUI(isOn) {
   convMicBtn.classList.toggle("active", isOn);
   convMicBtn.innerHTML = isOn
-    ? '<i data-lucide="mic"></i><span id="convMicLabel">Mute</span>'
-    : '<i data-lucide="mic-off"></i><span id="convMicLabel">Join Audio</span>';
+    ? '<i data-lucide="mic"></i><span id="convMicLabel">Mute</span><i data-lucide="chevron-up" class="conv-toolbar-caret"></i>'
+    : '<i data-lucide="mic-off"></i><span id="convMicLabel">Join Audio</span><i data-lucide="chevron-up" class="conv-toolbar-caret"></i>';
   lucide.createIcons({ nodes: [convMicBtn] });
   if (convUserId && convUsers[convUserId]) {
     convUsers[convUserId].mic_on = isOn;
@@ -3078,7 +3088,8 @@ async function convStartIosMic() {
 
 function _micTrace(msg) {
   console.log(`[mic] ${msg}`);
-  if (convMicLabel) convMicLabel.textContent = msg;
+  const micLabel = convMicBtn?.querySelector("#convMicLabel") || convMicLabel;
+  if (micLabel) micLabel.textContent = msg;
 }
 
 async function _convStartIosMicInner() {
@@ -3219,7 +3230,8 @@ async function _convStartIosMicInner() {
   _iosSttReconnectCount = 0;
   _iosMicActive = true;
   convSetMicUI(true);
-  convMicLabel.textContent = "Listening…";
+  const micLabel = convMicBtn?.querySelector("#convMicLabel");
+  if (micLabel) micLabel.textContent = "Listening…";
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "mic_status", is_on: true }));
   // Voice-clone enrollment from the live mic stream (best-effort, no-op if
@@ -3244,7 +3256,8 @@ function convStopIosMic() {
   _iosMicStream?.getTracks().forEach((t) => t.stop());
   _iosMicStream = null;
   convSetMicUI(false);
-  convMicLabel.textContent = "Tap to speak";
+  const micLabel = convMicBtn?.querySelector("#convMicLabel");
+  if (micLabel) micLabel.textContent = "Join Audio";
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "mic_status", is_on: false }));
 }
@@ -3320,17 +3333,150 @@ function _reconnectIosSttWs() {
   };
 }
 
-convMicBtn.addEventListener("click", () => {
+function convIsAudioJoined() {
+  return Boolean(_iosMicActive || convIsListening);
+}
+
+function convJoinComputerAudio() {
   _unlockTts();
+  convAudioModalClose();
+  convCloseToolbarPopovers();
+  if (convIsAudioJoined()) return;
   if (convCanUseBackendStt()) {
-    if (_iosMicActive) {
-      convStopIosMic();
-    } else {
-      convStartIosMic();
-    }
+    convStartIosMic();
   } else {
-    convIsListening ? convStopListening() : convStartListening();
+    convStartListening();
   }
+}
+
+function convLeaveComputerAudio() {
+  if (_iosMicActive) {
+    convStopIosMic();
+  } else if (convIsListening) {
+    convStopListening();
+  }
+}
+
+function convAudioModalOpen(status = "Choose an audio option to continue.") {
+  if (!convAudioModal) return;
+  convCloseToolbarPopovers();
+  convAudioModal.style.display = "flex";
+  if (convAudioTestStatus) convAudioTestStatus.textContent = status;
+  lucide.createIcons({ nodes: [convAudioModal] });
+}
+
+function convAudioModalClose() {
+  if (!convAudioModal) return;
+  convAudioModal.style.display = "none";
+}
+
+async function convTestSpeaker() {
+  if (!convAudioTestStatus) return;
+  convAudioTestStatus.textContent = "Playing a test tone...";
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) throw new Error("Audio output is not supported in this browser.");
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.9);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.95);
+    setTimeout(() => {
+      ctx.close();
+      if (convAudioTestStatus) convAudioTestStatus.textContent = "Speaker test complete.";
+    }, 1050);
+  } catch (err) {
+    convAudioTestStatus.textContent = err.message || "Could not play the speaker test.";
+  }
+}
+
+async function convTestMicrophone() {
+  if (!convAudioTestStatus) return;
+  if (convIsAudioJoined()) {
+    convAudioTestStatus.textContent = "Microphone is already joined and listening.";
+    return;
+  }
+  convAudioTestStatus.textContent = "Checking microphone input...";
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioCtx();
+    const source = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    const data = new Uint8Array(analyser.fftSize);
+    source.connect(analyser);
+    let peak = 0;
+    let ticks = 0;
+    const timer = setInterval(() => {
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const centered = data[i] - 128;
+        sum += centered * centered;
+      }
+      peak = Math.max(peak, Math.sqrt(sum / data.length));
+      ticks++;
+      convAudioTestStatus.textContent =
+        peak > 4 ? "Microphone input detected." : "Speak to test your microphone...";
+      if (ticks >= 25) {
+        clearInterval(timer);
+        stream.getTracks().forEach((track) => track.stop());
+        ctx.close();
+        convAudioTestStatus.textContent =
+          peak > 4 ? "Microphone test complete." : "No microphone input detected.";
+      }
+    }, 120);
+  } catch (err) {
+    convAudioTestStatus.textContent =
+      err?.name === "NotAllowedError"
+        ? "Microphone permission was blocked."
+        : "Could not start microphone test.";
+  }
+}
+
+convMicBtn.addEventListener("click", (e) => {
+  const clickedCaret = Boolean(e.target.closest(".conv-toolbar-caret"));
+  if (clickedCaret) {
+    const isOpen = convAudioPopover?.style.display === "flex";
+    convCloseToolbarPopovers(isOpen ? null : "audio");
+    if (!convAudioPopover) return;
+    convAudioPopover.style.display = isOpen ? "none" : "flex";
+    convMicBtn.classList.toggle("open", !isOpen);
+    lucide.createIcons({ nodes: [convAudioPopover] });
+    return;
+  }
+  if (convIsAudioJoined()) {
+    convLeaveComputerAudio();
+    return;
+  }
+  convAudioModalOpen();
+});
+
+convAudioJoinMenuBtn?.addEventListener("click", convJoinComputerAudio);
+convAudioTestMenuBtn?.addEventListener("click", () =>
+  convAudioModalOpen("Test your speaker or microphone before joining."),
+);
+convAudioCloseBtn?.addEventListener("click", convAudioModalClose);
+convAudioJoinBtn?.addEventListener("click", convJoinComputerAudio);
+convAudioTestSpeakerBtn?.addEventListener("click", convTestSpeaker);
+convAudioTestMicBtn?.addEventListener("click", convTestMicrophone);
+convAudioModal?.addEventListener("click", (e) => {
+  if (e.target === convAudioModal) convAudioModalClose();
+});
+convAudioAutoJoin?.addEventListener("change", () => {
+  showToast(
+    convAudioAutoJoin.checked
+      ? "Computer audio will auto-join when supported."
+      : "Computer audio auto-join is off.",
+    "info",
+  );
 });
 
 function convSetTtsUI() {
@@ -4628,6 +4774,10 @@ convCamBtn.addEventListener("click", () => {
 });
 
 function convCloseToolbarPopovers(except = null) {
+  if (except !== "audio" && convAudioPopover) {
+    convAudioPopover.style.display = "none";
+    convMicBtn?.classList.remove("open");
+  }
   if (except !== "participants" && convParticipantsPopover) {
     convParticipantsPopover.style.display = "none";
     convParticipantsBtn?.classList.remove("open");
@@ -4744,7 +4894,7 @@ convEndBtn?.addEventListener("click", () => {
 document.addEventListener("click", (e) => {
   if (!convActive?.contains(e.target)) return;
   const insidePopover = e.target.closest(".conv-toolbar-popover, .conv-participants-panel");
-  const insideToolbarButton = e.target.closest("#convParticipantsBtn, #convMoreBtn");
+  const insideToolbarButton = e.target.closest("#convMicBtn, #convParticipantsBtn, #convMoreBtn");
   if (!insidePopover && !insideToolbarButton) convCloseToolbarPopovers();
 });
 

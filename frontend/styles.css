@@ -2943,6 +2943,131 @@ footer p {
   background: #242427;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
 }
+#convActive .conv-audio-popover {
+  left: 0.8rem;
+  right: auto;
+  display: flex;
+  flex-direction: column;
+  width: 260px;
+}
+#convActive .conv-audio-popover .conv-more-action {
+  justify-content: flex-start;
+}
+
+/* ── Join audio modal ── */
+.conv-audio-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.2);
+}
+.conv-audio-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(430px, calc(100vw - 2rem));
+  min-height: 320px;
+  padding: 3.4rem 2rem 1.65rem;
+  border: 1px solid rgba(212, 212, 216, 0.95);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1f2937;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
+}
+.conv-audio-close {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #52525b;
+  cursor: pointer;
+}
+.conv-audio-close:hover {
+  background: #f4f4f5;
+  color: #18181b;
+}
+.conv-audio-close svg {
+  width: 18px;
+  height: 18px;
+}
+.conv-audio-title {
+  position: absolute;
+  top: 1rem;
+  left: 1.1rem;
+  color: #27272a;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.conv-audio-primary {
+  width: min(240px, 100%);
+  min-height: 104px;
+  margin-top: 1.5rem;
+  padding: 0.9rem 1rem;
+  border: 0;
+  border-radius: 8px;
+  background: #4f46e5;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.98rem;
+  font-weight: 800;
+  line-height: 1.35;
+  transition:
+    background 0.15s ease,
+    transform 0.12s ease;
+}
+.conv-audio-primary:hover {
+  background: #4338ca;
+  transform: translateY(-1px);
+}
+.conv-audio-link {
+  margin-top: 0.8rem;
+  border: 0;
+  background: transparent;
+  color: #4f46e5;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.conv-audio-link:hover {
+  color: #3730a3;
+  text-decoration: underline;
+}
+.conv-audio-status {
+  min-height: 20px;
+  margin-top: 0.9rem;
+  color: #52525b;
+  font-size: 0.78rem;
+  text-align: center;
+}
+.conv-audio-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  margin-top: auto;
+  color: #52525b;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+.conv-audio-checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: #4f46e5;
+  flex-shrink: 0;
+}
 #convActive .conv-participants-panel {
   position: absolute;
   top: 56px;
