@@ -464,10 +464,29 @@
               </button>
             </div>
 
-            <div class="conv-toolbar-popover conv-participants-popover" id="convParticipantsPopover" style="display:none">
-              <div class="conv-popover-title">Participants</div>
+            <aside class="conv-participants-panel" id="convParticipantsPopover" style="display:none" aria-label="Participants panel">
+              <div class="conv-participants-panel-header">
+                <strong id="convParticipantsPanelTitle">Participants</strong>
+                <div class="conv-participants-header-actions">
+                  <button type="button" class="conv-panel-icon-btn" id="convParticipantsHeaderMoreBtn" title="More participant options">
+                    <i data-lucide="more-horizontal"></i>
+                  </button>
+                  <button type="button" class="conv-panel-icon-btn" id="convParticipantsCloseBtn" title="Close participants">
+                    <i data-lucide="x"></i>
+                  </button>
+                </div>
+              </div>
               <div class="conv-participants-list" id="convParticipantsList"></div>
-            </div>
+              <div class="conv-participant-action-menu" id="convParticipantActionMenu" style="display:none">
+                <button type="button" data-action="rename">Rename</button>
+                <button type="button" data-action="profile">Edit profile picture</button>
+              </div>
+              <div class="conv-participants-panel-footer">
+                <button type="button" id="convParticipantsInviteBtn">Invite</button>
+                <button type="button" id="convParticipantsMuteAllBtn">Mute all</button>
+                <button type="button" id="convParticipantsMoreBtn">More</button>
+              </div>
+            </aside>
 
             <div class="conv-toolbar-popover conv-more-popover" id="convMorePopover" style="display:none">
               <button type="button" class="conv-more-action" id="convSummaryBtn">

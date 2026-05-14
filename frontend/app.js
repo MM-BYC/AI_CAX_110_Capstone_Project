@@ -1956,6 +1956,13 @@ const convParticipantsBtn = document.getElementById("convParticipantsBtn");
 const convParticipantsLabel = document.getElementById("convParticipantsLabel");
 const convParticipantsPopover = document.getElementById("convParticipantsPopover");
 const convParticipantsList = document.getElementById("convParticipantsList");
+const convParticipantsPanelTitle = document.getElementById("convParticipantsPanelTitle");
+const convParticipantsCloseBtn = document.getElementById("convParticipantsCloseBtn");
+const convParticipantsHeaderMoreBtn = document.getElementById("convParticipantsHeaderMoreBtn");
+const convParticipantActionMenu = document.getElementById("convParticipantActionMenu");
+const convParticipantsInviteBtn = document.getElementById("convParticipantsInviteBtn");
+const convParticipantsMuteAllBtn = document.getElementById("convParticipantsMuteAllBtn");
+const convParticipantsMoreBtn = document.getElementById("convParticipantsMoreBtn");
 const convChatBtn = document.getElementById("convChatBtn");
 const convMoreBtn = document.getElementById("convMoreBtn");
 const convMorePopover = document.getElementById("convMorePopover");
@@ -2005,19 +2012,66 @@ function convGetWsBase() {
 
 // ── Participant carousel ───────────────────────────────────────────────────
 // Each participant gets a square card (name overlay + camera video inside).
-// Cards fill a 3-row grid; left/right arrows paginate when count exceeds one page.
-
-const _CARD_ROWS = 20; // effectively unlimited — all tiles show in one page
+// Cards fill the visible gallery area; left/right arrows paginate overflow.
+const _CARD_MIN_TILE_WIDTH = 150;
+const _CARD_MIN_TILE_HEIGHT = 92;
+const _CARD_GRID_GAP = 10;
+const _CARD_MAX_COLS = 5;
+const _CARD_MAX_ROWS = 5;
 
 let _carouselPage = 0;
 const _carouselCards = []; // ordered DOM elements; order = join order
 
+function _carouselLayout() {
+  const viewport = document.getElementById("convCarouselViewport");
+  const rect = viewport?.getBoundingClientRect();
+  const width = viewport?.clientWidth || rect?.width || 720;
+  const height = viewport?.clientHeight || rect?.height || 360;
+  const count = Math.max(1, _carouselCards.length);
+  const maxColsByWidth = Math.max(
+    1,
+    Math.floor((width + _CARD_GRID_GAP) / (_CARD_MIN_TILE_WIDTH + _CARD_GRID_GAP)),
+  );
+  const maxRowsByHeight = Math.max(
+    1,
+    Math.floor((height + _CARD_GRID_GAP) / (_CARD_MIN_TILE_HEIGHT + _CARD_GRID_GAP)),
+  );
+  const maxCols = Math.min(_CARD_MAX_COLS, maxColsByWidth);
+  const maxRows = Math.min(_CARD_MAX_ROWS, maxRowsByHeight);
+  let best = {
+    cols: 1,
+    rows: 1,
+    pageSize: 1,
+    visibleCount: 1,
+    tileArea: width * height,
+  };
+
+  for (let rows = 1; rows <= maxRows; rows++) {
+    for (let cols = 1; cols <= maxCols; cols++) {
+      const pageSize = cols * rows;
+      const tileWidth = (width - _CARD_GRID_GAP * (cols - 1)) / cols;
+      const tileHeight = (height - _CARD_GRID_GAP * (rows - 1)) / rows;
+      const fittedHeight = Math.min(tileHeight, tileWidth * 9 / 16);
+      const tileArea = tileWidth * fittedHeight;
+      const visibleCount = Math.min(pageSize, count);
+      const betterVisibleCount = visibleCount > best.visibleCount;
+      const equalVisibleBetterSize =
+        visibleCount === best.visibleCount && tileArea > best.tileArea;
+      if (betterVisibleCount || equalVisibleBetterSize) {
+        best = { cols, rows, pageSize, visibleCount, tileArea };
+      }
+    }
+  }
+
+  return best;
+}
+
 function _carouselCols() {
-  const n = _carouselCards.length || 1;
-  if (n === 1) return 1;
-  if (n <= 4) return 2;
-  if (n <= 9) return 3;
-  return 4;
+  return _carouselLayout().cols;
+}
+
+function _carouselPageSize() {
+  return _carouselLayout().pageSize;
 }
 
 function _buildCard(uid, user) {
@@ -2065,9 +2119,10 @@ function _buildCard(uid, user) {
   const nameBar = document.createElement("div");
   nameBar.className = "conv-card-name-bar";
 
-  const micDot = document.createElement("div");
+  const micDot = document.createElement("i");
   micDot.className = "conv-participant-mic-dot" + (user.mic_on ? " on" : "");
   micDot.id = `conv-mic-dot-${uid}`;
+  micDot.setAttribute("data-lucide", user.mic_on ? "mic" : "mic-off");
 
   const nameTxt = document.createElement("span");
   nameTxt.className = "conv-card-name-txt";
@@ -2111,8 +2166,7 @@ function _carouselRenderPage() {
   const track = document.getElementById("convCarouselTrack");
   if (!track) return;
 
-  const cols = _carouselCols();
-  const pageSize = cols * _CARD_ROWS;
+  const { cols, rows, pageSize } = _carouselLayout();
   const total = _carouselCards.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   _carouselPage = Math.min(_carouselPage, totalPages - 1);
@@ -2125,6 +2179,7 @@ function _carouselRenderPage() {
   while (track.firstChild) track.removeChild(track.firstChild);
   _carouselCards.slice(start, end).forEach((c) => track.appendChild(c));
   track.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  track.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
 
   const btnL = document.getElementById("convCarouselLeft");
   const btnR = document.getElementById("convCarouselRight");
@@ -2172,6 +2227,9 @@ function convRenderParticipantsPopover() {
   if (convParticipantsLabel) {
     convParticipantsLabel.textContent = `Participants${users.length ? ` (${users.length})` : ""}`;
   }
+  if (convParticipantsPanelTitle) {
+    convParticipantsPanelTitle.textContent = `Participants (${users.length})`;
+  }
   if (!users.length) {
     convParticipantsList.innerHTML = '<div class="conv-participant-row empty">No participants yet</div>';
     return;
@@ -2180,22 +2238,25 @@ function convRenderParticipantsPopover() {
     .map(([uid, user]) => {
       const name = escapeHtml(user.name || "Guest");
       const lang = escapeHtml((user.language || "").toUpperCase());
-      const self = uid === convUserId ? "You" : "";
+      const self = uid === convUserId ? "me" : "";
       const host = user.is_host ? "Host" : "";
-      const badges = [self, host].filter(Boolean).join(" · ");
+      const badges = [host, self].filter(Boolean).join(", ");
       const micIcon = user.mic_on ? "mic" : "mic-off";
       const videoIcon = user.camera_on ? "video" : "video-off";
       return `
-        <div class="conv-participant-row">
+        <div class="conv-participant-row" data-user-id="${escapeHtml(uid)}">
           <span class="conv-participant-avatar">${name.charAt(0).toUpperCase()}</span>
           <span class="conv-participant-meta">
-            <strong>${name}</strong>
-            <small>${badges || lang || "Participant"}</small>
+            <strong>${name}${badges ? ` <em>(${escapeHtml(badges)})</em>` : ""}</strong>
+            <small>${lang || "Participant"}</small>
           </span>
           <span class="conv-participant-status">
             <i data-lucide="${micIcon}"></i>
             <i data-lucide="${videoIcon}"></i>
           </span>
+          <button type="button" class="conv-participant-more-btn" data-user-id="${escapeHtml(uid)}" title="Participant options">
+            <i data-lucide="more-horizontal"></i>
+          </button>
         </div>
       `;
     })
@@ -2213,7 +2274,11 @@ function convUpdateChipMic(userId, isOn) {
     }
   }
   const dot = document.getElementById(`conv-mic-dot-${userId}`);
-  if (dot) dot.className = "conv-participant-mic-dot" + (isOn ? " on" : "");
+  if (dot) {
+    dot.className = "conv-participant-mic-dot" + (isOn ? " on" : "");
+    dot.setAttribute("data-lucide", isOn ? "mic" : "mic-off");
+    lucide.createIcons({ nodes: [dot] });
+  }
   convRenderParticipantsPopover();
 }
 
@@ -2342,8 +2407,7 @@ document.getElementById("convCarouselLeft")?.addEventListener("click", () => {
   }
 });
 document.getElementById("convCarouselRight")?.addEventListener("click", () => {
-  const cols = _carouselCols();
-  const pageSize = cols * _CARD_ROWS;
+  const pageSize = _carouselPageSize();
   const totalPages = Math.ceil(_carouselCards.length / pageSize);
   if (_carouselPage < totalPages - 1) {
     _carouselPage++;
@@ -4567,6 +4631,7 @@ function convCloseToolbarPopovers(except = null) {
   if (except !== "participants" && convParticipantsPopover) {
     convParticipantsPopover.style.display = "none";
     convParticipantsBtn?.classList.remove("open");
+    if (convParticipantActionMenu) convParticipantActionMenu.style.display = "none";
   }
   if (except !== "more" && convMorePopover) {
     convMorePopover.style.display = "none";
@@ -4581,6 +4646,71 @@ convParticipantsBtn?.addEventListener("click", () => {
   convRenderParticipantsPopover();
   convParticipantsPopover.style.display = isOpen ? "none" : "block";
   convParticipantsBtn.classList.toggle("open", !isOpen);
+  lucide.createIcons({ nodes: [convParticipantsPopover] });
+});
+
+convParticipantsCloseBtn?.addEventListener("click", () => {
+  convCloseToolbarPopovers();
+});
+
+convParticipantsHeaderMoreBtn?.addEventListener("click", () => {
+  showToast("More participant controls can be added when server-side moderation is available.", "info");
+});
+
+convParticipantsList?.addEventListener("click", (e) => {
+  const btn = e.target.closest(".conv-participant-more-btn");
+  if (!btn || !convParticipantActionMenu) return;
+  e.stopPropagation();
+  const nextUserId = btn.dataset.userId || "";
+  const isSameOpen =
+    convParticipantActionMenu.style.display === "block" &&
+    convParticipantActionMenu.dataset.userId === nextUserId;
+  convParticipantActionMenu.dataset.userId = nextUserId;
+  convParticipantActionMenu.style.top = `${Math.max(54, btn.offsetTop + 28)}px`;
+  convParticipantActionMenu.style.display =
+    isSameOpen ? "none" : "block";
+});
+
+convParticipantActionMenu?.addEventListener("click", (e) => {
+  const action = e.target.closest("button")?.dataset.action;
+  const userId = convParticipantActionMenu.dataset.userId;
+  if (!action || !userId) return;
+  if (action === "rename") {
+    const user = convUsers[userId];
+    const currentName = user?.name || "";
+    const nextName = prompt("Rename participant", currentName);
+    if (!nextName || !nextName.trim()) return;
+    if (userId === convUserId) {
+      const cleanName = nextName.trim().slice(0, 30);
+      convNameInput.value = cleanName;
+      if (convUsers[userId]) convUsers[userId].name = cleanName;
+      const cardName = document.querySelector(`#conv-card-${userId} .conv-card-name-txt`);
+      if (cardName) cardName.textContent = `${cleanName} (You)`;
+      convRenderParticipantsPopover();
+      showToast("Name updated for this session.", "success");
+    } else {
+      showToast("Only your own display name can be renamed here.", "info");
+    }
+  }
+  if (action === "profile") {
+    showToast("Profile picture editing is not available in this meeting room yet.", "info");
+  }
+  convParticipantActionMenu.style.display = "none";
+});
+
+convParticipantsInviteBtn?.addEventListener("click", () => {
+  convCloseToolbarPopovers();
+  convInviteBtn?.click();
+});
+
+convParticipantsMuteAllBtn?.addEventListener("click", () => {
+  if (convIsListening) convStopListening();
+  if (_iosMicActive) convStopIosMic();
+  showToast("Your audio is muted.", "success");
+});
+
+convParticipantsMoreBtn?.addEventListener("click", () => {
+  showToast("More participant controls can be added when server-side moderation is available.", "info");
 });
 
 convChatBtn?.addEventListener("click", () => {
@@ -4613,7 +4743,7 @@ convEndBtn?.addEventListener("click", () => {
 
 document.addEventListener("click", (e) => {
   if (!convActive?.contains(e.target)) return;
-  const insidePopover = e.target.closest(".conv-toolbar-popover");
+  const insidePopover = e.target.closest(".conv-toolbar-popover, .conv-participants-panel");
   const insideToolbarButton = e.target.closest("#convParticipantsBtn, #convMoreBtn");
   if (!insidePopover && !insideToolbarButton) convCloseToolbarPopovers();
 });
