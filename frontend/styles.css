@@ -3479,6 +3479,9 @@ footer p {
 
 /* ── Zoom-style Landing Page (lp-*) ── */
 .lp-wrap {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
