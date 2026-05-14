@@ -2048,7 +2048,14 @@ function convApplyRoomSnapshot(users) {
   });
 
   Object.keys(convUsers).forEach((uid) => {
-    if (!nextUsers[uid]) convRemoveParticipantCard(uid);
+    if (!nextUsers[uid]) {
+      if (convUsers[uid]?.idle) {
+        // Idle participants persist — carry them into the new state
+        nextUsers[uid] = convUsers[uid];
+      } else {
+        convRemoveParticipantCard(uid);
+      }
+    }
   });
   convUsers = nextUsers;
   convRenderParticipants();
@@ -2409,10 +2416,14 @@ function convHandleMessage(msg) {
     case "user_left":
       livekitDetachRemoteVideo(msg.user_id);
       convClearTyping(msg.user_id);
-      convStopIdleTimer(msg.user_id);
-      delete convUsers[msg.user_id];
-      convRenderParticipants();
-      convAddSystemMsg(`${msg.name} left the room.`);
+      if (convUsers[msg.user_id]?.idle) {
+        // Keep the card visible — idle participants stay on screen
+      } else {
+        convStopIdleTimer(msg.user_id);
+        delete convUsers[msg.user_id];
+        convRenderParticipants();
+        convAddSystemMsg(`${msg.name} left the room.`);
+      }
       break;
 
     case "webrtc_offer":
