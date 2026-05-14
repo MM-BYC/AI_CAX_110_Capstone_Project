@@ -1848,7 +1848,6 @@ const _CARD_ROWS = 20; // effectively unlimited — all tiles show in one page
 
 let _carouselPage = 0;
 const _carouselCards = []; // ordered DOM elements; order = join order
-const _participantIdleTimers = {};
 
 function _carouselCols() {
   const n = _carouselCards.length || 1;
@@ -1914,7 +1913,7 @@ function _buildCard(uid, user) {
   const idleTimer = document.createElement("span");
   idleTimer.className = "conv-card-idle-timer";
   idleTimer.id = `conv-idle-timer-${uid}`;
-  idleTimer.textContent = user.idle ? convFormatIdleElapsed(user.idle_since) : "";
+  idleTimer.textContent = user.idle ? "idle" : "";
 
   const langBadge = document.createElement("span");
   langBadge.className = "conv-lang-badge conv-card-lang-badge";
@@ -2021,42 +2020,14 @@ function convUpdateChipCam(userId, isOn) {
   if (dot) dot.className = "conv-participant-cam-dot" + (isOn ? " on" : "");
 }
 
-function convNormalizeIdleSince(idleSince) {
-  const parsed = Number(idleSince);
-  if (!Number.isFinite(parsed) || parsed <= 0) return Date.now();
-  return parsed > 100000000000 ? parsed : parsed * 1000;
-}
-
-function convFormatIdleElapsed(idleSince) {
-  const startedAt = convNormalizeIdleSince(idleSince);
-  const totalSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes >= 60) {
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    return `${hours}h ${remainingMinutes}m`;
-  }
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-function convUpdateIdleTimer(userId) {
-  const timer = document.getElementById(`conv-idle-timer-${userId}`);
-  if (!timer || !convUsers[userId]?.idle) return;
-  timer.textContent = convFormatIdleElapsed(convUsers[userId].idle_since);
-}
 
 function convStartIdleTimer(userId) {
   if (!convUsers[userId]) return;
-  if (!convUsers[userId].idle_since) convUsers[userId].idle_since = Date.now();
-  convUpdateIdleTimer(userId);
-  clearInterval(_participantIdleTimers[userId]);
-  _participantIdleTimers[userId] = setInterval(() => convUpdateIdleTimer(userId), 1000);
+  const timer = document.getElementById(`conv-idle-timer-${userId}`);
+  if (timer) timer.textContent = "idle";
 }
 
 function convStopIdleTimer(userId) {
-  clearInterval(_participantIdleTimers[userId]);
-  delete _participantIdleTimers[userId];
   const timer = document.getElementById(`conv-idle-timer-${userId}`);
   if (timer) timer.textContent = "";
 }

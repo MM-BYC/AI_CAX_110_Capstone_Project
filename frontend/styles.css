@@ -1175,14 +1175,16 @@ footer p {
 .conv-card-idle-timer {
   display: none;
   flex: 0 0 auto;
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 0.78rem;
+  font-weight: 600;
   color: #facc15;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
 .conv-participant-card.idle .conv-card-idle-timer {
-  display: inline-flex;
+  display: inline;
 }
 
 .conv-participant-card.idle .conv-card-placeholder {
