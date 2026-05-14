@@ -1212,29 +1212,33 @@ footer p {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 7px;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(2px);
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   z-index: 2;
 }
 .conv-card-name-txt {
   flex: 1;
   font-size: 1.24rem;
-  font-weight: 600;
-  color: #fff;
+  font-weight: 700;
+  color: #ffffff;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 .conv-card-lang-badge {
-  background: #2563eb;
-  font-size: 1.14rem;
-  font-weight: 700;
-  letter-spacing: 0;
-  color: #fff;
-  border-radius: 3px;
-  padding: 3px 7px;
+  background: #ffffff;
+  font-size: 1.0rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #0d3270;
+  border-radius: 4px;
+  padding: 3px 8px;
   flex-shrink: 0;
+  text-transform: uppercase;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
 /* Mic dot — inside name bar */
