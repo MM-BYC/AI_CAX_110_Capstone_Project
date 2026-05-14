@@ -2960,6 +2960,10 @@ footer p {
   gap: 1.5rem;
 }
 
+.auth-card--wide {
+  max-width: 900px;
+}
+
 .landing-shell {
   width: min(1120px, 100%);
   display: grid;
@@ -3270,17 +3274,24 @@ footer p {
 
 .pricing-plans {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.55rem;
-  margin: 0.25rem 0 0.25rem;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin: 0.25rem 0 0;
   text-align: left;
+}
+
+.pricing-footer {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.25rem;
 }
 
 .pricing-continue {
   width: 100%;
   justify-content: center;
-  min-height: 42px;
-  margin-top: 0.25rem;
+  min-height: 44px;
   font-weight: 800;
 }
 
@@ -3293,14 +3304,28 @@ footer p {
 .plan-card {
   background: #f8fafc;
   border: 1px solid #dbe3ef;
-  border-radius: 8px;
-  padding: 0.78rem 0.85rem;
+  border-radius: 12px;
+  padding: 1.5rem 1.25rem;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
   transition:
     background 0.18s ease,
     border-color 0.3s ease,
     box-shadow 0.3s ease;
   cursor: pointer;
+}
+
+.plan-desc {
+  font-size: 0.82rem;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.plan-badge--savings {
+  background: #7c3aed;
 }
 
 .plan-card:hover {
@@ -4263,5 +4288,14 @@ footer p {
 @media (max-width: 400px) {
   .auth-page-brand-name {
     font-size: 1rem;
+  }
+}
+
+@media (max-width: 700px) {
+  .pricing-plans {
+    grid-template-columns: 1fr;
+  }
+  .auth-card--wide {
+    max-width: 400px;
   }
 }

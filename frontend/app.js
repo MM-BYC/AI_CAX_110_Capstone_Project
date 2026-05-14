@@ -646,30 +646,53 @@ function showAuthModal(mode = "login") {
         <div class="plan-badge">Most Popular</div>
         <h3>Free Trial</h3>
         <div class="price" id="trialPrice">${currentPricing.trial_days || 3} Days</div>
-        <p>Full access to all features</p>
+        <p class="plan-desc">Full access — no commitment needed</p>
         <ul>
-          <li><i data-lucide="check"></i> 16 Languages</li>
-          <li><i data-lucide="check"></i> Live Conversation</li>
+          <li><i data-lucide="check"></i> All 16 languages</li>
+          <li><i data-lucide="check"></i> Live speech translation</li>
+          <li><i data-lucide="check"></i> Real-time conversation rooms</li>
+          <li><i data-lucide="check"></i> AI quality review on every translation</li>
+          <li><i data-lucide="check"></i> AI meeting recap &amp; summaries</li>
+          <li><i data-lucide="check"></i> Text &amp; media file translation</li>
         </ul>
       </div>
       <div class="plan-card monthly" onclick="selectPlan(this)">
         ${checkmarkSvg}
         <h3>Monthly</h3>
         <div class="price" id="monthlyPrice">${formatPrice(currentPricing.monthly_price)}<span>/mo</span></div>
-        <p>Billed monthly</p>
+        <p class="plan-desc">Flexible — cancel any time</p>
+        <ul>
+          <li><i data-lucide="check"></i> Everything in Free Trial</li>
+          <li><i data-lucide="check"></i> Unlimited conversation history</li>
+          <li><i data-lucide="check"></i> Admin post-meeting email delivery</li>
+          <li><i data-lucide="check"></i> Enterprise vocabulary manager</li>
+          <li><i data-lucide="check"></i> Search records by date, room &amp; participant</li>
+          <li><i data-lucide="check"></i> Priority support</li>
+        </ul>
       </div>
       <div class="plan-card annual" onclick="selectPlan(this)">
         ${checkmarkSvg}
+        <div class="plan-badge plan-badge--savings">Save 20%</div>
         <h3>Annual</h3>
         <div class="price" id="annualPrice">${formatPrice(currentPricing.yearly_price)}<span>/yr</span></div>
-        <p>Save 20% vs monthly</p>
+        <p class="plan-desc">Best value — lowest cost per month</p>
+        <ul>
+          <li><i data-lucide="check"></i> Everything in Monthly</li>
+          <li><i data-lucide="check"></i> 20% saving vs monthly billing</li>
+          <li><i data-lucide="check"></i> Dedicated account support</li>
+          <li><i data-lucide="check"></i> Early access to new features</li>
+          <li><i data-lucide="check"></i> Bulk participant room management</li>
+          <li><i data-lucide="check"></i> Custom enterprise vocabulary sets</li>
+        </ul>
       </div>
-      <button type="button" class="btn btn-primary pricing-continue" id="pricingContinueBtn">
-        <i data-lucide="arrow-right"></i>
-        <span>Continue with selected plan</span>
-      </button>
-      <div class="pricing-login-prompt">
-        Already have an account? <span class="auth-link" onclick="showAuthModal('login')">Sign in</span>
+      <div class="pricing-footer">
+        <button type="button" class="btn btn-primary pricing-continue" id="pricingContinueBtn">
+          <i data-lucide="arrow-right"></i>
+          <span>Continue with selected plan</span>
+        </button>
+        <div class="pricing-login-prompt">
+          Already have an account? <span class="auth-link" onclick="showAuthModal('login')">Sign in</span>
+        </div>
       </div>
     </div>
   `;
@@ -715,7 +738,7 @@ function showAuthModal(mode = "login") {
       </div>
     </header>
     <div class="auth-page-body">
-      <section class="auth-card" aria-label="${isLogin ? "Login" : isPricing ? "Plans and account creation" : "Reset password"}">
+      <section class="auth-card${isPricing ? " auth-card--wide" : ""}" aria-label="${isLogin ? "Login" : isPricing ? "Plans and account creation" : "Reset password"}">
         <div class="auth-header">
           <div class="auth-mode-switch">
             <button type="button" class="${isPricing ? "active" : ""}" onclick="showAuthModal('pricing')">Plans</button>
