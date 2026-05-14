@@ -10,9 +10,11 @@
   padding: 0;
 }
 
-html {
-  min-height: 100%;
+html,
+body {
+  height: 100%;
   background: #0a1628;
+  overflow: hidden;
 }
 
 body {
@@ -27,11 +29,21 @@ body {
   background-attachment: fixed;
 }
 
-/* ── Layout ── */
-.container {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 0 1.5rem 2rem;
+/* ── App shell (Zoom-style full-viewport column layout) ── */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* ── App body: sidebar + main content side by side ── */
+.app-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* ── Header (Zoom-style flat top bar) ── */
@@ -43,11 +55,9 @@ header {
   align-items: center;
   gap: 0.75rem;
   height: 56px;
-  margin: 0 -1.5rem 1.25rem;
-  padding: 0 1rem;
-  background: rgba(10, 22, 40, 0.82);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  flex-shrink: 0;
+  padding: 0 1.5rem;
+  background: rgba(10, 22, 40, 0.95);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   text-align: left;
 }
@@ -117,10 +127,10 @@ header .badge {
   display: none;
 }
 
-/* ── Hamburger ── */
+/* ── Hamburger (mobile only — hidden on desktop where sidebar is always visible) ── */
 .hamburger-btn {
-  display: inline-flex;
-  position: relative; /* live inline with the logo, not absolute */
+  display: none; /* shown only at ≤768px via media query below */
+  position: relative;
   width: 36px;
   height: 36px;
   background: transparent;
@@ -131,6 +141,12 @@ header .badge {
   justify-content: center;
   color: #ffffff;
   flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .hamburger-btn {
+    display: inline-flex;
+  }
 }
 
 .hamburger-btn:hover {
@@ -190,43 +206,49 @@ header h1 {
   background: rgba(99, 102, 241, 0.08);
 }
 
-/* ── Tab menu (Zoom-style dropdown anchored under the hamburger) ── */
-.tab-menu-wrap {
-  display: none;
-  position: absolute;
-  top: 56px; /* directly under the 56px-tall header */
-  left: 2rem;
-  z-index: 50;
-}
-.tab-menu-wrap.open {
-  display: block;
-}
-
-.tab-menu {
+/* ── Sidebar (Zoom-style persistent left nav) ── */
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 0;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 0.35rem;
-  width: 220px;
-  box-shadow: 0 8px 24px rgba(35, 35, 51, 0.12);
+  gap: 0.15rem;
+  padding: 1rem 0.6rem;
+  background: #0f172a;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-y: auto;
+}
+
+/* Mobile: sidebar hidden; hamburger toggles it as an overlay */
+@media (max-width: 768px) {
+  .sidebar {
+    display: none;
+    position: fixed;
+    top: 56px;
+    left: 0;
+    width: 220px;
+    height: calc(100dvh - 56px);
+    z-index: 50;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
+  }
+  .sidebar.open {
+    display: flex;
+  }
 }
 
 .tab-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.65rem;
   background: transparent;
   border: none;
-  border-radius: 6px;
-  color: #4d4d4d;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   font-weight: 500;
-  padding: 0.6rem 0.85rem;
+  padding: 0.72rem 0.9rem;
   transition:
     background 0.12s,
     color 0.12s;
@@ -236,19 +258,28 @@ header h1 {
 }
 
 .tab-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
 }
 
 .tab-btn:hover {
-  background: #f3f4f6;
+  background: rgba(255, 255, 255, 0.09);
   color: #ffffff;
 }
 
 .tab-btn.active {
-  background: rgba(45, 140, 255, 0.1);
-  color: #2d8cff;
+  background: rgba(45, 140, 255, 0.2);
+  color: #60a5fa;
   font-weight: 600;
+}
+
+/* ── Main content area ── */
+main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 1.5rem;
 }
 
 /* ── Language bar ── */
@@ -360,37 +391,26 @@ select option {
 
   /* Anchor the whole UI to the dynamic viewport so iOS Safari's URL bar
      doesn't push content out of view. */
-  body {
-    min-height: 100dvh;
-  }
-  .container {
-    min-height: 100dvh;
-    padding: 0 0.75rem 1rem;
-    display: flex;
-    flex-direction: column;
+  html,
+  body,
+  .app-shell {
+    height: 100dvh;
   }
   main {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
+    padding: 0.75rem;
+    overflow-y: auto;
   }
   .tab-content {
     flex: 1;
     min-height: 0;
   }
 
-  /* Header keeps the same Zoom-style top bar; just stretch margins to edge. */
   header {
-    margin: 0 -0.75rem 0.75rem;
-    padding: 0 0.75rem;
-  }
-  .tab-menu-wrap {
-    left: 1.75rem;
+    padding: 0 1rem;
   }
   .tab-btn {
-    padding: 0.7rem 0.85rem;
-    font-size: 0.95rem;
+    padding: 0.75rem 0.9rem;
+    font-size: 0.9rem;
   }
 }
 
@@ -650,16 +670,17 @@ audio {
   }
 }
 
-/* ── Footer ── */
+/* ── Footer (minimal app footer, outside the app-body flex row) ── */
 footer {
   text-align: center;
-  margin-top: 2.5rem;
-  padding-bottom: 1rem;
+  padding: 0.5rem 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
 }
 
 footer p {
-  font-size: 0.72rem;
-  color: #9ca3af;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.3);
 }
 
 /* ── Quality badge ── */
@@ -3333,7 +3354,7 @@ footer p {
     overflow-x: hidden;
   }
 
-  .container,
+  .app-shell,
   main,
   .tab-content,
   #convTab,

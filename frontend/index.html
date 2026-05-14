@@ -11,7 +11,7 @@
   </head>
 
   <body>
-    <div class="container">
+    <div class="app-shell">
 
       <header>
         <button type="button" class="hamburger-btn" id="hamburgerBtn" aria-label="Open menu" aria-expanded="false">
@@ -29,10 +29,9 @@
         <span class="badge">Multi-Agent System</span>
       </header>
 
-      <main>
-        <!-- Tab menu (becomes hamburger dropdown on mobile) -->
-        <div class="tab-menu-wrap" id="tabMenuWrap">
-        <div class="tab-menu">
+      <div class="app-body">
+        <!-- Sidebar (persistent left nav on desktop, slide-in on mobile) -->
+        <nav class="sidebar" id="tabMenuWrap" aria-label="Main navigation">
           <button type="button" class="tab-btn active" id="tabConv">
             <i data-lucide="users"></i>
             <span>Conversation</span>
@@ -53,8 +52,9 @@
             <i data-lucide="shield"></i>
             <span>Admin</span>
           </button>
-        </div>
-        </div>
+        </nav>
+
+        <main>
 
         <!-- Text tab -->
         <div id="textTab" class="tab-content" style="display:none">
@@ -599,12 +599,13 @@
           <div class="spinner"></div>
           <p>Processing…</p>
         </div>
-      </main>
+        </main>
+      </div><!-- /.app-body -->
 
       <footer>
         <p id="copyright"></p>
       </footer>
-    </div>
+    </div><!-- /.app-shell -->
 
     <script src="app.js"></script>
     <script>lucide.createIcons();</script>
