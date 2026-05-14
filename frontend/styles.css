@@ -1355,7 +1355,7 @@ footer p {
   transition: background 0.2s;
 }
 .conv-participant-mic-dot.on {
-  background: #ef4444;
+  background: #22c55e;
   animation: mic-pulse-dot 1.2s ease-in-out infinite;
 }
 .conv-participant-mic-dot.pulsing {
