@@ -3918,25 +3918,6 @@ footer p {
     height: 100dvh;
   }
 
-  .auth-overlay::after {
-    content: "";
-    position: fixed;
-    top: 0.75rem;
-    right: 0.3rem;
-    bottom: 0.75rem;
-    width: 4px;
-    border-radius: 999px;
-    pointer-events: none;
-    z-index: 10000;
-    background:
-      linear-gradient(
-        180deg,
-        rgba(255, 255, 255, 0.38),
-        rgba(15, 118, 110, 0.92) 46%,
-        rgba(15, 118, 110, 0.92) 54%,
-        rgba(255, 255, 255, 0.38)
-      );
-  }
 
   .landing-shell {
     width: 100%;
