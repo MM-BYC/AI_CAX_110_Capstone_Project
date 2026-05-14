@@ -17,7 +17,7 @@ html {
 
 body {
   font-family:
-    "Lato", "Open Sans", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+    "Inter", "Lato", "Open Sans", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
   color: #232333;
   min-height: 100vh;
   background:
@@ -2807,9 +2807,9 @@ footer p {
   align-items: center;
   gap: 0.7rem;
   color: #ffffff;
-  font-size: 1rem;
-  font-weight: 900;
-  letter-spacing: 0.01em;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   margin-bottom: clamp(1rem, 2.2vh, 1.7rem);
 }
 
@@ -2833,11 +2833,11 @@ footer p {
 .landing-hero h1 {
   max-width: 620px;
   color: #ffffff;
-  font-size: clamp(2.35rem, 4.6vw, 3.25rem);
-  line-height: 1;
-  letter-spacing: 0;
+  font-size: clamp(2.75rem, 5vw, 4rem);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
   margin: 0;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .landing-copy {
@@ -3322,6 +3322,7 @@ footer p {
 
   .landing-hero h1 {
     font-size: 3.2rem;
+    letter-spacing: -0.025em;
   }
 }
 
@@ -3399,8 +3400,9 @@ footer p {
   }
 
   .landing-hero h1 {
-    font-size: 1.72rem;
-    line-height: 1.08;
+    font-size: 1.85rem;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
   }
 
   .landing-proof {
@@ -3411,7 +3413,8 @@ footer p {
 
   .landing-brand {
     margin-bottom: 0.9rem;
-    font-size: 0.9rem;
+    font-size: 1rem;
+    letter-spacing: -0.01em;
   }
 
   .landing-brand-mark {
