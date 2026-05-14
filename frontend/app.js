@@ -675,10 +675,46 @@ function showAuthModal(mode = "login") {
   `;
 
   overlay.innerHTML = `
-    <div class="lp-auth-wrap">
-      <button type="button" class="lp-back-btn" onclick="showAuthModal('landing')">
-        <i data-lucide="arrow-left"></i> Back to home
-      </button>
+    <header class="auth-page-header">
+      <div class="auth-page-brand" onclick="showAuthModal('landing')" role="button" tabindex="0" aria-label="Back to home">
+        <span class="auth-page-brand-icon"><i data-lucide="languages"></i></span>
+        <span class="auth-page-brand-name">AI Translate</span>
+      </div>
+      <div class="auth-page-header-right">
+        <div class="auth-page-header-prompt">
+          ${isLogin
+            ? `<span>New to AI Translate?</span>
+               <button type="button" onclick="showAuthModal('pricing')">Create account free</button>`
+            : `<span>Already have an account?</span>
+               <button type="button" onclick="showAuthModal('login')">Sign in</button>`
+          }
+        </div>
+        <button type="button" class="auth-page-header-link">Support</button>
+        <div class="auth-page-lang-wrap">
+          <i data-lucide="globe"></i>
+          <select class="auth-page-lang-select" aria-label="Display language">
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="it">Italiano</option>
+            <option value="pt">Português</option>
+            <option value="zh">中文</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="ar">العربية</option>
+            <option value="ru">Русский</option>
+            <option value="hi">हिन्दी</option>
+            <option value="nl">Nederlands</option>
+            <option value="pl">Polski</option>
+            <option value="tr">Türkçe</option>
+            <option value="tl">Filipino</option>
+          </select>
+          <i data-lucide="chevron-down" class="auth-page-lang-chevron"></i>
+        </div>
+      </div>
+    </header>
+    <div class="auth-page-body">
       <section class="auth-card" aria-label="${isLogin ? "Login" : isPricing ? "Plans and account creation" : "Reset password"}">
         <div class="auth-header">
           <div class="auth-mode-switch">
