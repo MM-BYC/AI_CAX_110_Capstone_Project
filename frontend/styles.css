@@ -2722,9 +2722,9 @@ footer p {
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(circle at 12% 18%, rgba(20, 184, 166, 0.24), transparent 32%),
-    radial-gradient(circle at 84% 12%, rgba(245, 158, 11, 0.18), transparent 30%),
-    linear-gradient(135deg, #182033 0%, #28364f 46%, #e7edf3 100%);
+    radial-gradient(ellipse at 20% 0%, rgba(27, 114, 232, 0.35), transparent 55%),
+    radial-gradient(ellipse at 80% 100%, rgba(0, 82, 212, 0.28), transparent 50%),
+    linear-gradient(160deg, #0a1628 0%, #0d3270 45%, #1558d6 100%);
   z-index: 9999;
   display: flex;
   flex-direction: column;
@@ -2766,13 +2766,11 @@ footer p {
 }
 
 .landing-hero {
-  color: #172033;
+  color: #ffffff;
   padding: clamp(1.5rem, 3.4vw, 3.2rem);
   background:
-    linear-gradient(150deg, rgba(255, 255, 255, 0.92), rgba(224, 242, 254, 0.72) 48%, rgba(204, 251, 241, 0.58)),
-    url("https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1400&q=80") center / cover;
-  background-blend-mode: screen, normal;
-  filter: contrast(1.08) saturate(1.08);
+    radial-gradient(ellipse at 30% 20%, rgba(27, 114, 232, 0.45), transparent 60%),
+    linear-gradient(155deg, #0d2250 0%, #0a4bbd 55%, #1b72e8 100%);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -2783,7 +2781,7 @@ footer p {
   display: inline-flex;
   align-items: center;
   gap: 0.7rem;
-  color: #0f766e;
+  color: #ffffff;
   font-size: 1rem;
   font-weight: 900;
   letter-spacing: 0.01em;
@@ -2797,9 +2795,9 @@ footer p {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #0f766e;
+  background: #1b72e8;
   color: #ffffff;
-  box-shadow: 0 12px 28px rgba(15, 118, 110, 0.28);
+  box-shadow: 0 12px 28px rgba(27, 114, 232, 0.4);
 }
 
 .landing-brand-mark svg {
@@ -2809,7 +2807,7 @@ footer p {
 
 .landing-hero h1 {
   max-width: 620px;
-  color: #101827;
+  color: #ffffff;
   font-size: clamp(2.35rem, 4.6vw, 3.25rem);
   line-height: 1;
   letter-spacing: 0;
@@ -2820,15 +2818,15 @@ footer p {
 .landing-copy {
   max-width: 580px;
   margin: clamp(0.8rem, 1.8vh, 1.1rem) 0 0;
-  color: #243244;
+  color: #bfdbfe;
   font-size: 1.08rem;
   line-height: 1.7;
   width: fit-content;
   padding: 0.72rem 0.9rem;
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 8px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(240, 253, 250, 0.82));
-  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.2);
 }
 
 .landing-proof {
@@ -2877,7 +2875,7 @@ footer p {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  color: #243244;
+  color: #93c5fd;
   font-size: 0.86rem;
   font-weight: 700;
 }
@@ -2885,7 +2883,7 @@ footer p {
 .landing-feature-list svg {
   width: 16px;
   height: 16px;
-  color: #0f766e;
+  color: #60a5fa;
 }
 
 .landing-view {
