@@ -204,7 +204,6 @@ hamburgerBtn?.addEventListener("click", () => {
 
 const _selectTab = (active) => {
   showTab(active);
-  setMenuOpen(false);
 };
 tabText.addEventListener("click", () =>
   _selectTab({ btn: tabText, panel: textTab }),
@@ -219,13 +218,6 @@ tabConv.addEventListener("click", () =>
   _selectTab({ btn: tabConv, panel: convTab }),
 );
 
-// Close the dropdown when tapping outside of it (mobile).
-document.addEventListener("click", (e) => {
-  if (!tabMenuWrap?.classList.contains("open")) return;
-  if (tabMenuWrap.contains(e.target)) return;
-  if (hamburgerBtn?.contains(e.target)) return;
-  setMenuOpen(false);
-});
 
 // ── Authentication Management ──────────────────────────────────────────────
 const AUTH_STORAGE_KEYS = [
