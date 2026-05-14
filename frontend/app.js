@@ -600,6 +600,16 @@ function showAuthModal(mode = "login") {
               <h3>Enterprise Vocabulary</h3>
               <p>Define your organisation's terminology once. Every translation respects your brand language and domain terms.</p>
             </div>
+            <div class="lp-feat-card">
+              <div class="lp-feat-icon"><i data-lucide="clipboard-list"></i></div>
+              <h3>AI Meeting Recap</h3>
+              <p>One click generates a full AI summary of your multilingual conversation — main goals, key decisions, action items with assignees, follow-ups, and next-meeting recommendations, delivered in your language.</p>
+            </div>
+            <div class="lp-feat-card">
+              <div class="lp-feat-icon"><i data-lucide="send"></i></div>
+              <h3>Post-Meeting Record Delivery</h3>
+              <p>Admins can search saved conversations by date, room, or participant, then email the full transcript or AI summary to themselves with all attendees CC'd — the complete record, delivered automatically.</p>
+            </div>
           </div>
         </section>
 
