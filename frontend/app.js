@@ -530,6 +530,101 @@ function showAuthModal(mode = "login") {
   const isForgot = mode === "forgot";
   const isCancel = normalizedMode === "cancel";
 
+  // ── Landing page (Zoom-style full-screen marketing page) ─────────────────
+  if (normalizedMode === "landing") {
+    overlay.innerHTML = `
+      <div class="lp-wrap">
+        <nav class="lp-topbar">
+          <div class="lp-topbar-brand">
+            <span class="landing-brand-mark"><i data-lucide="languages"></i></span>
+            <span>AI Translate</span>
+          </div>
+          <div class="lp-topbar-actions">
+            <button type="button" class="lp-signin-btn" onclick="showAuthModal('login')">Sign In</button>
+            <button type="button" class="lp-cta-btn" onclick="showAuthModal('pricing')">Get Started Free</button>
+          </div>
+        </nav>
+
+        <section class="lp-hero">
+          <h1>Speak Live. One Room.<br>Real-Time Meetings,<br>Locally Translated.</h1>
+          <p class="lp-hero-sub">AI-powered real-time translation across <strong>16 languages</strong>. Create secure rooms, invite anyone, and let everyone speak freely in their own language.</p>
+          <div class="lp-hero-actions">
+            <button type="button" class="lp-primary-btn" onclick="showAuthModal('pricing')">
+              <i data-lucide="zap"></i>
+              Get Started Free
+            </button>
+            <button type="button" class="lp-ghost-btn" onclick="showAuthModal('login')">
+              Sign In
+            </button>
+          </div>
+          <div class="lp-hero-badges">
+            <span><i data-lucide="globe"></i> 16 Languages</span>
+            <span><i data-lucide="clock"></i> Real-Time AI</span>
+            <span><i data-lucide="shield"></i> Secure Rooms</span>
+            <span><i data-lucide="smartphone"></i> No Downloads</span>
+          </div>
+        </section>
+
+        <section class="lp-features">
+          <h2 class="lp-section-title">Everything you need for multilingual meetings</h2>
+          <div class="lp-feature-grid">
+            <div class="lp-feat-card">
+              <div class="lp-feat-icon"><i data-lucide="users"></i></div>
+              <h3>Conversation Rooms</h3>
+              <p>Create secure meeting rooms and invite participants. Everyone hears the conversation in their own language, in real time.</p>
+            </div>
+            <div class="lp-feat-card">
+              <div class="lp-feat-icon"><i data-lucide="mic"></i></div>
+              <h3>Live Speech Translation</h3>
+              <p>Speak and see your words translated instantly. Google Cloud Speech captures voice, Groq AI translates at speed.</p>
+            </div>
+            <div class="lp-feat-card">
+              <div class="lp-feat-icon"><i data-lucide="file-text"></i></div>
+              <h3>Text Translation</h3>
+              <p>Paste or type any text and get AI-quality translation with hallucination review across 16 language pairs.</p>
+            </div>
+            <div class="lp-feat-card">
+              <div class="lp-feat-icon"><i data-lucide="upload-cloud"></i></div>
+              <h3>Audio &amp; Video Media</h3>
+              <p>Upload audio or video files. Groq Whisper transcribes and translates the full content within seconds.</p>
+            </div>
+            <div class="lp-feat-card">
+              <div class="lp-feat-icon"><i data-lucide="sparkles"></i></div>
+              <h3>AI Quality Review</h3>
+              <p>Every translation is reviewed by a second AI agent for accuracy, catching hallucinations before they reach your team.</p>
+            </div>
+            <div class="lp-feat-card">
+              <div class="lp-feat-icon"><i data-lucide="book-open"></i></div>
+              <h3>Enterprise Vocabulary</h3>
+              <p>Define your organisation's terminology once. Every translation respects your brand language and domain terms.</p>
+            </div>
+          </div>
+        </section>
+
+        <div class="lp-stats-strip">
+          <div class="lp-stat-item"><strong>16</strong><span>Languages</span></div>
+          <div class="lp-stat-item"><strong>Real-Time</strong><span>AI Translation</span></div>
+          <div class="lp-stat-item"><strong>Multi-User</strong><span>Secure Rooms</span></div>
+          <div class="lp-stat-item"><strong>Enterprise</strong><span>Vocabulary</span></div>
+        </div>
+
+        <section class="lp-bottom-cta">
+          <h2>Start speaking across languages today</h2>
+          <p>Free trial included. No credit card required to start.</p>
+          <button type="button" class="lp-primary-btn" onclick="showAuthModal('pricing')">
+            <i data-lucide="zap"></i>
+            Try AI Translate Free
+          </button>
+        </section>
+
+        <p class="landing-copyright" id="landingCopyright"></p>
+      </div>
+    `;
+    updateCopyrightYear();
+    lucide.createIcons({ nodes: [overlay] });
+    return;
+  }
+
   const checkmarkSvg = `<div class="checkmark-overlay"><svg class="checkmark-svg" viewBox="0 0 52 52"><circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/><path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg></div>`;
 
   const pricingHtml = `
@@ -568,26 +663,11 @@ function showAuthModal(mode = "login") {
   `;
 
   overlay.innerHTML = `
-    <div class="landing-shell">
-      <section class="landing-hero" aria-label="AI Translate overview">
-        <div class="landing-brand">
-          <span class="landing-brand-mark"><i data-lucide="languages"></i></span>
-          <span>AI Translate</span>
-        </div>
-        <h1>Speak Live. One Room. Real-Time Meetings, Locally Translated.</h1>
-        <p class="landing-copy">Create secure rooms, invite participants, and let everyone follow the discussion in their own selected language across speech, text, and shared media.</p>
-        <div class="landing-proof">
-          <div><strong>16</strong><span>Languages</span></div>
-          <div><strong>Conversation</strong><span>Rooms</span></div>
-          <div><strong>AI</strong><span>Speech + Text</span></div>
-        </div>
-        <div class="landing-feature-list">
-          <span><i data-lucide="video"></i> Video conversation rooms</span>
-          <span><i data-lucide="book-open"></i> Enterprise vocabulary</span>
-        </div>
-      </section>
-
-      <section class="auth-card landing-auth-card" aria-label="${isLogin ? "Login" : isPricing ? "Plans and account creation" : "Reset password"}">
+    <div class="lp-auth-wrap">
+      <button type="button" class="lp-back-btn" onclick="showAuthModal('landing')">
+        <i data-lucide="arrow-left"></i> Back to home
+      </button>
+      <section class="auth-card" aria-label="${isLogin ? "Login" : isPricing ? "Plans and account creation" : "Reset password"}">
         <div class="auth-header">
           <div class="auth-mode-switch">
             <button type="button" class="${isPricing ? "active" : ""}" onclick="showAuthModal('pricing')">Plans</button>
@@ -656,8 +736,7 @@ function showAuthModal(mode = "login") {
           </div>
         </div>
       </section>
-      </div>
-      <p class="landing-copyright" id="landingCopyright"></p>
+    </div>
   `;
 
   updateCopyrightYear();
@@ -5364,7 +5443,7 @@ vocabDef?.addEventListener("keydown", (e) => {
 // Show login modal on startup if user is not authenticated
 window.addEventListener("DOMContentLoaded", () => {
   if (!currentUserToken) {
-    showAuthModal("login");
+    showAuthModal("landing");
   }
   updateAuthHeader();
 });

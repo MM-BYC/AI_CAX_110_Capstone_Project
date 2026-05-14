@@ -3320,6 +3320,391 @@ footer p {
   flex-shrink: 0;
 }
 
+/* ── Zoom-style Landing Page (lp-*) ── */
+.lp-wrap {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem 5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.lp-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 0;
+  position: sticky;
+  top: 0;
+  background: rgba(10, 22, 40, 0.94);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 10;
+  margin: 0 -2rem;
+  padding: 1rem 2rem;
+}
+
+.lp-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.lp-topbar-brand .landing-brand-mark {
+  width: 34px;
+  height: 34px;
+  box-shadow: none;
+}
+
+.lp-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.lp-signin-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 8px;
+  color: #fff;
+  padding: 0.48rem 1rem;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.lp-signin-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.lp-cta-btn {
+  background: #1b72e8;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  padding: 0.5rem 1.1rem;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.lp-cta-btn:hover {
+  background: #1558c8;
+}
+
+.lp-hero {
+  padding: 5rem 0 4.5rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.lp-hero h1 {
+  font-size: clamp(2.5rem, 5.5vw, 4.2rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: #fff;
+  max-width: 820px;
+}
+
+.lp-hero-sub {
+  font-size: clamp(1rem, 1.8vw, 1.18rem);
+  color: rgba(255, 255, 255, 0.72);
+  max-width: 580px;
+  line-height: 1.65;
+  margin: 0;
+}
+
+.lp-hero-sub strong {
+  color: #60a5fa;
+}
+
+.lp-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.lp-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #1b72e8;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 0.82rem 1.75rem;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  letter-spacing: -0.01em;
+}
+
+.lp-primary-btn:hover {
+  background: #1558c8;
+  transform: translateY(-1px);
+}
+
+.lp-primary-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.lp-ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: transparent;
+  color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  padding: 0.82rem 1.75rem;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.lp-ghost-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+.lp-hero-badges {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 0.25rem;
+}
+
+.lp-hero-badges span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 500;
+}
+
+.lp-hero-badges svg {
+  width: 14px;
+  height: 14px;
+  color: #60a5fa;
+}
+
+.lp-features {
+  padding: 3rem 0 3.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.lp-section-title {
+  text-align: center;
+  font-size: clamp(1.5rem, 2.8vw, 2.1rem);
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.02em;
+  margin-bottom: 2.5rem;
+}
+
+.lp-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+}
+
+.lp-feat-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 1.75rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.lp-feat-card:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(45, 140, 255, 0.4);
+}
+
+.lp-feat-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  background: rgba(27, 114, 232, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #60a5fa;
+}
+
+.lp-feat-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.lp-feat-card h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.lp-feat-card p {
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.6;
+}
+
+.lp-stats-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  padding: 2.5rem 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 3.5rem;
+}
+
+.lp-stat-item {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.lp-stat-item strong {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #60a5fa;
+  letter-spacing: -0.02em;
+}
+
+.lp-stat-item span {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lp-bottom-cta {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 0 1.5rem;
+}
+
+.lp-bottom-cta h2 {
+  font-size: clamp(1.5rem, 3vw, 2.2rem);
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.025em;
+}
+
+.lp-bottom-cta p {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0;
+}
+
+.lp-auth-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 440px;
+  padding: 2rem 0;
+}
+
+.lp-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  align-self: flex-start;
+  transition: color 0.12s;
+}
+
+.lp-back-btn:hover {
+  color: #fff;
+}
+
+.lp-back-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+@media (max-width: 900px) {
+  .lp-feature-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .lp-stats-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .lp-wrap {
+    padding: 0 1rem 4rem;
+  }
+  .lp-topbar {
+    margin: 0 -1rem;
+    padding: 0.85rem 1rem;
+  }
+  .lp-hero {
+    padding: 3rem 0 3rem;
+    gap: 1.25rem;
+  }
+  .lp-hero h1 {
+    font-size: 2.2rem;
+  }
+  .lp-feature-grid {
+    grid-template-columns: 1fr;
+  }
+  .lp-hero-badges {
+    gap: 0.75rem;
+  }
+  .lp-topbar-actions .lp-signin-btn {
+    display: none;
+  }
+}
+
 @media (max-width: 900px) {
   .auth-overlay {
     align-items: flex-start;
