@@ -1774,7 +1774,7 @@ function _buildCard(uid, user) {
 
   const card = document.createElement("div");
   card.className =
-    "conv-participant-card" + (isMe ? " me" : "") + (user.idle ? " idle" : "");
+    "conv-participant-card" + (isMe ? " me" : "") + (user.idle ? " idle" : "") + (user.mic_on ? " mic-on" : "");
   card.id = `conv-card-${uid}`;
   card.dataset.uid = uid;
 
@@ -1916,10 +1916,9 @@ function convRenderParticipants() {
 function convUpdateChipMic(userId, isOn) {
   const card = document.getElementById(`conv-card-${userId}`);
   if (card) {
-    card.classList.toggle("speaking", isOn);
-    if (isOn) {
-      card.style.setProperty("--conv-speaking-intensity", "0.7");
-    } else {
+    card.classList.toggle("mic-on", isOn);
+    if (!isOn) {
+      card.classList.remove("speaking");
       card.style.removeProperty("--conv-speaking-intensity");
     }
   }
@@ -2868,8 +2867,14 @@ async function _convStartIosMicInner() {
     }
     const intensity = Math.min(1, Math.max(0, (rms - NOISE_GATE_RMS) / 0.08));
     const localCard = document.getElementById(`conv-card-${convUserId}`);
-    if (localCard && localCard.classList.contains("speaking")) {
-      localCard.style.setProperty("--conv-speaking-intensity", intensity.toFixed(3));
+    if (localCard && localCard.classList.contains("mic-on")) {
+      const isTalking = rms >= NOISE_GATE_RMS;
+      localCard.classList.toggle("speaking", isTalking);
+      if (isTalking) {
+        localCard.style.setProperty("--conv-speaking-intensity", intensity.toFixed(3));
+      } else {
+        localCard.style.removeProperty("--conv-speaking-intensity");
+      }
     }
     const i16 = new Int16Array(f32.length); // initialized to zeros
     if (rms >= NOISE_GATE_RMS) {
