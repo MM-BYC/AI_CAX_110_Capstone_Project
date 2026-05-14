@@ -1589,6 +1589,7 @@ let convUserId = null; // this session's user_id assigned by server
 let convIsHost = false;
 let convUsers = {}; // user_id → {name, language, is_host, mic_on, camera_on, idle, idle_since}
 let convTranscript = [];
+const _participantIdleTimers = {};
 let convIsListening = false;
 let convRecognition = null;
 let convXlateTimer = null;
