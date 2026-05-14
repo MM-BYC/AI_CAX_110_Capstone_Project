@@ -1974,6 +1974,8 @@ const convParticipantsInviteBtn = document.getElementById("convParticipantsInvit
 const convParticipantsMuteAllBtn = document.getElementById("convParticipantsMuteAllBtn");
 const convParticipantsMoreBtn = document.getElementById("convParticipantsMoreBtn");
 const convChatBtn = document.getElementById("convChatBtn");
+const convChatPanel = document.getElementById("convChatPanel");
+const convChatCloseBtn = document.getElementById("convChatCloseBtn");
 const convMoreBtn = document.getElementById("convMoreBtn");
 const convMorePopover = document.getElementById("convMorePopover");
 const convEndBtn = document.getElementById("convEndBtn");
@@ -4781,11 +4783,31 @@ function convCloseToolbarPopovers(except = null) {
   if (except !== "participants" && convParticipantsPopover) {
     convParticipantsPopover.style.display = "none";
     convParticipantsBtn?.classList.remove("open");
+    convSetParticipantsPanelOpen(false);
     if (convParticipantActionMenu) convParticipantActionMenu.style.display = "none";
   }
   if (except !== "more" && convMorePopover) {
     convMorePopover.style.display = "none";
     convMoreBtn?.classList.remove("open");
+  }
+}
+
+function convSetParticipantsPanelOpen(isOpen) {
+  convActive?.classList.toggle("participants-panel-open", isOpen);
+  requestAnimationFrame(() => _carouselRenderPage());
+  setTimeout(() => _carouselRenderPage(), 180);
+}
+
+function convSetChatPanelOpen(isOpen) {
+  convActive?.classList.toggle("chat-panel-open", isOpen);
+  convChatPanel?.classList.toggle("open", isOpen);
+  convChatBtn?.classList.toggle("open", isOpen);
+  convKeyboardBar?.classList.toggle("open", isOpen);
+  requestAnimationFrame(() => _carouselRenderPage());
+  setTimeout(() => _carouselRenderPage(), 180);
+  if (isOpen) {
+    convMessages.scrollTop = convMessages.scrollHeight;
+    convKeyboardInput?.focus();
   }
 }
 
@@ -4796,6 +4818,7 @@ convParticipantsBtn?.addEventListener("click", () => {
   convRenderParticipantsPopover();
   convParticipantsPopover.style.display = isOpen ? "none" : "block";
   convParticipantsBtn.classList.toggle("open", !isOpen);
+  convSetParticipantsPanelOpen(!isOpen);
   lucide.createIcons({ nodes: [convParticipantsPopover] });
 });
 
@@ -4864,10 +4887,12 @@ convParticipantsMoreBtn?.addEventListener("click", () => {
 });
 
 convChatBtn?.addEventListener("click", () => {
-  convCloseToolbarPopovers();
-  convKeyboardBar?.classList.toggle("open");
-  convChatBtn.classList.toggle("open", convKeyboardBar?.classList.contains("open"));
-  if (convKeyboardBar?.classList.contains("open")) convKeyboardInput?.focus();
+  convCloseToolbarPopovers("participants");
+  convSetChatPanelOpen(!convActive?.classList.contains("chat-panel-open"));
+});
+
+convChatCloseBtn?.addEventListener("click", () => {
+  convSetChatPanelOpen(false);
 });
 
 convMoreBtn?.addEventListener("click", () => {
@@ -4893,9 +4918,12 @@ convEndBtn?.addEventListener("click", () => {
 
 document.addEventListener("click", (e) => {
   if (!convActive?.contains(e.target)) return;
-  const insidePopover = e.target.closest(".conv-toolbar-popover, .conv-participants-panel");
-  const insideToolbarButton = e.target.closest("#convMicBtn, #convParticipantsBtn, #convMoreBtn");
-  if (!insidePopover && !insideToolbarButton) convCloseToolbarPopovers();
+  const insidePopover = e.target.closest(".conv-toolbar-popover, .conv-participants-panel, .conv-chat-panel");
+  const insideToolbarButton = e.target.closest("#convMicBtn, #convParticipantsBtn, #convChatBtn, #convMoreBtn");
+  if (!insidePopover && !insideToolbarButton) {
+    if (convParticipantActionMenu) convParticipantActionMenu.style.display = "none";
+    convCloseToolbarPopovers("participants");
+  }
 });
 
 // ── Reset / disconnect ─────────────────────────────────────────────────────
@@ -4957,8 +4985,7 @@ function convReset() {
     '<div class="conv-start-hint">Press your mic to start speaking</div>';
   setConversationRoomCode("");
   convCloseToolbarPopovers();
-  convKeyboardBar?.classList.remove("open");
-  convChatBtn?.classList.remove("open");
+  convSetChatPanelOpen(false);
   convRenderParticipantsPopover();
   if (convRoomInput) convRoomInput.value = "";
   if (convSummaryModal) convSummaryModal.style.display = "none";

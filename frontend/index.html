@@ -445,23 +445,32 @@
               </button>
             </div>
 
-            <!-- Messages -->
-            <div class="conv-messages" id="convMessages">
-              <div class="conv-start-hint">Press your mic to start speaking</div>
-            </div>
+            <div class="conv-chat-panel" id="convChatPanel">
+              <div class="conv-chat-panel-header">
+                <strong>Chat</strong>
+                <button type="button" class="conv-panel-icon-btn" id="convChatCloseBtn" title="Close chat">
+                  <i data-lucide="x"></i>
+                </button>
+              </div>
 
-            <!-- Voice clone status badge -->
-            <div id="voiceCloneBadge" style="display:none;text-align:center;margin-bottom:0.4rem">
-              <span id="voiceCloneBadgeText" style="font-size:0.72rem;padding:0.2rem 0.65rem;border-radius:999px;font-weight:600;letter-spacing:0.04em"></span>
-            </div>
+              <!-- Messages -->
+              <div class="conv-messages" id="convMessages">
+                <div class="conv-start-hint">Press your mic to start speaking</div>
+              </div>
 
-            <!-- Keyboard input -->
-            <div class="conv-keyboard-bar" id="convKeyboardBar">
-              <input type="text" id="convKeyboardInput" class="conv-keyboard-input"
-                     placeholder="Type a message…" maxlength="500" autocomplete="off" />
-              <button type="button" class="conv-keyboard-send" id="convKeyboardSend" title="Send">
-                <i data-lucide="send"></i>
-              </button>
+              <!-- Voice clone status badge -->
+              <div id="voiceCloneBadge" style="display:none;text-align:center;margin-bottom:0.4rem">
+                <span id="voiceCloneBadgeText" style="font-size:0.72rem;padding:0.2rem 0.65rem;border-radius:999px;font-weight:600;letter-spacing:0.04em"></span>
+              </div>
+
+              <!-- Keyboard input -->
+              <div class="conv-keyboard-bar" id="convKeyboardBar">
+                <input type="text" id="convKeyboardInput" class="conv-keyboard-input"
+                       placeholder="Type a message…" maxlength="500" autocomplete="off" />
+                <button type="button" class="conv-keyboard-send" id="convKeyboardSend" title="Send">
+                  <i data-lucide="send"></i>
+                </button>
+              </div>
             </div>
 
             <aside class="conv-participants-panel" id="convParticipantsPopover" style="display:none" aria-label="Participants panel">
