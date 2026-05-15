@@ -19,13 +19,26 @@ body {
 
 body {
   font-family:
-    "Inter", "Lato", "Open Sans", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+    "Inter", "Lato", "Open Sans", "Helvetica Neue", "Segoe UI", system-ui,
+    sans-serif;
   color: #232333;
   min-height: 100vh;
   background:
-    radial-gradient(ellipse at 18% 5%,  rgba(88,  80, 236, 0.16), transparent 44%),
-    radial-gradient(ellipse at 82% 95%, rgba(14,  90, 220, 0.26), transparent 48%),
-    radial-gradient(ellipse at 52% 52%, rgba(27, 114, 232, 0.10), transparent 56%),
+    radial-gradient(
+      ellipse at 18% 5%,
+      rgba(88, 80, 236, 0.16),
+      transparent 44%
+    ),
+    radial-gradient(
+      ellipse at 82% 95%,
+      rgba(14, 90, 220, 0.26),
+      transparent 48%
+    ),
+    radial-gradient(
+      ellipse at 52% 52%,
+      rgba(27, 114, 232, 0.1),
+      transparent 56%
+    ),
     linear-gradient(158deg, #080f1e 0%, #0a2860 28%, #0d44b8 58%, #1466de 100%);
   background-attachment: fixed;
 }
@@ -1168,23 +1181,25 @@ footer p {
 .conv-carousel-track {
   display: grid;
   grid-auto-flow: row; /* fill left → right, then next row */
-  grid-auto-rows: 100px;
+  grid-auto-rows: minmax(0, 1fr);
   gap: 0px;
   /* grid-template-columns set dynamically by JS */
 }
 
 /* ── Participant card ─────────────────────────────────────────────────────── */
 .conv-participant-card {
-  width: 100px;
+  width: 100%;
+  min-width: 0;
   flex-shrink: 0;
   cursor: default;
 }
 
-/* Square video box */
+/* Responsive video box */
 .conv-card-box {
   position: relative;
-  width: 100px;
-  height: 100px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 108px;
   border-radius: 10px;
   overflow: hidden;
   background: #111827;
@@ -1205,10 +1220,11 @@ footer p {
 .conv-participant-card.speaking .conv-card-box {
   border-color: #4ade80;
   border-width: 3px;
-  animation: speakingBorderPulse 0.6s ease-in-out infinite;
+  animation: speakingBorderPulse 0.5s ease-in-out infinite;
   box-shadow:
-    0 0 0 calc(4px + 14px * var(--conv-speaking-intensity, 0.7)) rgba(34, 197, 94, 0.55),
-    0 0 18px 4px rgba(74, 222, 128, 0.45);
+    0 0 0 calc(4px + 14px * var(--conv-speaking-intensity, 0.7))
+      rgba(34, 197, 94, 0.65),
+    0 0 18px 4px rgba(74, 222, 128, 0.5);
 }
 
 @keyframes speakingBorderPulse {
@@ -1216,14 +1232,18 @@ footer p {
   100% {
     border-color: #22c55e;
     box-shadow:
-      0 0 0 4px rgba(34, 197, 94, 0.35),
-      0 0 10px 2px rgba(34, 197, 94, 0.3);
+      0 0 0 calc(3px + 12px * var(--conv-speaking-intensity, 0.7))
+        rgba(34, 197, 94, 0.32),
+      0 0 10px calc(2px * var(--conv-speaking-intensity, 0.7))
+        rgba(34, 197, 94, 0.24);
   }
   50% {
     border-color: #86efac;
     box-shadow:
-      0 0 0 calc(6px + 14px * var(--conv-speaking-intensity, 0.7)) rgba(74, 222, 128, 0.65),
-      0 0 28px 8px rgba(134, 239, 172, 0.55);
+      0 0 0 calc(8px + 18px * var(--conv-speaking-intensity, 0.7))
+        rgba(74, 222, 128, 0.72),
+      0 0 30px calc(8px * var(--conv-speaking-intensity, 0.7))
+        rgba(134, 239, 172, 0.55);
   }
 }
 
@@ -1334,7 +1354,7 @@ footer p {
 }
 .conv-card-lang-badge {
   background: #ffffff;
-  font-size: 1.0rem;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.02em;
   color: #0d3270;
@@ -2794,10 +2814,11 @@ footer p {
 #convActive .conv-participant-card.speaking .conv-card-box {
   border-color: #4ade80;
   border-width: 3px;
-  animation: speakingBorderPulse 0.6s ease-in-out infinite;
+  animation: speakingBorderPulse 0.5s ease-in-out infinite;
   box-shadow:
-    0 0 0 calc(4px + 14px * var(--conv-speaking-intensity, 0.7)) rgba(34, 197, 94, 0.55),
-    0 0 18px 4px rgba(74, 222, 128, 0.45);
+    0 0 0 calc(4px + 14px * var(--conv-speaking-intensity, 0.7))
+      rgba(34, 197, 94, 0.65),
+    0 0 18px 4px rgba(74, 222, 128, 0.5);
 }
 
 #convActive .conv-participant-card.idle .conv-card-box {
@@ -3415,9 +3436,21 @@ footer p {
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse at 18% 5%,  rgba(88,  80, 236, 0.16), transparent 44%),
-    radial-gradient(ellipse at 82% 95%, rgba(14,  90, 220, 0.26), transparent 48%),
-    radial-gradient(ellipse at 52% 52%, rgba(27, 114, 232, 0.10), transparent 56%),
+    radial-gradient(
+      ellipse at 18% 5%,
+      rgba(88, 80, 236, 0.16),
+      transparent 44%
+    ),
+    radial-gradient(
+      ellipse at 82% 95%,
+      rgba(14, 90, 220, 0.26),
+      transparent 48%
+    ),
+    radial-gradient(
+      ellipse at 52% 52%,
+      rgba(27, 114, 232, 0.1),
+      transparent 56%
+    ),
     linear-gradient(158deg, #080f1e 0%, #0a2860 28%, #0d44b8 58%, #1466de 100%);
   z-index: 9999;
   display: flex;
@@ -3490,7 +3523,9 @@ footer p {
   padding: 0.3rem 0.85rem;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.14s, color 0.14s;
+  transition:
+    background 0.14s,
+    color 0.14s;
 }
 .auth-page-header-prompt button:hover {
   background: #6366f1;
@@ -3598,7 +3633,11 @@ footer p {
   color: #ffffff;
   padding: clamp(1.5rem, 3.4vw, 3.2rem);
   background:
-    radial-gradient(ellipse at 30% 20%, rgba(27, 114, 232, 0.45), transparent 60%),
+    radial-gradient(
+      ellipse at 30% 20%,
+      rgba(27, 114, 232, 0.45),
+      transparent 60%
+    ),
     linear-gradient(155deg, #0d2250 0%, #0a4bbd 55%, #1b72e8 100%);
   display: flex;
   flex-direction: column;
@@ -4191,7 +4230,9 @@ footer p {
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
 }
 
 .lp-signin-btn:hover {
@@ -4268,7 +4309,9 @@ footer p {
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, transform 0.1s;
+  transition:
+    background 0.15s,
+    transform 0.1s;
   letter-spacing: -0.01em;
 }
 
@@ -4295,7 +4338,9 @@ footer p {
   font-size: 1rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .lp-ghost-btn:hover {
@@ -4355,7 +4400,9 @@ footer p {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .lp-feat-card:hover {
@@ -4559,7 +4606,6 @@ footer p {
   .auth-overlay {
     height: 100dvh;
   }
-
 
   .landing-shell {
     width: 100%;
@@ -4858,21 +4904,41 @@ footer p {
   }
 
   #convActive.chat-panel-open .conv-chat-panel {
-    top: 48px;
+    position: fixed;
     left: 0.5rem;
     right: 0.5rem;
-    bottom: calc(54px + env(safe-area-inset-bottom));
+    bottom: calc(env(safe-area-inset-bottom) + 8px);
+    top: auto;
+    height: min(56vh, 340px);
     width: auto;
+    z-index: 50;
     border: 1px solid #343438;
-    border-radius: 8px;
+    border-radius: 18px 18px 0 0;
+    background: #1f2023;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
   }
 
   #convActive.participants-panel-open.chat-panel-open .conv-participants-panel {
-    bottom: calc(50% + 4px);
+    bottom: calc(56vh + 16px + env(safe-area-inset-bottom));
   }
 
   #convActive.participants-panel-open.chat-panel-open .conv-chat-panel {
-    top: calc(50% + 4px);
+    top: auto;
+  }
+
+  #convActive .conv-chat-panel.open {
+    animation: chatSheetSlideUp 0.24s ease-out;
+  }
+
+  @keyframes chatSheetSlideUp {
+    from {
+      transform: translateY(18px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
   }
 
   #convActive .conv-keyboard-bar {
