@@ -6,6 +6,18 @@ An agentic AI translation system powered by **Groq AI**, **OpenAI Whisper large-
 
 ---
 
+## Recent Updates
+
+- **Language Badges:** Participant cards now display full language names (e.g., "English", "Spanish") with blue badges for better readability.
+- **Speaking Indicators:** Active speakers have a bright green border that flashes in sync with audio volume for clear visual feedback.
+- **Chat Panel Default:** The chat panel now opens automatically by default on all devices for immediate access to messages.
+- **Card Layout Optimization:** Removed all gaps between participant cards to maximize screen real estate usage.
+- **Signup Modal Simplification:** Removed unnecessary "1 Account 2 Trial" step labels from the signup modal for a cleaner user experience.
+- **Supported Languages:** The app supports 16 languages: English (en), Spanish (es), French (fr), German (de), Italian (it), Portuguese (pt), Chinese (zh), Japanese (ja), Korean (ko), Arabic (ar), Russian (ru), Hindi (hi), Dutch (nl), Polish (pl), Turkish (tr), Tagalog (tl).
+- **Future Plans:** Voice cloning feature (using Coqui XTTS-v2) is implemented but disabled on free tier due to RAM constraints. Planned for premium deployment.
+
+---
+
 ## Features
 
 ### Text Translation
@@ -32,10 +44,12 @@ Multi-user real-time conversation room where each participant speaks and reads i
 - **Live WebRTC video** — open your camera to broadcast video to all participants; streams auto-play without requiring a click
 - **Live WebRTC audio** — unmute your mic to stream live audio to all participants via Web Audio API
 - **Keyboard input** — type messages as an alternative to speaking
-- **Participant chips** — show each user's name, language name, language code badge, mic status dot, and camera status dot
+- **Participant chips** — show each user's name, full language name with blue badge, mic status dot, and camera status dot; speaking participants have bright green flashing borders synced to volume
 - **Colour-coded message bubbles** — each participant has a unique persistent colour applied to their avatar, chip accent, and bubble
 - **"Show original" toggle** — tap any translated bubble to reveal the original source text, tap again to return to the translation
 - **Live caption overlay** — interim speech text and final translations appear as overlays on each participant's remote video tile
+- **Chat panel auto-open** — chat panel opens by default on all devices for immediate message access
+- **Optimized layout** — no gaps between participant cards to maximize screen usage
 - **Anti-hallucination pipeline** — every spoken and typed message passes through a 4-stage quality-checked agent pipeline before delivery
 
 ---
@@ -165,7 +179,10 @@ Return result
 | Model | Provider | Role |
 | --- | --- | --- |
 | **llama-3.3-70b-versatile** | Groq / Meta | Text translation — configurable via `GROQ_MODEL` in `.env` |
+| **Whisper large-v3** | Groq | Speech-to-text for uploaded audio files |
 | **Whisper base** | OpenAI | Offline speech transcription with word timestamps |
+| **Google Cloud Speech-to-Text** | Google Cloud | Streaming real-time speech recognition for 16 languages in conversation mode |
+| **XTTS-v2** | Coqui | Voice cloning for synthesized speech (optional, disabled on free tier due to RAM constraints) |
 
 ### Frontend
 
@@ -292,9 +309,9 @@ cd frontend
 
 ## Google Cloud Speech-to-Text Setup
 
-The iOS conversation mic uses **Google Cloud STT streaming** for true real-time transcription instead of the browser's `webkitSpeechRecognition` (which requires Siri & Dictation to be enabled in iOS Settings and fails in many configurations).
+The conversation mode uses **Google Cloud STT streaming** for true real-time transcription of live speech across all 16 supported languages (en, es, fr, de, it, pt, zh, ja, ko, ar, ru, hi, nl, pl, tr, tl), providing reliable speech recognition instead of relying solely on the browser's `webkitSpeechRecognition` (which can be inconsistent across devices and browsers).
 
-The desktop host (macOS/Chrome) is unaffected — it continues to use the browser's built-in speech recognition.
+The desktop host (macOS/Chrome) benefits from enhanced accuracy, while mobile devices get consistent performance.
 
 ### Why Google Cloud STT?
 
