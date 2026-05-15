@@ -204,7 +204,11 @@ async def _cleanup_empty_rooms():
             await asyncio.sleep(60)
             now = time.time()
             for rid in list(_rooms.keys()):
-                empty_since = _rooms[rid].get("empty_since")
+                room = _rooms[rid]
+                if room.get("info"):
+                    room["empty_since"] = None
+                    continue
+                empty_since = room.get("empty_since")
                 if empty_since and now - empty_since > _EMPTY_ROOM_TTL_SEC:
                     _rooms.pop(rid, None)
                     _recent_broadcasts.pop(rid, None)
@@ -1811,7 +1815,15 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
 
         room["conns"].pop(user_id, None)
 
-        room["info"].pop(user_id, None)
+        user_info = room["info"].get(user_id)
+        preserve_as_idle = bool(user_info) and not explicit_leave
+        if preserve_as_idle:
+            user_info["idle"] = True
+            user_info["idle_since"] = user_info.get("idle_since") or time.time()
+            user_info["mic_on"] = False
+            user_info["camera_on"] = False
+        else:
+            room["info"].pop(user_id, None)
 
         if user_was_host:
             # Host left or disconnected: hand off to the next user when
@@ -1823,6 +1835,8 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                 room["host_id"] = new_host_id
                 if new_host_id in room["info"]:
                     room["info"][new_host_id]["is_host"] = True
+                if preserve_as_idle and user_id in room["info"]:
+                    room["info"][user_id]["is_host"] = False
                 try:
                     await room["conns"][new_host_id].send_json({
                         "type": "host_changed",
@@ -1835,17 +1849,29 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                 if explicit_leave:
                     room["host_left"] = True
 
-        # Notify remaining participants
+        # Notify remaining participants. Idle disconnects stay visible in the
+        # roster; explicit leaves are removed from the room.
         for uid, ws in list(room["conns"].items()):
-            if ws:
-                try:
+            if not ws:
+                continue
+            try:
+                if preserve_as_idle:
+                    await ws.send_json({
+                        "type": "user_idle_status",
+                        "user_id": user_id,
+                        "is_idle": True,
+                        "idle_since": room["info"].get(user_id, {}).get("idle_since"),
+                    })
+                else:
                     await ws.send_json({"type": "user_left", "user_id": user_id, "name": user_name})
-                except Exception:
-                    pass
+            except Exception:
+                pass
         await _broadcast_room_snapshot()
 
-        if not room["conns"]:
+        if not room["conns"] and not room["info"]:
             room["empty_since"] = time.time()
+        elif room["info"]:
+            room["empty_since"] = None
 
 
 @app.post("/detect_language")
