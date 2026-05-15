@@ -2011,6 +2011,9 @@ function convShowScreen(screen) {
   convSetup.style.display = "none";
   convActive.style.display = "none";
   screen.style.display = screen === convActive ? "flex" : "block";
+  if (screen === convActive) {
+    convSetChatPanelOpen(true);
+  }
 }
 
 function convGetWsBase() {
@@ -2027,7 +2030,7 @@ function convGetWsBase() {
 // Cards fill the visible gallery area; left/right arrows paginate overflow.
 const _CARD_MIN_TILE_WIDTH = 150;
 const _CARD_MIN_TILE_HEIGHT = 92;
-const _CARD_GRID_GAP = 10;
+const _CARD_GRID_GAP = 0;
 const _CARD_MAX_COLS = 5;
 const _CARD_MAX_ROWS = 5;
 
@@ -2249,7 +2252,7 @@ function convRenderParticipantsPopover() {
   convParticipantsList.innerHTML = users
     .map(([uid, user]) => {
       const name = escapeHtml(user.name || "Guest");
-      const lang = escapeHtml((user.language || "").toUpperCase());
+      const lang = escapeHtml(LANG_NAMES[user.language] || (user.language || "").toUpperCase() || "Participant");
       const self = uid === convUserId ? "me" : "";
       const host = user.is_host ? "Host" : "";
       const badges = [host, self].filter(Boolean).join(", ");
@@ -2260,7 +2263,7 @@ function convRenderParticipantsPopover() {
           <span class="conv-participant-avatar">${name.charAt(0).toUpperCase()}</span>
           <span class="conv-participant-meta">
             <strong>${name}${badges ? ` <em>(${escapeHtml(badges)})</em>` : ""}</strong>
-            <small>${lang || "Participant"}</small>
+            <small>${lang}</small>
           </span>
           <span class="conv-participant-status">
             <i data-lucide="${micIcon}"></i>

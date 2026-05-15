@@ -1169,7 +1169,7 @@ footer p {
   display: grid;
   grid-auto-flow: row; /* fill left → right, then next row */
   grid-auto-rows: 100px;
-  gap: 8px;
+  gap: 0px;
   /* grid-template-columns set dynamically by JS */
 }
 
@@ -2738,7 +2738,7 @@ footer p {
 }
 #convActive .conv-carousel-track {
   display: grid;
-  gap: 10px;
+  gap: 0px;
   grid-auto-rows: minmax(0, 1fr);
   align-content: center;
   height: 100%;
@@ -2780,7 +2780,7 @@ footer p {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
 }
 #convActive .conv-card-lang-badge {
-  display: none;
+  display: inline-flex;
 }
 #convActive .conv-participant-mic-dot,
 #convActive .conv-participant-cam-dot {
