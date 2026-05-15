@@ -4800,29 +4800,39 @@ footer p {
   }
 
   #convActive .conv-mic-bar {
-    grid-template-columns: 1fr;
-    gap: 0.3rem;
-    padding: 0.5rem 0.4rem;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0;
+    padding: 0.28rem 0.2rem calc(0.28rem + env(safe-area-inset-bottom));
   }
 
   #convActive .conv-toolbar-left,
   #convActive .conv-toolbar-center,
   #convActive .conv-toolbar-right {
-    justify-content: center;
-    width: 100%;
+    display: contents;
   }
 
   #convActive .conv-toolbar-btn {
-    flex: 1 1 0;
+    width: 100%;
     min-width: 0;
-    height: 48px;
-    padding: 0.2rem 0.25rem;
-    font-size: 0.62rem;
+    height: 42px;
+    padding: 0.12rem 0.08rem;
+    border-radius: 4px;
+    font-size: 0.54rem;
+    font-weight: 700;
+  }
+
+  #convActive .conv-toolbar-btn span {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1;
   }
 
   #convActive .conv-toolbar-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 17px;
+    height: 17px;
   }
 
   #convActive .conv-toolbar-caret {
@@ -4832,7 +4842,7 @@ footer p {
   #convActive .conv-toolbar-popover {
     left: 0.5rem;
     right: 0.5rem;
-    bottom: 154px;
+    bottom: calc(54px + env(safe-area-inset-bottom));
     width: auto;
     transform: none;
   }
@@ -4841,7 +4851,7 @@ footer p {
     top: 48px;
     left: 0.5rem;
     right: 0.5rem;
-    bottom: 154px;
+    bottom: calc(54px + env(safe-area-inset-bottom));
     width: auto;
     border: 1px solid #343438;
     border-radius: 8px;
@@ -4851,7 +4861,7 @@ footer p {
     top: 48px;
     left: 0.5rem;
     right: 0.5rem;
-    bottom: 154px;
+    bottom: calc(54px + env(safe-area-inset-bottom));
     width: auto;
     border: 1px solid #343438;
     border-radius: 8px;
