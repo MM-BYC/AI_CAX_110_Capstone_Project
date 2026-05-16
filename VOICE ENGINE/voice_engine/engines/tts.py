@@ -41,4 +41,5 @@ class ToneTTS:
             sample_rate_hz=self.sample_rate_hz,
             duration_ms=duration_ms,
             text=translation.target_text,
+            metadata=translation.metadata,
         )

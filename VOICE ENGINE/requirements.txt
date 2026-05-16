@@ -11,4 +11,5 @@ torchaudio>=2.3
 onnxruntime>=1.18
 webrtcvad>=2.0.10
 pydantic>=2.7
+pinecone[grpc]>=7.0.0
 uvloop>=0.19; platform_system != "Windows"

@@ -19,6 +19,7 @@ It does not use OpenAI, external LLM APIs, or hosted AI services.
 - Streaming ASR interface.
 - Phrase commit logic.
 - Translation interface.
+- Translation memory and confidence guard layer.
 - Terminology and anti-hallucination guard.
 - Speaker profile and voice-clone interface.
 - TTS interface.
@@ -145,6 +146,96 @@ The room orchestrator keeps the same simple calling model for phone and web clie
 - Playback is controlled per recipient by an async output queue so one listener can receive translated audio from many speakers without the input streams blocking each other.
 
 The room-level layer runs cleanup, VAD, ASR, and phrase commit once per source participant. When a phrase is committed, translation and synthesis are fanned out concurrently to every other participant, then queued by recipient.
+
+## Translation Memory and Confidence Guard
+
+The orchestrator now wraps the configured translator with a local translation-memory layer. This is the low-latency anti-hallucination helper for live calls:
+
+- Approved source phrase -> target phrase corrections are stored locally.
+- A persistent JSONL memory path is created automatically by the package.
+- A local vector index is built in-process for fast retrieval.
+- Pinecone can mirror approved examples for external vector storage when configured.
+- Exact or high-similarity approved matches can be used immediately.
+- Weaker matches become confidence signals instead of hard overrides.
+- Grammar-profile scoring learns simple structure from approved examples.
+- The existing terminology guard still blocks low-confidence or incomplete output.
+
+This module does not claim that hallucination is impossible. Its job is to keep the realtime path conservative: use known good translations quickly, preserve important terms and numbers, and lower confidence when the engine cannot justify the output.
+
+Package users can create memory explicitly:
+
+```python
+from voice_engine import TranslationMemory, TranslationMemoryEntry, VoiceEngineOrchestrator
+
+memory = TranslationMemory(
+    entries=[
+        TranslationMemoryEntry(
+            source_language="en",
+            target_language="tl",
+            source_text="I am on my way",
+            target_text="Papunta na ako",
+            namespace="global",
+            domain="general",
+        )
+    ]
+)
+
+orchestrator = VoiceEngineOrchestrator(
+    room_id="992144",
+    participants=[participant_a, participant_b],
+    translation_memory=memory,
+)
+```
+
+After a human-approved correction, feed it back through the orchestrator:
+
+```python
+orchestrator.learn_translation_correction(
+    source_participant_id="A",
+    recipient_id="B",
+    source_text="I am on my way",
+    target_text="Papunta na ako",
+    metadata={"reviewer": "operator"},
+)
+```
+
+Future matching chunks are retrieved in-process first. Pinecone is treated as an external mirror and fallback, not as the first blocking step in the live audio path.
+
+The default persistent memory path is:
+
+```text
+VOICE ENGINE/data/translation_memory/approved_corrections.jsonl
+```
+
+When the package is installed outside this repository and that folder is not available, the fallback path is:
+
+```text
+~/.voice_engine/translation_memory/approved_corrections.jsonl
+```
+
+Override the path with:
+
+```bash
+export VOICE_ENGINE_TRANSLATION_MEMORY_PATH="/absolute/path/approved_corrections.jsonl"
+```
+
+Enable the Pinecone vector mirror with:
+
+```bash
+export VOICE_ENGINE_PINECONE_API_KEY="..."
+export VOICE_ENGINE_PINECONE_INDEX="voice-engine-memory"
+# Optional if targeting a specific index host:
+export VOICE_ENGINE_PINECONE_HOST="..."
+export VOICE_ENGINE_PINECONE_NAMESPACE="voice-engine-translation-memory"
+```
+
+The package install metadata includes Pinecone:
+
+```bash
+python3 -m pip install -e "VOICE ENGINE"
+```
+
+This installs `pinecone[grpc]` with the package. If Pinecone credentials are not configured, VOICE ENGINE still uses its persistent local memory and local vector retrieval.
 
 ## Production Rule
 

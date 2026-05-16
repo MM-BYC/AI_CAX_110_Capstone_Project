@@ -17,6 +17,7 @@ class EngineConfig:
     jitter_buffer_ms: int = 60
     asr_min_confidence: float = 0.72
     translation_min_confidence: float = 0.78
+    translation_memory_min_similarity: float = 0.92
     phrase_commit_ms: int = 280
     max_output_queue_ms: int = 1_500
     translated_audio_only: bool = True

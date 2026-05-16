@@ -41,6 +41,7 @@ class TranslationEvent:
     confidence: float
     source_language: str
     target_language: str
+    metadata: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

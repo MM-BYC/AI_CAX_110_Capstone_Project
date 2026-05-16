@@ -341,6 +341,27 @@ If still uncertain:
 
 No hallucinated audible content should be sent to either caller.
 
+### 10.1 Translation Memory and Confidence Learning
+
+The realtime path should use a local translation-memory module before any
+remote vector lookup. The package now has an internal persistent JSONL memory
+path plus an in-process vector index. Pinecone can mirror approved examples for
+external vector storage, but the live call must never wait on network retrieval
+before speaking when a local match is available.
+
+The local module stores approved source phrase to target phrase corrections,
+glossary constraints, namespace/domain metadata, and lightweight grammar-profile
+signals learned from reviewed examples. During a call, the orchestrator can use
+exact or high-similarity approved matches immediately, treat weak matches as
+confidence signals, and lower the score of translations that do not resemble
+known safe structure for the language pair.
+
+This does not prove that hallucination is impossible. It reduces the chance that
+unsupported text reaches TTS by making the engine prefer known good phrases,
+confidence-gated translation, and silence or delay when the candidate cannot be
+justified. The same persisted examples become the offline dataset for later
+fine-tuning of translation and grammar scoring models.
+
 ### 11. Speaker Embedding Engine
 
 Builds a compact voice identity representation from each participant's speech.

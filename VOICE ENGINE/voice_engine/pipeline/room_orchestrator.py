@@ -10,6 +10,7 @@ from voice_engine.engines.guard import TerminologyGuard
 from voice_engine.engines.translation import TranslationEngine
 from voice_engine.engines.tts import TTSEngine
 from voice_engine.exceptions import GuardRejectedOutput
+from voice_engine.memory import MemoryAugmentedTranslator, TranslationMemory
 from voice_engine.metrics import LatencyTrace, StageTimer
 from voice_engine.models import AudioFrame, CommittedPhrase, SynthAudioEvent, TranslationEvent
 from voice_engine.pipeline.phrase_committer import PhraseCommitter
@@ -108,10 +109,22 @@ class VoiceEngineOrchestrator:
         tts: TTSEngine | None = None,
         speaker_profiles: SpeakerEmbeddingEngine | None = None,
         asr_factory: Callable[[], StreamingASR] | None = None,
+        translation_memory: TranslationMemory | None = None,
+        memory_namespace: str | None = None,
+        memory_domain: str = "general",
     ):
         self.room_id = room_id
         self.config = config or EngineConfig()
-        self.translator = translator or GlossaryTranslator()
+        self.translation_memory = translation_memory or TranslationMemory.create_default(
+            min_similarity=self.config.translation_memory_min_similarity
+        )
+        self.translator = MemoryAugmentedTranslator(
+            translator or GlossaryTranslator(),
+            memory=self.translation_memory,
+            min_accept_confidence=self.config.translation_min_confidence,
+            namespace=memory_namespace or room_id,
+            domain=memory_domain,
+        )
         self.tts = tts or ToneTTS(self.config.sample_rate_hz)
         self.speaker_profiles = speaker_profiles or SpeakerEmbeddingEngine()
         self.asr_factory = asr_factory or DebugStreamingASR
@@ -150,6 +163,31 @@ class VoiceEngineOrchestrator:
         self._participants.pop(participant_id, None)
         self._ingress.pop(participant_id, None)
         self._output_queues.pop(participant_id, None)
+
+    def learn_translation_correction(
+        self,
+        source_participant_id: str,
+        recipient_id: str,
+        source_text: str,
+        target_text: str,
+        metadata: dict[str, str] | None = None,
+    ) -> None:
+        """Store an approved phrase correction for future low-latency lookup."""
+        source = self._participants[source_participant_id]
+        recipient = self._participants[recipient_id]
+        target_language = recipient.target_language or recipient.source_language
+        self.translator.learn_correction(
+            source_text=source_text,
+            target_text=target_text,
+            source_language=source.source_language,
+            target_language=target_language,
+            metadata={
+                "room_id": self.room_id,
+                "source_participant_id": source_participant_id,
+                "recipient_id": recipient_id,
+                **(metadata or {}),
+            },
+        )
 
     async def accept_audio(self, frame: AudioFrame) -> RoomAudioResult:
         """Accept one caller mic frame and enqueue translated audio for listeners."""
@@ -294,6 +332,7 @@ class VoiceEngineOrchestrator:
                 confidence=translation.confidence,
                 source_language=translation.source_language,
                 target_language=target_language,
+                metadata=translation.metadata,
             ),
             speaker_profile=speaker_profile,
             recipient_id=recipient.participant_id,

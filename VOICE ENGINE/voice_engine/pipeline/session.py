@@ -1,5 +1,6 @@
 from voice_engine.config import EngineConfig, ParticipantConfig
 from voice_engine.engines import DebugStreamingASR, GlossaryTranslator, SpeakerEmbeddingEngine, ToneTTS
+from voice_engine.memory import MemoryAugmentedTranslator, TranslationMemory
 from voice_engine.metrics import LatencyTrace
 from voice_engine.models import AudioFrame, Direction, SynthAudioEvent
 from voice_engine.pipeline.direction import DirectionPipeline, DirectionResult
@@ -14,6 +15,7 @@ class CallSession:
         participant_b: ParticipantConfig,
         config: EngineConfig | None = None,
         phrase_table: dict[tuple[str, str, str], str] | None = None,
+        translation_memory: TranslationMemory | None = None,
     ):
         self.config = config or EngineConfig()
         self.participant_a = participant_a
@@ -21,7 +23,20 @@ class CallSession:
         self.speaker_profiles = SpeakerEmbeddingEngine()
 
         # Placeholders. Replace these with trained native local models.
-        translator = GlossaryTranslator(phrase_table)
+        memory = translation_memory
+        if memory is None and phrase_table is not None:
+            memory = TranslationMemory.from_phrase_table(
+                phrase_table,
+                min_similarity=self.config.translation_memory_min_similarity,
+            )
+        if memory is None:
+            memory = TranslationMemory.create_default(min_similarity=self.config.translation_memory_min_similarity)
+        translator = MemoryAugmentedTranslator(
+            GlossaryTranslator(phrase_table),
+            memory=memory,
+            min_accept_confidence=self.config.translation_min_confidence,
+        )
+        self.translator = translator
         tts = ToneTTS(self.config.sample_rate_hz)
 
         self.a_to_b = DirectionPipeline(
@@ -55,3 +70,27 @@ class CallSession:
     async def route_audio(self, frame: AudioFrame) -> list[SynthAudioEvent]:
         result = await self.accept_audio(frame)
         return result.audio_events
+
+    def learn_translation_correction(
+        self,
+        source_participant_id: str,
+        source_text: str,
+        target_text: str,
+        metadata: dict[str, str] | None = None,
+    ) -> None:
+        """Store an approved correction for the A/B call memory layer."""
+        if source_participant_id == self.participant_a.participant_id:
+            source = self.participant_a
+            target = self.participant_b
+        elif source_participant_id == self.participant_b.participant_id:
+            source = self.participant_b
+            target = self.participant_a
+        else:
+            raise ValueError(f"unknown participant: {source_participant_id}")
+        self.translator.learn_correction(
+            source_text=source_text,
+            target_text=target_text,
+            source_language=source.source_language,
+            target_language=source.target_language or target.source_language,
+            metadata=metadata,
+        )
