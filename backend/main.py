@@ -12,6 +12,7 @@ import tempfile
 import threading
 import time
 import hashlib
+import sys
 from collections import deque
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -161,12 +162,329 @@ SUMMARY_LANG_NAMES = {
 # Frontend directory - works whether run from project root or from backend directory
 _current_file = Path(__file__).resolve()
 if _current_file.parent.name == "backend":
+    PROJECT_ROOT = _current_file.parent.parent
     FRONTEND_DIR = _current_file.parent.parent / "frontend"
 else:
+    PROJECT_ROOT = _current_file.parent
     FRONTEND_DIR = _current_file.parent / "frontend"
+
+LOCAL_VOICE_ENGINE_DIR = PROJECT_ROOT / "VOICE ENGINE"
+
+try:
+    from voice_engine import EngineConfig, ParticipantConfig, VoiceEngineOrchestrator  # noqa: E402
+    from voice_engine.audio.frames import synth_sine_pcm16  # noqa: E402
+    from voice_engine.engines.neural_tts import VoiceEngineNeuralTTSPlatform  # noqa: E402
+    from voice_engine.models import AudioFrame, SynthAudioEvent, TranslationEvent  # noqa: E402
+    _VOICE_ENGINE_AVAILABLE = True
+except Exception as e:
+    # Production should install VOICE ENGINE as a normal Python package.
+    # This fallback only supports local capstone development before packaging.
+    if LOCAL_VOICE_ENGINE_DIR.exists() and str(LOCAL_VOICE_ENGINE_DIR) not in sys.path:
+        sys.path.insert(0, str(LOCAL_VOICE_ENGINE_DIR))
+    try:
+        from voice_engine import EngineConfig, ParticipantConfig, VoiceEngineOrchestrator  # noqa: E402
+        from voice_engine.audio.frames import synth_sine_pcm16  # noqa: E402
+        from voice_engine.engines.neural_tts import VoiceEngineNeuralTTSPlatform  # noqa: E402
+        from voice_engine.models import AudioFrame, SynthAudioEvent, TranslationEvent  # noqa: E402
+        _VOICE_ENGINE_AVAILABLE = True
+    except Exception as fallback_error:
+        EngineConfig = ParticipantConfig = VoiceEngineOrchestrator = None
+        VoiceEngineNeuralTTSPlatform = None
+        AudioFrame = SynthAudioEvent = TranslationEvent = None
+        synth_sine_pcm16 = None
+        _VOICE_ENGINE_AVAILABLE = False
+        logging.getLogger(__name__).warning(
+            "VOICE ENGINE package unavailable: %s; local fallback unavailable: %s",
+            e,
+            fallback_error,
+        )
 
 
 _EMPTY_ROOM_TTL_SEC = 300
+_voice_engine_tts_platform = None
+
+
+def _get_voice_engine_tts_platform():
+    global _voice_engine_tts_platform
+    if not _VOICE_ENGINE_AVAILABLE or VoiceEngineNeuralTTSPlatform is None:
+        return None
+    if _voice_engine_tts_platform is not None:
+        return _voice_engine_tts_platform
+
+    vendor_dir = LOCAL_VOICE_ENGINE_DIR / "vendor"
+    _voice_engine_tts_platform = VoiceEngineNeuralTTSPlatform(
+        base_dir=LOCAL_VOICE_ENGINE_DIR if LOCAL_VOICE_ENGINE_DIR.exists() else PROJECT_ROOT,
+        vendor_dir=vendor_dir if vendor_dir.exists() else None,
+    )
+    return _voice_engine_tts_platform
+
+
+class _ConversationVoiceTranslator:
+    """Adapter from VOICE ENGINE translation calls to this app's pipeline."""
+
+    async def translate(self, phrase, source_language: str, target_language: str):
+        if source_language == target_language:
+            translated = phrase.source_text
+        else:
+            result = await asyncio.to_thread(
+                run_conversation_pipeline,
+                phrase.source_text,
+                source_language,
+                target_language,
+                "",
+            )
+            translated = result.get("translation", phrase.source_text)
+        return TranslationEvent(
+            source_text=phrase.source_text,
+            target_text=translated,
+            confidence=0.99,
+            source_language=source_language,
+            target_language=target_language,
+        )
+
+
+class _ConversationVoiceTTS:
+    """Adapter from room TTS calls to the VOICE ENGINE package synthesizer."""
+
+    def __init__(self, sample_rate_hz: int):
+        self.sample_rate_hz = sample_rate_hz
+
+    async def synthesize(self, translation, speaker_profile, recipient_id: str):
+        audio = b""
+        audio_format = "none"
+        method = ""
+
+        platform = _get_voice_engine_tts_platform()
+        if platform is not None:
+            try:
+                wav_path = Path(tempfile.gettempdir()) / (
+                    f"voice_engine_{speaker_profile.participant_id}_{recipient_id}_{secrets.token_hex(8)}.wav"
+                )
+                result = await asyncio.to_thread(
+                    platform.synthesize_to_wav,
+                    translation.target_text,
+                    translation.target_language,
+                    wav_path,
+                    speaker_profile.profile_id,
+                )
+                method = result.method
+                if result.audio_bytes > 0 and "fallback_tone" not in result.method:
+                    audio = wav_path.read_bytes()
+                    audio_format = "wav"
+                wav_path.unlink(missing_ok=True)
+                wav_path.with_suffix(".mp3").unlink(missing_ok=True)
+                wav_path.with_suffix(".aiff").unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning("VOICE ENGINE package synthesis skipped: %s", e)
+                audio = b""
+                audio_format = "none"
+
+        if audio_format == "none" and voice_clone.is_available() and voice_clone.has_enrollment(speaker_profile.participant_id):
+            try:
+                audio = await asyncio.to_thread(
+                    voice_clone.synthesize_for_user,
+                    translation.target_text,
+                    translation.target_language,
+                    speaker_profile.participant_id,
+                )
+                audio_format = "wav" if audio else "none"
+                method = "backend_voice_clone"
+            except Exception as e:
+                logger.warning("Backend voice clone fallback skipped: %s", e)
+                audio = b""
+                audio_format = "none"
+
+        return SynthAudioEvent(
+            recipient_id=recipient_id,
+            source_participant_id=speaker_profile.participant_id,
+            pcm16=audio,
+            sample_rate_hz=self.sample_rate_hz,
+            duration_ms=max(120, min(15_000, len(translation.target_text) * 55)),
+            text=translation.target_text,
+            audio_format=audio_format,
+            metadata={"synthesizer": method} if method else {},
+        )
+
+
+_voice_engine_rooms: dict = {}
+
+
+def _voice_engine_participant(user_id: str, info: dict):
+    language = info.get("language") or "en"
+    return ParticipantConfig(
+        participant_id=user_id,
+        display_name=info.get("name") or user_id,
+        source_language=language,
+        target_language=language,
+        voice_profile_id=user_id,
+    )
+
+
+def _get_voice_engine_orchestrator(room_id: str):
+    if not _VOICE_ENGINE_AVAILABLE:
+        return None
+    orchestrator = _voice_engine_rooms.get(room_id)
+    if orchestrator is not None:
+        return orchestrator
+
+    room = _rooms.get(room_id)
+    participants = []
+    if room:
+        participants = [
+            _voice_engine_participant(uid, info)
+            for uid, info in room.get("info", {}).items()
+        ]
+    config = EngineConfig(jitter_buffer_ms=20)
+    orchestrator = VoiceEngineOrchestrator(
+        room_id=room_id,
+        participants=participants,
+        config=config,
+        translator=_ConversationVoiceTranslator(),
+        tts=_ConversationVoiceTTS(config.sample_rate_hz),
+    )
+    _voice_engine_rooms[room_id] = orchestrator
+    return orchestrator
+
+
+def _voice_engine_register_participant(room_id: str, user_id: str, info: dict, replace: bool = False) -> None:
+    orchestrator = _get_voice_engine_orchestrator(room_id)
+    if orchestrator is None:
+        return
+    if user_id in orchestrator.participant_ids:
+        if replace:
+            orchestrator.remove_participant(user_id)
+        else:
+            return
+    orchestrator.add_participant(_voice_engine_participant(user_id, info))
+
+
+def _voice_engine_remove_participant(room_id: str, user_id: str) -> None:
+    orchestrator = _voice_engine_rooms.get(room_id)
+    if orchestrator is not None:
+        orchestrator.remove_participant(user_id)
+
+
+def _voice_engine_dispose_room(room_id: str) -> None:
+    _voice_engine_rooms.pop(room_id, None)
+
+
+async def _voice_engine_accept_transcript(room_id: str, user_id: str, text: str):
+    orchestrator = _get_voice_engine_orchestrator(room_id)
+    if orchestrator is None:
+        return None
+    room = _rooms.get(room_id)
+    info = (room or {}).get("info", {}).get(user_id)
+    if info:
+        _voice_engine_register_participant(room_id, user_id, info)
+    frame_ms = orchestrator.config.frame_ms
+    pcm16 = synth_sine_pcm16(440.0, frame_ms, orchestrator.config.sample_rate_hz)
+    return await orchestrator.accept_audio(
+        AudioFrame(
+            participant_id=user_id,
+            pcm16=pcm16,
+            sample_rate_hz=orchestrator.config.sample_rate_hz,
+            timestamp_ms=int(time.time() * 1000),
+            duration_ms=frame_ms,
+            metadata={
+                "room_id": room_id,
+                "debug_text": text,
+                "debug_confidence": "0.99",
+            },
+        )
+    )
+
+
+async def _voice_engine_accept_pcm_frame(
+    room_id: str,
+    user_id: str,
+    pcm16: bytes,
+    sample_rate_hz: int,
+    timestamp_ms: int,
+    sequence: int,
+):
+    """Feed live caller PCM into the room VOICE ENGINE pipeline.
+
+    The packaged ASR is pluggable. In this app the Google final transcript is
+    still used as the committed phrase until the native package ASR is swapped
+    in, but the room engine now receives the continuous mic stream directly.
+    """
+    orchestrator = _get_voice_engine_orchestrator(room_id)
+    if orchestrator is None:
+        return None
+    room = _rooms.get(room_id)
+    info = (room or {}).get("info", {}).get(user_id)
+    if info:
+        _voice_engine_register_participant(room_id, user_id, info)
+    try:
+        return await orchestrator.accept_audio(
+            AudioFrame(
+                participant_id=user_id,
+                pcm16=pcm16,
+                sample_rate_hz=sample_rate_hz,
+                timestamp_ms=timestamp_ms,
+                duration_ms=max(1, int((len(pcm16) / 2) * 1000 / max(1, sample_rate_hz))),
+                metadata={
+                    "room_id": room_id,
+                    "sequence": str(sequence),
+                },
+            )
+        )
+    except Exception as e:
+        logger.warning("VOICE ENGINE live PCM frame skipped: room=%s user=%s error=%s", room_id, user_id, e)
+        return None
+
+
+async def _send_voice_engine_room_outputs(room_id: str, user_id: str, text: str, speaker_name: str) -> bool:
+    room = _rooms.get(room_id)
+    orchestrator = _get_voice_engine_orchestrator(room_id)
+    if not room or orchestrator is None:
+        return False
+
+    result = await _voice_engine_accept_transcript(room_id, user_id, text)
+    if result is None:
+        return False
+    if result.blocked_reason:
+        logger.warning("VOICE ENGINE blocked room=%s user=%s: %s", room_id, user_id, result.blocked_reason)
+        return False
+
+    events_by_recipient = {
+        event.recipient_id: event
+        for event in result.output_events
+        if event.source_participant_id == user_id
+    }
+    delivered = False
+    for other_id, other_ws in list(room["conns"].items()):
+        if other_id == user_id or not other_ws:
+            continue
+        event = events_by_recipient.get(other_id)
+        if event is None:
+            continue
+
+        has_engine_audio = bool(event.pcm16) and getattr(event, "audio_format", "") == "wav"
+        _record_broadcast(room_id, event.text)
+        try:
+            await other_ws.send_json({
+                "type": "message",
+                "from_id": user_id,
+                "from": speaker_name,
+                "original": text,
+                "translation": event.text,
+                "is_self": False,
+                "voice_engine_audio": has_engine_audio,
+            })
+            if has_engine_audio:
+                await other_ws.send_json({
+                    "type": "voice_audio",
+                    "from_id": user_id,
+                    "format": "wav",
+                    "audio_b64": base64.b64encode(event.pcm16).decode("ascii"),
+                    "engine": "voice_engine",
+                    "synthesizer": event.metadata.get("synthesizer", ""),
+                })
+            delivered = True
+        except Exception as e:
+            logger.error("VOICE ENGINE delivery error for %s: %s", other_id, e)
+    return delivered
 
 
 async def _send_voice_clone_audio(ws, speaker_id: str, text: str, target_lang: str) -> None:
@@ -212,6 +530,7 @@ async def _cleanup_empty_rooms():
                 if empty_since and now - empty_since > _EMPTY_ROOM_TTL_SEC:
                     _rooms.pop(rid, None)
                     _recent_broadcasts.pop(rid, None)
+                    _voice_engine_dispose_room(rid)
                     logger.info("Cleaned up empty room: %s", rid)
             # Prune idle rate-limit buckets to keep memory bounded
             security._prune_rate_windows()
@@ -1515,6 +1834,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
         "idle": False,
         "idle_since": None,
     }
+    _voice_engine_register_participant(room_id, user_id, room["info"][user_id], replace=True)
     logger.info(
         "Conversation join: room=%s user=%s name=%r language=%s reconnected=%s",
         room_id, user_id, data["name"], data["language"], reconnected_existing_user,
@@ -1602,45 +1922,47 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
                     "is_self": True,
                 })
 
-                # Translate and deliver to every other participant
-                speaker_has_clone = voice_clone.has_enrollment(user_id) and voice_clone.is_available()
-                for other_id, other_ws in list(room["conns"].items()):
-                    if other_id == user_id or not other_ws:
-                        continue
-                    other_info = room["info"].get(other_id)
-                    if not other_info:
-                        continue
-                    try:
-                        if other_info["language"] == my_info["language"]:
-                            translated = text
-                        else:
-                            result = await asyncio.to_thread(
-                                run_conversation_pipeline,
-                                text,
-                                my_info["language"],
-                                other_info["language"],
-                                _style_hint,
-                            )
-                            translated = result.get("translation", text)
+                delivered_by_voice_engine = await _send_voice_engine_room_outputs(
+                    room_id, user_id, text, my_info["name"],
+                )
+                if not delivered_by_voice_engine:
+                    # Fallback keeps the existing text/browser-TTS path alive
+                    # if VOICE ENGINE is unavailable or rejects the utterance.
+                    speaker_has_clone = voice_clone.has_enrollment(user_id) and voice_clone.is_available()
+                    for other_id, other_ws in list(room["conns"].items()):
+                        if other_id == user_id or not other_ws:
+                            continue
+                        other_info = room["info"].get(other_id)
+                        if not other_info:
+                            continue
+                        try:
+                            if other_info["language"] == my_info["language"]:
+                                translated = text
+                            else:
+                                result = await asyncio.to_thread(
+                                    run_conversation_pipeline,
+                                    text,
+                                    my_info["language"],
+                                    other_info["language"],
+                                    _style_hint,
+                                )
+                                translated = result.get("translation", text)
 
-                        await other_ws.send_json({
-                            "type": "message",
-                            "from_id": user_id,
-                            "from": my_info["name"],
-                            "original": text,
-                            "translation": translated,
-                            "is_self": False,
-                        })
+                            await other_ws.send_json({
+                                "type": "message",
+                                "from_id": user_id,
+                                "from": my_info["name"],
+                                "original": text,
+                                "translation": translated,
+                                "is_self": False,
+                            })
 
-                        # Voice clone broadcast — fire-and-forget so it never
-                        # blocks the text path.  Listener falls back to browser
-                        # TTS if the audio doesn't arrive within ~1.5 s.
-                        if speaker_has_clone:
-                            asyncio.create_task(_send_voice_clone_audio(
-                                other_ws, user_id, translated, other_info["language"],
-                            ))
-                    except Exception as e:
-                        logger.error(f"Translation error for {other_id}: {e}")
+                            if speaker_has_clone:
+                                asyncio.create_task(_send_voice_clone_audio(
+                                    other_ws, user_id, translated, other_info["language"],
+                                ))
+                        except Exception as e:
+                            logger.error(f"Translation error for {other_id}: {e}")
 
             elif msg_type == "interim":
                 my_info = room["info"].get(user_id)
@@ -1824,6 +2146,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
             user_info["camera_on"] = False
         else:
             room["info"].pop(user_id, None)
+            _voice_engine_remove_participant(room_id, user_id)
 
         if user_was_host:
             # Host left or disconnected: hand off to the next user when
@@ -1870,6 +2193,7 @@ async def conversation_ws(websocket: WebSocket, room_id: str):
 
         if not room["conns"] and not room["info"]:
             room["empty_since"] = time.time()
+            _voice_engine_dispose_room(room_id)
         elif room["info"]:
             room["empty_since"] = None
 
@@ -1975,53 +2299,60 @@ async def inject_speech(room_id: str, user_id: str, text: str,
         except Exception:
             pass
 
-    # Translate to every other participant's language in parallel — sequential
-    # awaits on Groq calls add up fast (each ~200-400 ms).
-    async def _translate_and_send(other_id: str, other_ws, other_info):
-        try:
-            if other_info["language"] == my_info["language"]:
-                translated = text
-            else:
-                result = await asyncio.to_thread(
-                    run_conversation_pipeline,
-                    text, my_info["language"], other_info["language"],
-                    style_hint,
-                )
-                translated = result.get("translation", text)
-            _record_broadcast(room_id, translated)
-            await other_ws.send_json({
-                "type": "message", "from_id": user_id,
-                "from": my_info["name"], "original": text,
-                "translation": translated, "is_self": False,
-            })
-        except Exception as e:
-            logger.error("Translation error for %s: %s", other_id, e)
+    delivered_by_voice_engine = await _send_voice_engine_room_outputs(
+        room_id, user_id, text, my_info["name"],
+    )
+    if not delivered_by_voice_engine:
+        # Fallback keeps the existing text/browser-TTS path alive if VOICE
+        # ENGINE is unavailable or rejects the utterance.
+        async def _translate_and_send(other_id: str, other_ws, other_info):
+            try:
+                if other_info["language"] == my_info["language"]:
+                    translated = text
+                else:
+                    result = await asyncio.to_thread(
+                        run_conversation_pipeline,
+                        text, my_info["language"], other_info["language"],
+                        style_hint,
+                    )
+                    translated = result.get("translation", text)
+                _record_broadcast(room_id, translated)
+                await other_ws.send_json({
+                    "type": "message", "from_id": user_id,
+                    "from": my_info["name"], "original": text,
+                    "translation": translated, "is_self": False,
+                })
+            except Exception as e:
+                logger.error("Translation error for %s: %s", other_id, e)
 
-    tasks = []
-    for other_id, other_ws in list(room["conns"].items()):
-        if other_id == user_id or not other_ws:
-            continue
-        other_info = room["info"].get(other_id)
-        if not other_info:
-            continue
-        tasks.append(_translate_and_send(other_id, other_ws, other_info))
-    if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
+        tasks = []
+        for other_id, other_ws in list(room["conns"].items()):
+            if other_id == user_id or not other_ws:
+                continue
+            other_info = room["info"].get(other_id)
+            if not other_info:
+                continue
+            tasks.append(_translate_and_send(other_id, other_ws, other_info))
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     # Clear speaking state now that all translations have been delivered
     room.setdefault("speaking", {}).pop(user_id, None)
 
 
+@app.websocket("/ws/voice-engine/{room_id}/{user_id}")
 @app.websocket("/ws/stt/{room_id}/{user_id}")
 async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str,
                                api_key: str = ""):
-    """Google Cloud STT streaming endpoint used by iOS clients.
+    """Conversation live-audio endpoint.
 
     Binary frames arriving from the browser contain raw LINEAR16 PCM audio
-    at the device's native sample rate.  A daemon thread feeds those frames
-    into a Google Cloud streaming_recognize session and calls inject_speech()
-    for every final transcript.  Sessions restart automatically every 4.5 min
-    (before Google's hard 5-min limit).
+    at the device's native sample rate. Frames are fed into the VOICE ENGINE
+    room orchestrator immediately. Until the packaged native ASR replaces this
+    adapter, a daemon thread also feeds those frames into Google Cloud
+    streaming_recognize and commits each final transcript through the same
+    VOICE ENGINE room pipeline. Sessions restart automatically every 4.5 min
+    to stay before Google's hard 5-min limit.
     """
     if not _GOOGLE_STT_AVAILABLE:
         await websocket.close(code=1011, reason="google-cloud-speech not installed")
@@ -2229,6 +2560,14 @@ async def stt_stream_endpoint(websocket: WebSocket, room_id: str, user_id: str,
                 audio_q.put_nowait(data)
             except _queue.Full:
                 pass  # drop frame — client sent faster than STT can consume
+            await _voice_engine_accept_pcm_frame(
+                room_id=room_id,
+                user_id=user_id,
+                pcm16=data,
+                sample_rate_hz=sample_rate,
+                timestamp_ms=int(time.time() * 1000),
+                sequence=rx_frames,
+            )
     except WebSocketDisconnect:
         pass
     except Exception as e:

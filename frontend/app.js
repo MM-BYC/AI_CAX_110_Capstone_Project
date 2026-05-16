@@ -220,7 +220,6 @@ tabConv.addEventListener("click", () =>
   _selectTab({ btn: tabConv, panel: convTab }),
 );
 
-
 // ── Authentication Management ──────────────────────────────────────────────
 const AUTH_STORAGE_KEYS = [
   "auth_email",
@@ -238,8 +237,10 @@ let currentUserEmail = sessionStorage.getItem("auth_email") || null;
 let currentUserToken = sessionStorage.getItem("auth_token") || null;
 let currentUserFirstName = sessionStorage.getItem("auth_first_name") || "";
 let currentUserLastName = sessionStorage.getItem("auth_last_name") || "";
-let currentUserTrialEndsAt = Number(sessionStorage.getItem("auth_trial_ends_at")) || null;
-let currentUserIsSubscriber = sessionStorage.getItem("auth_is_subscriber") === "true";
+let currentUserTrialEndsAt =
+  Number(sessionStorage.getItem("auth_trial_ends_at")) || null;
+let currentUserIsSubscriber =
+  sessionStorage.getItem("auth_is_subscriber") === "true";
 let trialTimerIntervalId = null;
 let _browserSessionEnding = false;
 
@@ -256,7 +257,10 @@ function persistAuthSession(data) {
   sessionStorage.setItem("auth_first_name", currentUserFirstName);
   sessionStorage.setItem("auth_last_name", currentUserLastName);
   if (currentUserTrialEndsAt) {
-    sessionStorage.setItem("auth_trial_ends_at", String(currentUserTrialEndsAt));
+    sessionStorage.setItem(
+      "auth_trial_ends_at",
+      String(currentUserTrialEndsAt),
+    );
   } else {
     sessionStorage.removeItem("auth_trial_ends_at");
   }
@@ -548,17 +552,21 @@ function showSignupModal(plan = "trial") {
   });
   document.getElementById("signupCardExpiry").addEventListener("input", (e) => {
     const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
-    e.target.value = digits.length > 2 ? digits.slice(0, 2) + " / " + digits.slice(2) : digits;
+    e.target.value =
+      digits.length > 2 ? digits.slice(0, 2) + " / " + digits.slice(2) : digits;
   });
 
-  document.getElementById("billingBackBtn").onclick = () => showAuthModal("pricing");
+  document.getElementById("billingBackBtn").onclick = () =>
+    showAuthModal("pricing");
   document.getElementById("billingSubmit").onclick = async () => {
     const firstName = document.getElementById("signupFirstName").value.trim();
     const lastName = document.getElementById("signupLastName").value.trim();
     const email = document.getElementById("signupEmail").value.trim();
     const phone = document.getElementById("signupPhone").value.trim();
     const password = document.getElementById("signupPass").value.trim();
-    const passwordConfirm = document.getElementById("signupPassConfirm").value.trim();
+    const passwordConfirm = document
+      .getElementById("signupPassConfirm")
+      .value.trim();
     if (!firstName || !lastName || !email || !password) {
       alert("Please enter your first name, last name, email, and password");
       return;
@@ -584,7 +592,9 @@ function showSignupModal(plan = "trial") {
       payment_method: {
         type: "test_card",
         card_name: document.getElementById("signupCardName").value.trim(),
-        card_number: document.getElementById("signupCardNumber").value.replace(/\s/g, ""),
+        card_number: document
+          .getElementById("signupCardNumber")
+          .value.replace(/\s/g, ""),
         card_expiry: document.getElementById("signupCardExpiry").value.trim(),
         card_cvv: document.getElementById("signupCardCvv").value.trim(),
       },
@@ -596,7 +606,8 @@ function showSignupModal(plan = "trial") {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error((await res.json()).detail || "Signup failed");
+      if (!res.ok)
+        throw new Error((await res.json()).detail || "Signup failed");
 
       const data = await res.json();
       persistAuthSession(data);
@@ -797,10 +808,11 @@ function showAuthModal(mode = "login") {
       </div>
       <div class="auth-page-header-right">
         <div class="auth-page-header-prompt">
-          ${isLogin
-            ? `<span>New to AI Translate?</span>
+          ${
+            isLogin
+              ? `<span>New to AI Translate?</span>
                <button type="button" onclick="showAuthModal('pricing')">Create account free</button>`
-            : `<span>Already have an account?</span>
+              : `<span>Already have an account?</span>
                <button type="button" onclick="showAuthModal('login')">Sign in</button>`
           }
         </div>
@@ -920,9 +932,10 @@ function showAuthModal(mode = "login") {
       alert("Please enter an email");
       return;
     }
-    const pass = !isForgot && !isCancel
-      ? document.getElementById("authPass").value.trim()
-      : "";
+    const pass =
+      !isForgot && !isCancel
+        ? document.getElementById("authPass").value.trim()
+        : "";
     if (isCancel) {
       if (!document.getElementById("cancelTerms").checked) {
         alert("Please acknowledge the refund policy");
@@ -965,7 +978,9 @@ function showAuthModal(mode = "login") {
       if (!res.ok) {
         const err = await res.json();
         if (isLogin && res.status === 401) {
-          throw new Error("Email or password not recognized. Try again or create a trial account from Plans.");
+          throw new Error(
+            "Email or password not recognized. Try again or create a trial account from Plans.",
+          );
         }
         throw new Error(err.detail || "Auth failed");
       }
@@ -1835,8 +1850,8 @@ async function convVoiceCloneEnroll(stream) {
 
 // Speak the translated text. If voice cloning is available we wait briefly
 // for the cloned audio to arrive; otherwise we use browser TTS immediately.
-function convSpeakOrAwaitClone(text, langCode, fromId) {
-  if (_voiceCloneAvailable !== true) {
+function convSpeakOrAwaitClone(text, langCode, fromId, waitForEngineAudio = false) {
+  if (_voiceCloneAvailable !== true && !waitForEngineAudio) {
     convSpeak(text, langCode);
     return;
   }
@@ -1952,7 +1967,9 @@ const convAudioTestMenuBtn = document.getElementById("convAudioTestMenuBtn");
 const convAudioModal = document.getElementById("convAudioModal");
 const convAudioCloseBtn = document.getElementById("convAudioCloseBtn");
 const convAudioJoinBtn = document.getElementById("convAudioJoinBtn");
-const convAudioTestSpeakerBtn = document.getElementById("convAudioTestSpeakerBtn");
+const convAudioTestSpeakerBtn = document.getElementById(
+  "convAudioTestSpeakerBtn",
+);
 const convAudioTestMicBtn = document.getElementById("convAudioTestMicBtn");
 const convAudioTestStatus = document.getElementById("convAudioTestStatus");
 const convAudioAutoJoin = document.getElementById("convAudioAutoJoin");
@@ -1964,15 +1981,31 @@ const convTtsBtn = document.getElementById("convTtsBtn");
 const convTtsLabel = document.getElementById("convTtsLabel");
 const convParticipantsBtn = document.getElementById("convParticipantsBtn");
 const convParticipantsLabel = document.getElementById("convParticipantsLabel");
-const convParticipantsPopover = document.getElementById("convParticipantsPopover");
+const convParticipantsPopover = document.getElementById(
+  "convParticipantsPopover",
+);
 const convParticipantsList = document.getElementById("convParticipantsList");
-const convParticipantsPanelTitle = document.getElementById("convParticipantsPanelTitle");
-const convParticipantsCloseBtn = document.getElementById("convParticipantsCloseBtn");
-const convParticipantsHeaderMoreBtn = document.getElementById("convParticipantsHeaderMoreBtn");
-const convParticipantActionMenu = document.getElementById("convParticipantActionMenu");
-const convParticipantsInviteBtn = document.getElementById("convParticipantsInviteBtn");
-const convParticipantsMuteAllBtn = document.getElementById("convParticipantsMuteAllBtn");
-const convParticipantsMoreBtn = document.getElementById("convParticipantsMoreBtn");
+const convParticipantsPanelTitle = document.getElementById(
+  "convParticipantsPanelTitle",
+);
+const convParticipantsCloseBtn = document.getElementById(
+  "convParticipantsCloseBtn",
+);
+const convParticipantsHeaderMoreBtn = document.getElementById(
+  "convParticipantsHeaderMoreBtn",
+);
+const convParticipantActionMenu = document.getElementById(
+  "convParticipantActionMenu",
+);
+const convParticipantsInviteBtn = document.getElementById(
+  "convParticipantsInviteBtn",
+);
+const convParticipantsMuteAllBtn = document.getElementById(
+  "convParticipantsMuteAllBtn",
+);
+const convParticipantsMoreBtn = document.getElementById(
+  "convParticipantsMoreBtn",
+);
 const convChatBtn = document.getElementById("convChatBtn");
 const convChatPanel = document.getElementById("convChatPanel");
 const convChatCloseBtn = document.getElementById("convChatCloseBtn");
@@ -2034,6 +2067,22 @@ const _CARD_GRID_GAP = 0;
 const _CARD_MAX_COLS = 5;
 const _CARD_MAX_ROWS = 5;
 
+function _getCardMinTileWidth() {
+  const width = window.innerWidth;
+  if (width <= 420) return 96;
+  if (width <= 560) return 110;
+  if (width <= 768) return 130;
+  return _CARD_MIN_TILE_WIDTH;
+}
+
+function _getCardMinTileHeight() {
+  const width = window.innerWidth;
+  if (width <= 420) return 70;
+  if (width <= 560) return 78;
+  if (width <= 768) return 86;
+  return _CARD_MIN_TILE_HEIGHT;
+}
+
 let _carouselPage = 0;
 const _carouselCards = []; // ordered DOM elements; order = join order
 
@@ -2045,11 +2094,15 @@ function _carouselLayout() {
   const count = Math.max(1, _carouselCards.length);
   const maxColsByWidth = Math.max(
     1,
-    Math.floor((width + _CARD_GRID_GAP) / (_CARD_MIN_TILE_WIDTH + _CARD_GRID_GAP)),
+    Math.floor(
+      (width + _CARD_GRID_GAP) / (_getCardMinTileWidth() + _CARD_GRID_GAP),
+    ),
   );
   const maxRowsByHeight = Math.max(
     1,
-    Math.floor((height + _CARD_GRID_GAP) / (_CARD_MIN_TILE_HEIGHT + _CARD_GRID_GAP)),
+    Math.floor(
+      (height + _CARD_GRID_GAP) / (_getCardMinTileHeight() + _CARD_GRID_GAP),
+    ),
   );
   const maxCols = Math.min(_CARD_MAX_COLS, maxColsByWidth);
   const maxRows = Math.min(_CARD_MAX_ROWS, maxRowsByHeight);
@@ -2066,7 +2119,7 @@ function _carouselLayout() {
       const pageSize = cols * rows;
       const tileWidth = (width - _CARD_GRID_GAP * (cols - 1)) / cols;
       const tileHeight = (height - _CARD_GRID_GAP * (rows - 1)) / rows;
-      const fittedHeight = Math.min(tileHeight, tileWidth * 9 / 16);
+      const fittedHeight = Math.min(tileHeight, (tileWidth * 9) / 16);
       const tileArea = tileWidth * fittedHeight;
       const visibleCount = Math.min(pageSize, count);
       const betterVisibleCount = visibleCount > best.visibleCount;
@@ -2095,7 +2148,10 @@ function _buildCard(uid, user) {
 
   const card = document.createElement("div");
   card.className =
-    "conv-participant-card" + (isMe ? " me" : "") + (user.idle ? " idle" : "") + (user.mic_on ? " mic-on" : "");
+    "conv-participant-card" +
+    (isMe ? " me" : "") +
+    (user.idle ? " idle" : "") +
+    (user.mic_on ? " mic-on" : "");
   card.id = `conv-card-${uid}`;
   card.dataset.uid = uid;
 
@@ -2150,7 +2206,8 @@ function _buildCard(uid, user) {
 
   const langBadge = document.createElement("span");
   langBadge.className = "conv-lang-badge conv-card-lang-badge";
-  langBadge.textContent = LANG_NAMES[user.language] || user.language.toUpperCase();
+  langBadge.textContent =
+    LANG_NAMES[user.language] || user.language.toUpperCase();
 
   const camDot = document.createElement("div");
   camDot.className = "conv-participant-cam-dot" + (user.camera_on ? " on" : "");
@@ -2219,7 +2276,9 @@ function convRenderParticipants() {
     if (!_carouselCards.find((c) => c.dataset.uid === uid)) {
       _carouselCards.push(_buildCard(uid, user));
     }
-    document.getElementById(`conv-card-${uid}`)?.classList.toggle("idle", !!user.idle);
+    document
+      .getElementById(`conv-card-${uid}`)
+      ?.classList.toggle("idle", !!user.idle);
     if (user.idle) convStartIdleTimer(uid);
     else convStopIdleTimer(uid);
   });
@@ -2246,13 +2305,18 @@ function convRenderParticipantsPopover() {
     convParticipantsPanelTitle.textContent = `Participants (${users.length})`;
   }
   if (!users.length) {
-    convParticipantsList.innerHTML = '<div class="conv-participant-row empty">No participants yet</div>';
+    convParticipantsList.innerHTML =
+      '<div class="conv-participant-row empty">No participants yet</div>';
     return;
   }
   convParticipantsList.innerHTML = users
     .map(([uid, user]) => {
       const name = escapeHtml(user.name || "Guest");
-      const lang = escapeHtml(LANG_NAMES[user.language] || (user.language || "").toUpperCase() || "Participant");
+      const lang = escapeHtml(
+        LANG_NAMES[user.language] ||
+          (user.language || "").toUpperCase() ||
+          "Participant",
+      );
       const self = uid === convUserId ? "me" : "";
       const host = user.is_host ? "Host" : "";
       const badges = [host, self].filter(Boolean).join(", ");
@@ -2302,7 +2366,6 @@ function convUpdateChipCam(userId, isOn) {
   if (dot) dot.className = "conv-participant-cam-dot" + (isOn ? " on" : "");
   convRenderParticipantsPopover();
 }
-
 
 function convStartIdleTimer(userId) {
   if (!convUsers[userId]) return;
@@ -2354,7 +2417,9 @@ function convSetUserIdle(userId, isIdle, idleSince = null) {
   if (convUsers[userId]) {
     convUsers[userId].idle = isIdle;
     convUsers[userId].idle_since = isIdle
-      ? convNormalizeIdleSince(idleSince || convUsers[userId].idle_since || Date.now())
+      ? convNormalizeIdleSince(
+          idleSince || convUsers[userId].idle_since || Date.now(),
+        )
       : null;
     if (isIdle) {
       convUsers[userId].mic_on = false;
@@ -2372,7 +2437,10 @@ function convSetUserIdle(userId, isIdle, idleSince = null) {
     convStopIdleTimer(userId);
   }
   if (wasIdle && !isIdle && userId !== convUserId) {
-    showToast(`${convUsers[userId]?.name || "Participant"} is back online.`, "success");
+    showToast(
+      `${convUsers[userId]?.name || "Participant"} is back online.`,
+      "success",
+    );
   }
 }
 
@@ -2796,6 +2864,7 @@ function convHandleMessage(msg) {
           msg.translation,
           convUsers[convUserId]?.language || "en",
           msg.from_id,
+          !!msg.voice_engine_audio,
         );
       }
       break;
@@ -2932,7 +3001,8 @@ async function convStartListening() {
     return;
   }
 
-  const selectedLang = convUsers[convUserId]?.language || convLangSelect.value || "en";
+  const selectedLang =
+    convUsers[convUserId]?.language || convLangSelect.value || "en";
   const lang = LANG_LOCALES[selectedLang] || "en-US";
 
   convFinalText = "";
@@ -3047,12 +3117,10 @@ function convStopListening() {
   if (!_isSafari) webrtcStopAudio();
 }
 
-// ── Conversation mic — AudioContext → ScriptProcessorNode → Google STT ─────
-// Raw LINEAR16 PCM is streamed continuously to /ws/stt/. Final transcripts
-// from Google Cloud Speech are injected directly into the translation pipeline.
-// This is the primary path for conversation mode across Android Chrome,
-// iPhone Safari, iPhone Chrome, and desktop browsers so language handling is
-// consistent for Tagalog and every supported participant language.
+// ── Conversation mic — AudioContext → ScriptProcessorNode → VOICE ENGINE ───
+// Raw LINEAR16 PCM is streamed continuously to /ws/voice-engine/. The backend
+// feeds live frames into the room VoiceEngineOrchestrator and commits final
+// transcripts through the same voice-engine room pipeline.
 
 let _iosMicStream = null;
 let _iosAudioCtx = null;
@@ -3169,7 +3237,10 @@ async function _convStartIosMicInner() {
 
   if (!_iosSttWs || _iosSttWs.readyState !== WebSocket.OPEN) {
     _micTrace("Tap to speak");
-    console.error("[conversation mic] STT WS closed immediately:", _sttCloseReason);
+    console.error(
+      "[conversation mic] STT WS closed immediately:",
+      _sttCloseReason,
+    );
     alert(
       "Mic connection failed — server closed immediately.\n\n" +
         (_sttCloseReason
@@ -3216,7 +3287,10 @@ async function _convStartIosMicInner() {
       const isTalking = rms >= NOISE_GATE_RMS;
       localCard.classList.toggle("speaking", isTalking);
       if (isTalking) {
-        localCard.style.setProperty("--conv-speaking-intensity", intensity.toFixed(3));
+        localCard.style.setProperty(
+          "--conv-speaking-intensity",
+          intensity.toFixed(3),
+        );
       } else {
         localCard.style.removeProperty("--conv-speaking-intensity");
       }
@@ -3270,7 +3344,7 @@ function convStopIosMic() {
 function _buildIosSttWsUrl() {
   const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
   const wsBase = (API_BASE || location.origin).replace(/^https?:/, wsProto);
-  return `${wsBase}/ws/stt/${convRoomId}/${convUserId}`;
+  return `${wsBase}/ws/voice-engine/${convRoomId}/${convUserId}`;
 }
 
 function _onIosSttDrop() {
@@ -3290,7 +3364,13 @@ function convSendPresence(isIdle) {
     if (_iosMicActive) convStopIosMic();
   }
   if (convWs?.readyState === WebSocket.OPEN) {
-    convWs.send(JSON.stringify({ type: "presence", is_idle: isIdle, idle_since: idleSince }));
+    convWs.send(
+      JSON.stringify({
+        type: "presence",
+        is_idle: isIdle,
+        idle_since: idleSince,
+      }),
+    );
   }
 }
 
@@ -3380,7 +3460,8 @@ async function convTestSpeaker() {
   convAudioTestStatus.textContent = "Playing a test tone...";
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) throw new Error("Audio output is not supported in this browser.");
+    if (!AudioCtx)
+      throw new Error("Audio output is not supported in this browser.");
     const ctx = new AudioCtx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -3395,17 +3476,20 @@ async function convTestSpeaker() {
     osc.stop(ctx.currentTime + 0.95);
     setTimeout(() => {
       ctx.close();
-      if (convAudioTestStatus) convAudioTestStatus.textContent = "Speaker test complete.";
+      if (convAudioTestStatus)
+        convAudioTestStatus.textContent = "Speaker test complete.";
     }, 1050);
   } catch (err) {
-    convAudioTestStatus.textContent = err.message || "Could not play the speaker test.";
+    convAudioTestStatus.textContent =
+      err.message || "Could not play the speaker test.";
   }
 }
 
 async function convTestMicrophone() {
   if (!convAudioTestStatus) return;
   if (convIsAudioJoined()) {
-    convAudioTestStatus.textContent = "Microphone is already joined and listening.";
+    convAudioTestStatus.textContent =
+      "Microphone is already joined and listening.";
     return;
   }
   convAudioTestStatus.textContent = "Checking microphone input...";
@@ -3429,13 +3513,17 @@ async function convTestMicrophone() {
       peak = Math.max(peak, Math.sqrt(sum / data.length));
       ticks++;
       convAudioTestStatus.textContent =
-        peak > 4 ? "Microphone input detected." : "Speak to test your microphone...";
+        peak > 4
+          ? "Microphone input detected."
+          : "Speak to test your microphone...";
       if (ticks >= 25) {
         clearInterval(timer);
         stream.getTracks().forEach((track) => track.stop());
         ctx.close();
         convAudioTestStatus.textContent =
-          peak > 4 ? "Microphone test complete." : "No microphone input detected.";
+          peak > 4
+            ? "Microphone test complete."
+            : "No microphone input detected.";
       }
     }, 120);
   } catch (err) {
@@ -3891,30 +3979,40 @@ function convSummaryActions(items) {
   const sectionCopy = convSummarySectionCopy();
   const rows = Array.isArray(items) ? items : [];
   if (!rows.length) return `<p>${escapeHtml(sectionCopy.notIdentified)}</p>`;
-  return `<div class="conv-summary-actions">${rows.map((item) => `
+  return `<div class="conv-summary-actions">${rows
+    .map(
+      (item) => `
     <div class="conv-summary-action">
       <strong>${escapeHtml(item.owner || sectionCopy.notIdentified)}</strong>
       <span>${escapeHtml(item.task || sectionCopy.notIdentified)}</span>
       <small>${escapeHtml(sectionCopy.deliverable)}: ${escapeHtml(item.deliverable || sectionCopy.notIdentified)} · ${escapeHtml(sectionCopy.due)}: ${escapeHtml(item.due_date || sectionCopy.notIdentified)}</small>
     </div>
-  `).join("")}</div>`;
+  `,
+    )
+    .join("")}</div>`;
 }
 
 function convSummaryFollowUps(items) {
   const sectionCopy = convSummarySectionCopy();
   const rows = Array.isArray(items) ? items : [];
   if (!rows.length) return `<p>${escapeHtml(sectionCopy.notIdentified)}</p>`;
-  return `<div class="conv-summary-actions">${rows.map((item) => `
+  return `<div class="conv-summary-actions">${rows
+    .map(
+      (item) => `
     <div class="conv-summary-action">
       <strong>${escapeHtml(item.owner || sectionCopy.notIdentified)} → ${escapeHtml(item.with_whom || sectionCopy.notIdentified)}</strong>
       <span>${escapeHtml(item.reason || sectionCopy.notIdentified)}</span>
       <small>${escapeHtml(sectionCopy.timing)}: ${escapeHtml(item.timing || sectionCopy.notIdentified)}</small>
     </div>
-  `).join("")}</div>`;
+  `,
+    )
+    .join("")}</div>`;
 }
 
 function convNormalizeSummaryText(value) {
-  return String(value || "").replace(/\s+/g, " ").trim();
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function convReadBoardMessagesForSummary() {
@@ -3993,7 +4091,9 @@ function convRenderSummary(summary) {
 }
 
 function convBuildSummaryPayload(messages, summary = null) {
-  const participants = Object.values(convUsers).map((u) => u.name).filter(Boolean);
+  const participants = Object.values(convUsers)
+    .map((u) => u.name)
+    .filter(Boolean);
   return {
     messages,
     participants,
@@ -4031,7 +4131,8 @@ async function convOpenSummary() {
       },
       body: JSON.stringify(convBuildSummaryPayload(messages)),
     });
-    if (!res.ok) throw new Error((await res.json()).detail || copy.requestFailed);
+    if (!res.ok)
+      throw new Error((await res.json()).detail || copy.requestFailed);
     const summary = await res.json();
     convLastSummaryPayload = convBuildSummaryPayload(messages, summary);
     convRenderSummary(summary);
@@ -4142,7 +4243,9 @@ function convHistoryDateRangeHtml() {
 async function convOpenHistory() {
   if (!convRequireLogin()) return;
   convShowSummaryModal("Conversation History", convHistoryDateRangeHtml());
-  document.getElementById("convHistorySearchBtn")?.addEventListener("click", convLoadHistoryDates);
+  document
+    .getElementById("convHistorySearchBtn")
+    ?.addEventListener("click", convLoadHistoryDates);
   await convLoadHistoryDates();
 }
 
@@ -4156,25 +4259,36 @@ async function convLoadHistoryDates() {
   if (end) params.set("end_date", end);
   list.innerHTML = "<p>Loading history...</p>";
   try {
-    const res = await fetch(`${API_BASE}/api/v1/conversation/history/dates?${params}`, {
-      headers: convHistoryHeaders(),
-    });
-    if (!res.ok) throw new Error((await res.json()).detail || "Could not load history");
+    const res = await fetch(
+      `${API_BASE}/api/v1/conversation/history/dates?${params}`,
+      {
+        headers: convHistoryHeaders(),
+      },
+    );
+    if (!res.ok)
+      throw new Error((await res.json()).detail || "Could not load history");
     const data = await res.json();
     const dates = Array.isArray(data.dates) ? data.dates : [];
     if (!dates.length) {
-      list.innerHTML = "<p>No saved conversation history found for that range.</p>";
+      list.innerHTML =
+        "<p>No saved conversation history found for that range.</p>";
       return;
     }
-    list.innerHTML = dates.map((item) => `
+    list.innerHTML = dates
+      .map(
+        (item) => `
       <button type="button" class="conv-history-date" data-date="${escapeHtml(item.date)}">
         <strong>${escapeHtml(item.date)}</strong>
         <span>${escapeHtml(String(item.count))} saved summar${item.count === 1 ? "y" : "ies"}</span>
         <small>${escapeHtml((item.participants || []).join(", ") || "No participants listed")}</small>
       </button>
-    `).join("");
+    `,
+      )
+      .join("");
     list.querySelectorAll(".conv-history-date").forEach((btn) => {
-      btn.addEventListener("click", () => convOpenHistoryDate(btn.dataset.date));
+      btn.addEventListener("click", () =>
+        convOpenHistoryDate(btn.dataset.date),
+      );
     });
   } catch (err) {
     list.innerHTML = `<p>${escapeHtml(err.message || "Could not load history")}</p>`;
@@ -4183,12 +4297,21 @@ async function convLoadHistoryDates() {
 
 async function convOpenHistoryDate(date) {
   if (!date || !convRequireLogin()) return;
-  convShowSummaryModal(`Conversation History - ${date}`, "<p>Loading saved summary...</p>");
+  convShowSummaryModal(
+    `Conversation History - ${date}`,
+    "<p>Loading saved summary...</p>",
+  );
   try {
-    const res = await fetch(`${API_BASE}/api/v1/conversation/history/date/${encodeURIComponent(date)}`, {
-      headers: convHistoryHeaders(),
-    });
-    if (!res.ok) throw new Error((await res.json()).detail || "Could not load saved summary");
+    const res = await fetch(
+      `${API_BASE}/api/v1/conversation/history/date/${encodeURIComponent(date)}`,
+      {
+        headers: convHistoryHeaders(),
+      },
+    );
+    if (!res.ok)
+      throw new Error(
+        (await res.json()).detail || "Could not load saved summary",
+      );
     const data = await res.json();
     const records = Array.isArray(data.records) ? data.records : [];
     if (!records.length) {
@@ -4205,7 +4328,9 @@ async function convOpenHistoryDate(date) {
         </button>
       </div>
       <div class="conv-history-records">
-        ${records.map((record) => `
+        ${records
+          .map(
+            (record) => `
           <section class="conv-history-record">
             <div class="conv-history-record-head">
               <strong>${escapeHtml(record.created_at || record.local_date || date)}</strong>
@@ -4216,14 +4341,24 @@ async function convOpenHistoryDate(date) {
             <p class="conv-history-meta">Room ${escapeHtml(record.room_id || "Not identified")} · ${escapeHtml((record.participants || []).join(", ") || "No participants listed")} · ${escapeHtml(String(record.metadata?.message_count || 0))} chat messages</p>
             ${convSummaryHtml(record.summary || {})}
           </section>
-        `).join("")}
+        `,
+          )
+          .join("")}
       </div>
     `;
-    document.getElementById("convHistoryBackBtn")?.addEventListener("click", convOpenHistory);
-    document.getElementById("convHistoryDeleteDateBtn")?.addEventListener("click", () => convDeleteHistoryDate(date));
-    convSummaryBody.querySelectorAll(".conv-history-email-btn").forEach((btn) => {
-      btn.addEventListener("click", () => convEmailHistoryRecord(btn.dataset.recordId));
-    });
+    document
+      .getElementById("convHistoryBackBtn")
+      ?.addEventListener("click", convOpenHistory);
+    document
+      .getElementById("convHistoryDeleteDateBtn")
+      ?.addEventListener("click", () => convDeleteHistoryDate(date));
+    convSummaryBody
+      .querySelectorAll(".conv-history-email-btn")
+      .forEach((btn) => {
+        btn.addEventListener("click", () =>
+          convEmailHistoryRecord(btn.dataset.recordId),
+        );
+      });
     lucide.createIcons({ nodes: [convSummaryModal] });
   } catch (err) {
     convSummaryBody.innerHTML = `<p>${escapeHtml(err.message || "Could not load saved summary")}</p>`;
@@ -4231,12 +4366,16 @@ async function convOpenHistoryDate(date) {
 }
 
 async function convDeleteHistoryDate(date) {
-  if (!confirm(`Delete all saved summaries and full chat sources for ${date}?`)) return;
+  if (!confirm(`Delete all saved summaries and full chat sources for ${date}?`))
+    return;
   try {
-    const res = await fetch(`${API_BASE}/api/v1/conversation/history/date/${encodeURIComponent(date)}`, {
-      method: "DELETE",
-      headers: convHistoryHeaders(),
-    });
+    const res = await fetch(
+      `${API_BASE}/api/v1/conversation/history/date/${encodeURIComponent(date)}`,
+      {
+        method: "DELETE",
+        headers: convHistoryHeaders(),
+      },
+    );
     if (!res.ok) throw new Error((await res.json()).detail || "Delete failed");
     await convOpenHistory();
   } catch (err) {
@@ -4255,11 +4394,17 @@ async function convEmailHistoryRecord(recordId) {
   const contentType =
     choice.trim() === "2" ? "summary" : choice.trim() === "3" ? "chat" : "both";
   try {
-    const res = await fetch(`${API_BASE}/api/v1/conversation/history/record/${encodeURIComponent(recordId)}/email`, {
-      method: "POST",
-      headers: convHistoryHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ recipient: recipient.trim(), content_type: contentType }),
-    });
+    const res = await fetch(
+      `${API_BASE}/api/v1/conversation/history/record/${encodeURIComponent(recordId)}/email`,
+      {
+        method: "POST",
+        headers: convHistoryHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          recipient: recipient.trim(),
+          content_type: contentType,
+        }),
+      },
+    );
     if (!res.ok) throw new Error((await res.json()).detail || "Email failed");
     alert("History email queued.");
   } catch (err) {
@@ -4287,9 +4432,15 @@ function convAdminAuthHtml(mode = "login") {
 
 function convShowAdminAuth(mode = "login") {
   convShowAdminPanel("Admin", convAdminAuthHtml(mode));
-  document.getElementById("convAdminLoginTab")?.addEventListener("click", () => convShowAdminAuth("login"));
-  document.getElementById("convAdminCreateTab")?.addEventListener("click", () => convShowAdminAuth("create"));
-  document.getElementById("convAdminSubmitBtn")?.addEventListener("click", () => convSubmitAdminAuth(mode));
+  document
+    .getElementById("convAdminLoginTab")
+    ?.addEventListener("click", () => convShowAdminAuth("login"));
+  document
+    .getElementById("convAdminCreateTab")
+    ?.addEventListener("click", () => convShowAdminAuth("create"));
+  document
+    .getElementById("convAdminSubmitBtn")
+    ?.addEventListener("click", () => convSubmitAdminAuth(mode));
 }
 
 async function convSubmitAdminAuth(mode = "login") {
@@ -4306,14 +4457,18 @@ async function convSubmitAdminAuth(mode = "login") {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, role: "admin" }),
       });
-      if (!create.ok) throw new Error((await create.json()).detail || "Admin account creation failed");
+      if (!create.ok)
+        throw new Error(
+          (await create.json()).detail || "Admin account creation failed",
+        );
     }
     const login = await fetch(`${API_BASE}/api/v1/admin/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    if (!login.ok) throw new Error((await login.json()).detail || "Admin login failed");
+    if (!login.ok)
+      throw new Error((await login.json()).detail || "Admin login failed");
     const data = await login.json();
     convAdminToken = data.admin_token;
     convAdminEmail = data.email || email;
@@ -4366,17 +4521,30 @@ async function convOpenHistoryAdmin() {
     return;
   }
   try {
-    const res = await fetch(`${API_BASE}/api/v1/admin/conversation-history/retention`, {
-      headers: convAdminHeaders(),
-    });
-    if (!res.ok) throw new Error((await res.json()).detail || "Admin login required");
+    const res = await fetch(
+      `${API_BASE}/api/v1/admin/conversation-history/retention`,
+      {
+        headers: convAdminHeaders(),
+      },
+    );
+    if (!res.ok)
+      throw new Error((await res.json()).detail || "Admin login required");
     const data = await res.json();
-    convShowAdminPanel(`Admin — ${convAdminEmail}`, convAdminPanelHtml(data.retention_days || 90));
-    document.getElementById("convAdminRetentionSaveBtn")?.addEventListener("click", convAdminSaveRetention);
-    document.getElementById("convAdminHistorySearchBtn")?.addEventListener("click", convAdminLoadHistoryDates);
-    document.getElementById("convAdminCancelBtn")?.addEventListener("click", () => {
-      showTab({ btn: tabConv, panel: convTab });
-    });
+    convShowAdminPanel(
+      `Admin — ${convAdminEmail}`,
+      convAdminPanelHtml(data.retention_days || 90),
+    );
+    document
+      .getElementById("convAdminRetentionSaveBtn")
+      ?.addEventListener("click", convAdminSaveRetention);
+    document
+      .getElementById("convAdminHistorySearchBtn")
+      ?.addEventListener("click", convAdminLoadHistoryDates);
+    document
+      .getElementById("convAdminCancelBtn")
+      ?.addEventListener("click", () => {
+        showTab({ btn: tabConv, panel: convTab });
+      });
     await convAdminLoadHistoryDates();
   } catch (err) {
     convAdminToken = "";
@@ -4386,23 +4554,34 @@ async function convOpenHistoryAdmin() {
 }
 
 async function convAdminSaveRetention() {
-  const retentionDays = Number(document.getElementById("convAdminRetentionDays")?.value);
+  const retentionDays = Number(
+    document.getElementById("convAdminRetentionDays")?.value,
+  );
   if (!Number.isInteger(retentionDays) || retentionDays < 1) {
     showToast("Enter a whole number of days.", "error");
     return;
   }
   try {
-    const res = await fetch(`${API_BASE}/api/v1/admin/conversation-history/retention`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        ...convAdminHeaders(),
+    const res = await fetch(
+      `${API_BASE}/api/v1/admin/conversation-history/retention`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...convAdminHeaders(),
+        },
+        body: JSON.stringify({ retention_days: retentionDays }),
       },
-      body: JSON.stringify({ retention_days: retentionDays }),
-    });
-    if (!res.ok) throw new Error((await res.json()).detail || "Could not update retention");
+    );
+    if (!res.ok)
+      throw new Error(
+        (await res.json()).detail || "Could not update retention",
+      );
     const saved = await res.json();
-    showToast(`Retention updated to ${saved.retention_days} days. Purged records: ${saved.purged_records || 0}.`, "success");
+    showToast(
+      `Retention updated to ${saved.retention_days} days. Purged records: ${saved.purged_records || 0}.`,
+      "success",
+    );
   } catch (err) {
     showToast(err.message || "Could not update retention", "error");
   }
@@ -4414,33 +4593,46 @@ async function convAdminLoadHistoryDates() {
   const params = new URLSearchParams();
   const start = document.getElementById("convAdminHistoryStart")?.value || "";
   const end = document.getElementById("convAdminHistoryEnd")?.value || "";
-  const participantEmail = document.getElementById("convAdminHistoryEmail")?.value.trim() || "";
-  const room = document.getElementById("convAdminHistoryRoom")?.value.trim() || "";
+  const participantEmail =
+    document.getElementById("convAdminHistoryEmail")?.value.trim() || "";
+  const room =
+    document.getElementById("convAdminHistoryRoom")?.value.trim() || "";
   if (start) params.set("start_date", start);
   if (end) params.set("end_date", end);
   if (participantEmail) params.set("participant_email", participantEmail);
   if (room) params.set("room_id", room);
   list.innerHTML = "<p>Loading history...</p>";
   try {
-    const res = await fetch(`${API_BASE}/api/v1/admin/conversation-history/dates?${params}`, {
-      headers: convAdminHeaders(),
-    });
-    if (!res.ok) throw new Error((await res.json()).detail || "Could not load history");
+    const res = await fetch(
+      `${API_BASE}/api/v1/admin/conversation-history/dates?${params}`,
+      {
+        headers: convAdminHeaders(),
+      },
+    );
+    if (!res.ok)
+      throw new Error((await res.json()).detail || "Could not load history");
     const data = await res.json();
     const dates = Array.isArray(data.dates) ? data.dates : [];
     if (!dates.length) {
-      list.innerHTML = "<p>No saved conversation history found for that range.</p>";
+      list.innerHTML =
+        "<p>No saved conversation history found for that range.</p>";
       return;
     }
-    list.innerHTML = dates.map((item) => `
+    list.innerHTML = dates
+      .map(
+        (item) => `
       <button type="button" class="conv-history-date" data-date="${escapeHtml(item.date)}">
         <strong>${escapeHtml(item.date)}</strong>
         <span>${escapeHtml(String(item.count))} saved summar${item.count === 1 ? "y" : "ies"}</span>
         <small>CC: ${escapeHtml((item.participant_emails || []).join(", ") || "No participant emails captured")}</small>
       </button>
-    `).join("");
+    `,
+      )
+      .join("");
     list.querySelectorAll(".conv-history-date").forEach((btn) => {
-      btn.addEventListener("click", () => convAdminOpenHistoryDate(btn.dataset.date));
+      btn.addEventListener("click", () =>
+        convAdminOpenHistoryDate(btn.dataset.date),
+      );
     });
   } catch (err) {
     list.innerHTML = `<p>${escapeHtml(err.message || "Could not load history")}</p>`;
@@ -4449,12 +4641,19 @@ async function convAdminLoadHistoryDates() {
 
 async function convAdminOpenHistoryDate(date) {
   if (!date) return;
-  convShowAdminPanel(`Admin History — ${date}`, "<p>Loading saved summaries...</p>");
+  convShowAdminPanel(
+    `Admin History — ${date}`,
+    "<p>Loading saved summaries...</p>",
+  );
   try {
-    const res = await fetch(`${API_BASE}/api/v1/admin/conversation-history/date/${encodeURIComponent(date)}`, {
-      headers: convAdminHeaders(),
-    });
-    if (!res.ok) throw new Error((await res.json()).detail || "Could not load date");
+    const res = await fetch(
+      `${API_BASE}/api/v1/admin/conversation-history/date/${encodeURIComponent(date)}`,
+      {
+        headers: convAdminHeaders(),
+      },
+    );
+    if (!res.ok)
+      throw new Error((await res.json()).detail || "Could not load date");
     const data = await res.json();
     const records = Array.isArray(data.records) ? data.records : [];
     const adminBody = adminTab.querySelector(".admin-panel-body");
@@ -4473,7 +4672,10 @@ async function convAdminOpenHistoryDate(date) {
         <span><b class="away"></b>Away/backgrounded</span>
       </div>
       <div class="conv-history-records">
-        ${records.map((record) => `
+        ${
+          records
+            .map(
+              (record) => `
           <section class="conv-history-record">
             <div class="conv-history-record-head">
               <strong>${escapeHtml(record.created_at || record.local_date || date)}</strong>
@@ -4493,33 +4695,52 @@ async function convAdminOpenHistoryDate(date) {
             <p class="conv-history-meta">Room ${escapeHtml(record.room_id || "Not identified")} · ${escapeHtml((record.participants || []).join(", ") || "No participants listed")} · ${escapeHtml(String(record.metadata?.message_count || 0))} chat messages</p>
             ${convSummaryHtml(record.summary || {})}
           </section>
-        `).join("") || "<p>No history remains for this date.</p>"}
+        `,
+            )
+            .join("") || "<p>No history remains for this date.</p>"
+        }
       </div>
     `;
-    document.getElementById("convAdminBackBtn")?.addEventListener("click", convOpenHistoryAdmin);
-    document.getElementById("convAdminDeleteDateBtn")?.addEventListener("click", () => convAdminDeleteHistoryDate(date));
+    document
+      .getElementById("convAdminBackBtn")
+      ?.addEventListener("click", convOpenHistoryAdmin);
+    document
+      .getElementById("convAdminDeleteDateBtn")
+      ?.addEventListener("click", () => convAdminDeleteHistoryDate(date));
     adminBody.querySelectorAll(".conv-admin-email-btn").forEach((btn) => {
-      btn.addEventListener("click", () => convAdminEmailHistoryRecord(btn.dataset.recordId));
+      btn.addEventListener("click", () =>
+        convAdminEmailHistoryRecord(btn.dataset.recordId),
+      );
     });
     adminBody.querySelectorAll(".conv-admin-chat-btn").forEach((btn) => {
-      btn.addEventListener("click", () => convAdminViewFullChat(btn.dataset.recordId, date));
+      btn.addEventListener("click", () =>
+        convAdminViewFullChat(btn.dataset.recordId, date),
+      );
     });
     adminBody.querySelectorAll(".conv-admin-regen-btn").forEach((btn) => {
-      btn.addEventListener("click", () => convAdminRegenerateSummary(btn.dataset.recordId, date));
+      btn.addEventListener("click", () =>
+        convAdminRegenerateSummary(btn.dataset.recordId, date),
+      );
     });
     lucide.createIcons({ nodes: [adminTab] });
   } catch (err) {
-    if (adminTab) adminTab.querySelector(".admin-panel-body").innerHTML = `<p>${escapeHtml(err.message || "Could not load date")}</p>`;
+    if (adminTab)
+      adminTab.querySelector(".admin-panel-body").innerHTML =
+        `<p>${escapeHtml(err.message || "Could not load date")}</p>`;
   }
 }
 
 async function convAdminDeleteHistoryDate(date) {
-  if (!confirm(`Delete all saved summaries and full chat sources for ${date}?`)) return;
+  if (!confirm(`Delete all saved summaries and full chat sources for ${date}?`))
+    return;
   try {
-    const res = await fetch(`${API_BASE}/api/v1/admin/conversation-history/date/${encodeURIComponent(date)}`, {
-      method: "DELETE",
-      headers: convAdminHeaders(),
-    });
+    const res = await fetch(
+      `${API_BASE}/api/v1/admin/conversation-history/date/${encodeURIComponent(date)}`,
+      {
+        method: "DELETE",
+        headers: convAdminHeaders(),
+      },
+    );
     if (!res.ok) throw new Error((await res.json()).detail || "Delete failed");
     await convOpenHistoryAdmin();
   } catch (err) {
@@ -4528,35 +4749,52 @@ async function convAdminDeleteHistoryDate(date) {
 }
 
 async function convAdminFetchRecord(recordId) {
-  const res = await fetch(`${API_BASE}/api/v1/admin/conversation-history/record/${encodeURIComponent(recordId)}`, {
-    headers: convAdminHeaders(),
-  });
-  if (!res.ok) throw new Error((await res.json()).detail || "Could not load record");
+  const res = await fetch(
+    `${API_BASE}/api/v1/admin/conversation-history/record/${encodeURIComponent(recordId)}`,
+    {
+      headers: convAdminHeaders(),
+    },
+  );
+  if (!res.ok)
+    throw new Error((await res.json()).detail || "Could not load record");
   return res.json();
 }
 
 async function convAdminViewFullChat(recordId, date) {
   try {
     const record = await convAdminFetchRecord(recordId);
-    const rows = Array.isArray(record.chat_messages) ? record.chat_messages : [];
-    convShowAdminPanel(`Full Chat — ${record.local_date || date}`, `
+    const rows = Array.isArray(record.chat_messages)
+      ? record.chat_messages
+      : [];
+    convShowAdminPanel(
+      `Full Chat — ${record.local_date || date}`,
+      `
       <div class="conv-history-toolbar">
         <button type="button" class="btn btn-secondary" id="convAdminChatBackBtn">
           <i data-lucide="arrow-left"></i><span>Back</span>
         </button>
       </div>
       <div class="conv-full-chat-list">
-        ${rows.map((m) => `
+        ${
+          rows
+            .map(
+              (m) => `
           <div class="conv-full-chat-row">
             <strong>${escapeHtml(m.speaker || "Unknown")}</strong>
             <span>${escapeHtml(m.shown_text || m.original || m.translation || "")}</span>
             ${m.original && m.original !== (m.shown_text || m.translation) ? `<small>Original: ${escapeHtml(m.original)}</small>` : ""}
             ${m.translation && m.translation !== (m.shown_text || m.original) ? `<small>Translation: ${escapeHtml(m.translation)}</small>` : ""}
           </div>
-        `).join("") || "<p>No full chat source saved.</p>"}
+        `,
+            )
+            .join("") || "<p>No full chat source saved.</p>"
+        }
       </div>
-    `);
-    document.getElementById("convAdminChatBackBtn")?.addEventListener("click", () => convAdminOpenHistoryDate(date));
+    `,
+    );
+    document
+      .getElementById("convAdminChatBackBtn")
+      ?.addEventListener("click", () => convAdminOpenHistoryDate(date));
   } catch (err) {
     showToast(err.message || "Could not load full chat", "error");
   }
@@ -4565,11 +4803,15 @@ async function convAdminViewFullChat(recordId, date) {
 async function convAdminRegenerateSummary(recordId, date) {
   try {
     showToast("Regenerating summary from full chat...", "info");
-    const res = await fetch(`${API_BASE}/api/v1/admin/conversation-history/record/${encodeURIComponent(recordId)}/regenerate`, {
-      method: "POST",
-      headers: convAdminHeaders(),
-    });
-    if (!res.ok) throw new Error((await res.json()).detail || "Regeneration failed");
+    const res = await fetch(
+      `${API_BASE}/api/v1/admin/conversation-history/record/${encodeURIComponent(recordId)}/regenerate`,
+      {
+        method: "POST",
+        headers: convAdminHeaders(),
+      },
+    );
+    if (!res.ok)
+      throw new Error((await res.json()).detail || "Regeneration failed");
     showToast("Summary regenerated from full chat.", "success");
     await convAdminOpenHistoryDate(date);
   } catch (err) {
@@ -4601,24 +4843,38 @@ function convAdminEmailChoiceHtml(recordId) {
 }
 
 async function convAdminEmailHistoryRecord(recordId) {
-  convShowAdminPanel("Email Conversation History", convAdminEmailChoiceHtml(recordId));
-  document.getElementById("convAdminEmailCancelBtn")?.addEventListener("click", convOpenHistoryAdmin);
-  document.getElementById("convAdminEmailSendBtn")?.addEventListener("click", async () => {
-    const contentType = document.getElementById("convAdminEmailContent")?.value || "both";
-    await convAdminSendHistoryEmail(recordId, contentType);
-  });
+  convShowAdminPanel(
+    "Email Conversation History",
+    convAdminEmailChoiceHtml(recordId),
+  );
+  document
+    .getElementById("convAdminEmailCancelBtn")
+    ?.addEventListener("click", convOpenHistoryAdmin);
+  document
+    .getElementById("convAdminEmailSendBtn")
+    ?.addEventListener("click", async () => {
+      const contentType =
+        document.getElementById("convAdminEmailContent")?.value || "both";
+      await convAdminSendHistoryEmail(recordId, contentType);
+    });
 }
 
 async function convAdminSendHistoryEmail(recordId, contentType) {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/admin/conversation-history/record/${encodeURIComponent(recordId)}/email`, {
-      method: "POST",
-      headers: convAdminHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ content_type: contentType }),
-    });
+    const res = await fetch(
+      `${API_BASE}/api/v1/admin/conversation-history/record/${encodeURIComponent(recordId)}/email`,
+      {
+        method: "POST",
+        headers: convAdminHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ content_type: contentType }),
+      },
+    );
     if (!res.ok) throw new Error((await res.json()).detail || "Email failed");
     const data = await res.json();
-    showToast(`History email queued. CC: ${(data.cc || []).join(", ") || "none"}`, "success");
+    showToast(
+      `History email queued. CC: ${(data.cc || []).join(", ") || "none"}`,
+      "success",
+    );
     await convOpenHistoryAdmin();
   } catch (err) {
     showToast(err.message || "Email failed", "error");
@@ -4787,7 +5043,8 @@ function convCloseToolbarPopovers(except = null) {
     convParticipantsPopover.style.display = "none";
     convParticipantsBtn?.classList.remove("open");
     convSetParticipantsPanelOpen(false);
-    if (convParticipantActionMenu) convParticipantActionMenu.style.display = "none";
+    if (convParticipantActionMenu)
+      convParticipantActionMenu.style.display = "none";
   }
   if (except !== "more" && convMorePopover) {
     convMorePopover.style.display = "none";
@@ -4830,7 +5087,10 @@ convParticipantsCloseBtn?.addEventListener("click", () => {
 });
 
 convParticipantsHeaderMoreBtn?.addEventListener("click", () => {
-  showToast("More participant controls can be added when server-side moderation is available.", "info");
+  showToast(
+    "More participant controls can be added when server-side moderation is available.",
+    "info",
+  );
 });
 
 convParticipantsList?.addEventListener("click", (e) => {
@@ -4843,8 +5103,7 @@ convParticipantsList?.addEventListener("click", (e) => {
     convParticipantActionMenu.dataset.userId === nextUserId;
   convParticipantActionMenu.dataset.userId = nextUserId;
   convParticipantActionMenu.style.top = `${Math.max(54, btn.offsetTop + 28)}px`;
-  convParticipantActionMenu.style.display =
-    isSameOpen ? "none" : "block";
+  convParticipantActionMenu.style.display = isSameOpen ? "none" : "block";
 });
 
 convParticipantActionMenu?.addEventListener("click", (e) => {
@@ -4860,7 +5119,9 @@ convParticipantActionMenu?.addEventListener("click", (e) => {
       const cleanName = nextName.trim().slice(0, 30);
       convNameInput.value = cleanName;
       if (convUsers[userId]) convUsers[userId].name = cleanName;
-      const cardName = document.querySelector(`#conv-card-${userId} .conv-card-name-txt`);
+      const cardName = document.querySelector(
+        `#conv-card-${userId} .conv-card-name-txt`,
+      );
       if (cardName) cardName.textContent = `${cleanName} (You)`;
       convRenderParticipantsPopover();
       showToast("Name updated for this session.", "success");
@@ -4869,7 +5130,10 @@ convParticipantActionMenu?.addEventListener("click", (e) => {
     }
   }
   if (action === "profile") {
-    showToast("Profile picture editing is not available in this meeting room yet.", "info");
+    showToast(
+      "Profile picture editing is not available in this meeting room yet.",
+      "info",
+    );
   }
   convParticipantActionMenu.style.display = "none";
 });
@@ -4886,7 +5150,10 @@ convParticipantsMuteAllBtn?.addEventListener("click", () => {
 });
 
 convParticipantsMoreBtn?.addEventListener("click", () => {
-  showToast("More participant controls can be added when server-side moderation is available.", "info");
+  showToast(
+    "More participant controls can be added when server-side moderation is available.",
+    "info",
+  );
 });
 
 convChatBtn?.addEventListener("click", () => {
@@ -4921,10 +5188,15 @@ convEndBtn?.addEventListener("click", () => {
 
 document.addEventListener("click", (e) => {
   if (!convActive?.contains(e.target)) return;
-  const insidePopover = e.target.closest(".conv-toolbar-popover, .conv-participants-panel, .conv-chat-panel");
-  const insideToolbarButton = e.target.closest("#convMicBtn, #convParticipantsBtn, #convChatBtn, #convMoreBtn");
+  const insidePopover = e.target.closest(
+    ".conv-toolbar-popover, .conv-participants-panel, .conv-chat-panel",
+  );
+  const insideToolbarButton = e.target.closest(
+    "#convMicBtn, #convParticipantsBtn, #convChatBtn, #convMoreBtn",
+  );
   if (!insidePopover && !insideToolbarButton) {
-    if (convParticipantActionMenu) convParticipantActionMenu.style.display = "none";
+    if (convParticipantActionMenu)
+      convParticipantActionMenu.style.display = "none";
     convCloseToolbarPopovers("participants");
   }
 });
@@ -4969,7 +5241,9 @@ function convReset() {
   convUsers = {};
   convTranscript = [];
   // Reset carousel, colour and typing state for next session
-  Object.keys(_participantIdleTimers).forEach((userId) => convStopIdleTimer(userId));
+  Object.keys(_participantIdleTimers).forEach((userId) =>
+    convStopIdleTimer(userId),
+  );
   _carouselCards.length = 0;
   _carouselPage = 0;
   const _track = document.getElementById("convCarouselTrack");
@@ -5263,15 +5537,21 @@ async function livekitConnectVideo() {
 
   lkConnecting = true;
   try {
-    const name = convUsers[convUserId]?.name || getAuthenticatedDisplayName() || convUserId;
+    const name =
+      convUsers[convUserId]?.name ||
+      getAuthenticatedDisplayName() ||
+      convUserId;
     const params = new URLSearchParams({
       room_id: convRoomId,
       identity: convUserId,
       name,
     });
-    const res = await fetch(`${API_BASE}/api/livekit/token?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${currentUserToken}` },
-    });
+    const res = await fetch(
+      `${API_BASE}/api/livekit/token?${params.toString()}`,
+      {
+        headers: { Authorization: `Bearer ${currentUserToken}` },
+      },
+    );
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || "LiveKit video is unavailable");
 
@@ -5385,7 +5665,8 @@ async function livekitPublishVideo(stream) {
 async function livekitUnpublishVideo() {
   if (!lkRoom || !lkVideoPublication) return;
   try {
-    const track = lkVideoPublication.track || convCamStream?.getVideoTracks()[0];
+    const track =
+      lkVideoPublication.track || convCamStream?.getVideoTracks()[0];
     if (track) {
       lkRoom.localParticipant.unpublishTrack(track, false);
     }

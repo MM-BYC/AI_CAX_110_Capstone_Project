@@ -1,0 +1,4 @@
+Magandang umaga, ito ay isang apat na pangungusap na pagsubok ng voice engine.
+Nagsasalita ako sa Ingles bilang wikang input.
+Isasalin ng voice engine ang mensaheng ito sa Tagalog.
+Dapat malinaw ang audio ng output para sa isang tagapakinig sa tawag sa telepono.

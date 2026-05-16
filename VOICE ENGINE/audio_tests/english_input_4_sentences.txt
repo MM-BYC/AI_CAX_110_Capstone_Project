@@ -1,0 +1,4 @@
+Good morning, this is a four sentence voice engine test.
+I am speaking in English as the input language.
+The voice engine will translate this message into Tagalog.
+The output audio should be clear enough for a listener on a phone call.

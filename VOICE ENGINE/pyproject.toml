@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voice-engine"
+version = "0.1.0"
+description = "Standalone realtime voice translation engine."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "gTTS>=2.5.4",
+]
+
+[tool.setuptools.packages.find]
+include = ["voice_engine*"]

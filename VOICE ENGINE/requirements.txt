@@ -1,0 +1,14 @@
+# Runtime foundations for the standalone Python VOICE ENGINE.
+# Keep this file inside the VOICE ENGINE folder only.
+
+aiortc>=1.9
+av>=12.0
+numpy>=1.26
+scipy>=1.12
+soundfile>=0.12
+torch>=2.3
+torchaudio>=2.3
+onnxruntime>=1.18
+webrtcvad>=2.0.10
+pydantic>=2.7
+uvloop>=0.19; platform_system != "Windows"
