@@ -1,6 +1,6 @@
 # AI Translate — Capstone Project
 
-An agentic AI translation system powered by **Groq AI**, **OpenAI Whisper large-v3**, and **Google Cloud Speech-to-Text**, with real-time multi-user conversational translation, live WebRTC video/audio streaming, and anti-hallucination guardrails.
+An agentic AI translation system powered by **Groq AI**, **OpenAI Whisper large-v3**, and **Google Cloud Speech-to-Text**, with real-time multi-user conversational translation, LiveKit video streaming, and anti-hallucination guardrails.
 
 🔗 **Live App:** [https://ai-cax-110-capstone-project.onrender.com](https://ai-cax-110-capstone-project.onrender.com)
 
@@ -34,15 +34,15 @@ Real-time speech recognition and translation with streaming results.
 
 ### Live Conversation
 
-Multi-user real-time conversation room where each participant speaks and reads in their own language. Powered by WebSockets, WebRTC, and a per-message anti-hallucination pipeline.
+Multi-user real-time conversation room where each participant speaks and reads in their own language. Powered by WebSockets, LiveKit video, and a per-message anti-hallucination pipeline.
 
 **Conversation highlights:**
 
 - **Room codes** — create or join a room with a 6-character code
 - **Invite / Share modal** — share the room link via Copy, SMS, Email, WhatsApp, Teams, Messenger, Telegram, Slack, or Discord
 - **Unlimited participants** — every user is colour-coded for instant visual identification
-- **Live WebRTC video** — open your camera to broadcast video to all participants; streams auto-play without requiring a click
-- **Live WebRTC audio** — unmute your mic to stream live audio to all participants via Web Audio API
+- **LiveKit video** — open your camera to broadcast video to all participants; streams auto-play without requiring a click
+- **Translated audio output** — participants hear generated translated speech, not raw peer microphone audio
 - **Keyboard input** — type messages as an alternative to speaking
 - **Participant chips** — show each user's name, full language name with blue badge, mic status dot, and camera status dot; speaking participants have bright green flashing borders synced to volume
 - **Colour-coded message bubbles** — each participant has a unique persistent colour applied to their avatar, chip accent, and bubble
@@ -190,9 +190,9 @@ Return result
 | --- | --- |
 | **HTML5 / CSS3 / Vanilla JS** | UI — no framework |
 | **Web Speech API** (`SpeechRecognition`) | Real-time speech-to-text in the browser |
-| **WebRTC** (`RTCPeerConnection`) | Peer-to-peer live video + audio between participants; mesh topology with Google STUN |
-| **Web Audio API** (`AudioContext`) | Routes remote WebRTC audio tracks to speakers without autoplay restrictions |
-| **WebSocket API** | Signalling channel for room events and WebRTC offer/answer/ICE exchange |
+| **LiveKit** | Managed realtime video transport for participant camera streams |
+| **VOICE ENGINE** | Room-level translated audio pipeline and generated speech output |
+| **WebSocket API** | Signalling channel for room events, translated messages, and voice-engine audio events |
 | **Web Share API** | Native share sheet on mobile for the invite modal |
 | **Lucide Icons** | SVG icon set for mic, camera, share, and control buttons |
 | **Drag and Drop API** | Audio file upload |
@@ -230,7 +230,7 @@ backend/agents/
 ```text
 AI_CAX_110_Capstone_Project/
 ├── backend/
-│   ├── main.py                         # FastAPI server — REST, WebSocket, WebRTC relay
+│   ├── main.py                         # FastAPI server — REST, WebSocket, LiveKit token API
 │   ├── startback.sh                    # Backend start script
 │   └── agents/
 │       ├── __init__.py
@@ -244,7 +244,7 @@ AI_CAX_110_Capstone_Project/
 ├── frontend/
 │   ├── index.html                      # UI — 4 tabs, conversation room, invite modal
 │   ├── styles.css                      # Professional light theme
-│   ├── app.js                          # WebSocket, WebRTC, Speech API, UI logic
+│   ├── app.js                          # WebSocket, LiveKit, Speech API, UI logic
 │   ├── startfront.sh                   # Frontend start script
 │   └── __tests__/
 │       └── app.test.js                 # Frontend unit tests
@@ -432,9 +432,6 @@ Start the backend and open the browser console. When an iPhone unmutes the mic, 
 {"type": "keyboard",      "text": "Hello via keyboard"}
 {"type": "mic_status",    "is_on": true}
 {"type": "camera_status", "is_on": true}
-{"type": "webrtc_offer",  "target_id": "XYZ", "sdp": "..."}
-{"type": "webrtc_answer", "target_id": "XYZ", "sdp": "..."}
-{"type": "webrtc_ice",    "target_id": "XYZ", "candidate": {...}}
 ```
 
 **Server → Client messages:**
@@ -448,9 +445,6 @@ Start the backend and open the browser console. When an iPhone unmutes the mic, 
 {"type": "user_mic_status",    "user_id": "...", "is_on": true}
 {"type": "user_camera_status", "user_id": "...", "is_on": true}
 {"type": "host_changed", "new_host_id": "..."}
-{"type": "webrtc_offer",  "from_id": "...", "sdp": "..."}
-{"type": "webrtc_answer", "from_id": "...", "sdp": "..."}
-{"type": "webrtc_ice",    "from_id": "...", "candidate": {...}}
 ```
 
 ---
@@ -515,9 +509,8 @@ Test the real-time conversation feature using two different devices or two **Chr
 | **Anti-hallucination pipeline** | All conversation messages (speech + keyboard) pass through ConversationAgent → strict TranslationAgent (temperature 0) → QualityReviewAgent → retry with critique |
 | **ConversationAgent** | Strips English filler words (um, uh, like, you know…) and normalises whitespace before translation |
 | **TranslationAgent strict mode** | System-level prompt + `temperature=0` for deterministic, faithful translations |
-| **WebRTC video + audio** | Peer-to-peer live video and audio between all participants; mesh topology with Google STUN; muted `<video>` for guaranteed autoplay |
-| **WebRTC Perfect Negotiation** | W3C Perfect Negotiation pattern implemented — eliminates one-way audio/video caused by simultaneous offer collisions |
-| **Web Audio API** | Remote audio routed through `AudioContext → createMediaStreamSource` to bypass browser autoplay restrictions |
+| **LiveKit video** | Managed video room for participant camera streams; muted `<video>` for guaranteed autoplay |
+| **VOICE ENGINE room audio** | Raw peer microphone audio is not routed to listeners; each listener receives generated translated speech output |
 | **TTS voice output** | Real-time translated voice plays through the browser's speech synthesis engine; each participant hears incoming translations spoken aloud in the target language |
 | **TTS unlock** | `speechSynthesis` primed from the Create/Join button gesture so subsequent WebSocket-driven utterances are never blocked by the browser's autoplay policy |
 | **Participant carousel** | Replaced floating video grid with a paginated card carousel; cards fill left-to-right in row-major order and show first + last name initials in the placeholder |
@@ -528,7 +521,7 @@ Test the real-time conversation feature using two different devices or two **Chr
 | **Keyboard input** | Text input row in conversation tab routes through the full anti-hallucination pipeline |
 | **Invite / Share modal** | Share room link via 9 platforms: Copy, SMS, Email, WhatsApp, Teams, Messenger, Telegram, Slack, Discord |
 | **Room Code label** | "Room" renamed to "Room Code" for clarity |
-| **Safari mic fix** | `getUserMedia` for WebRTC audio is skipped on Safari so it no longer races with `SpeechRecognition` for the audio session — eliminates the spurious "mic blocked" error when only one tab is open |
+| **Safari mic fix** | Conversation mic capture uses the speech/voice-engine path instead of a peer audio transport, avoiding raw audio-session races |
 | **Mic reliability** | `onend` restart loop now stops after 5 consecutive drops with no speech (prevents silent spin on iOS background interruptions); `service-not-allowed` errors show a distinct "speech recognition service unavailable" message instead of the mic-permissions alert |
 | **AI model** | Upgraded from `llama-3.1-8b-instant` to `llama-3.3-70b-versatile` for better multilingual accuracy |
 | **Model config** | Configurable via `GROQ_MODEL` environment variable in `.env` |

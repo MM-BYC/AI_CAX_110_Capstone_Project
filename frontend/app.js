@@ -2390,7 +2390,6 @@ function convParticipantsMatch(a, b) {
 
 function convRemoveParticipantCard(userId) {
   convStopIdleTimer(userId);
-  webrtcOnUserLeft(userId);
   livekitDetachRemoteVideo(userId);
   convClearTyping(userId);
   const index = _carouselCards.findIndex((c) => c.dataset.uid === userId);
@@ -2822,6 +2821,7 @@ function convHandleMessage(msg) {
       if (!msg.user.idle) {
         convAddSystemMsg(`${msg.user.name} joined the room.`);
       }
+      livekitAttachExistingRemoteVideos();
       break;
 
     case "user_left":
@@ -2835,16 +2835,6 @@ function convHandleMessage(msg) {
         convRenderParticipants();
         convAddSystemMsg(`${msg.name} left the room.`);
       }
-      break;
-
-    case "webrtc_offer":
-      rtcHandleOffer(msg.from_id, msg.sdp);
-      break;
-    case "webrtc_answer":
-      rtcHandleAnswer(msg.from_id, msg.sdp);
-      break;
-    case "webrtc_ice":
-      rtcHandleIce(msg.from_id, msg.candidate);
       break;
 
     case "host_changed":
@@ -3099,10 +3089,6 @@ async function convStartListening() {
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "mic_status", is_on: true }));
   convSetMicUI(true);
-  // Safari: SpeechRecognition already holds the mic; a simultaneous getUserMedia
-  // call for WebRTC audio would race for the same audio session and cause a
-  // not-allowed error that erroneously shows the "mic blocked" dialog.
-  if (!_isSafari) webrtcStartAudio();
 }
 
 function convStopListening() {
@@ -3114,7 +3100,6 @@ function convStopListening() {
   convWs?.readyState === WebSocket.OPEN &&
     convWs.send(JSON.stringify({ type: "mic_status", is_on: false }));
   convSetMicUI(false);
-  if (!_isSafari) webrtcStopAudio();
 }
 
 // ── Conversation mic — AudioContext → ScriptProcessorNode → VOICE ENGINE ───
@@ -5226,7 +5211,6 @@ function convHandleDisconnect(reason) {
 }
 
 function convReset() {
-  webrtcCloseAll();
   convStopListening();
   convStopIosMic();
   convStopCamera();
@@ -5699,185 +5683,6 @@ function livekitDisconnectVideo() {
   lkVideoPublication = null;
 }
 
-// ── WebRTC Module ─────────────────────────────────────────────────────────
-const WEBRTC_ICE = [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
-];
-
-// convVideoGrid removed — remote video shown inside carousel cards
-
-let rtcPeers = {}; // userId → RTCPeerConnection
-let rtcAudioTrack = null; // local mic audio track (for WebRTC)
-let rtcVideoTrack = null; // local camera video track (for WebRTC)
-let rtcAudioContext = null; // created on user click so it's always activated
-let rtcAudioSources = {}; // userId → AudioContext source node
-let rtcVideoSenders = {}; // userId → RTCRtpSender (kept across pause/resume so
-// re-opening the camera reuses the same sender)
-let rtcAudioSenders = {}; // userId → RTCRtpSender (same idea for audio)
-
-function rtcLocalTracks() {
-  return [rtcAudioTrack, rtcVideoTrack].filter(Boolean);
-}
-
-// Perfect Negotiation (W3C standard)
-// ─────────────────────────────────────────────────────────────────────────────
-// When both peers add tracks simultaneously both fire onnegotiationneeded and
-// send offers at the same moment ("glare"). Without handling this one side's
-// setRemoteDescription throws InvalidStateError (have-local-offer), the track
-// is silently dropped, and one direction of audio/video never connects.
-//
-// Fix: designate host as "impolite" (its offer wins) and joiner as "polite"
-// (it rolls back its own pending offer and accepts the remote one).
-// The browser re-fires onnegotiationneeded after rollback so the polite peer's
-// own tracks get negotiated in the next round-trip.
-
-function rtcCreatePeer(userId) {
-  if (rtcPeers[userId]) return rtcPeers[userId];
-
-  const pc = new RTCPeerConnection({ iceServers: WEBRTC_ICE });
-  rtcPeers[userId] = pc;
-  pc._makingOffer = false;
-
-  rtcLocalTracks().forEach((t) => {
-    const sender = pc.addTrack(t);
-    if (t.kind === "video") rtcVideoSenders[userId] = sender;
-    else if (t.kind === "audio") rtcAudioSenders[userId] = sender;
-  });
-
-  // onnegotiationneeded fires automatically when tracks are added/removed —
-  // no need to call rtcNegotiate manually anywhere.
-  pc.onnegotiationneeded = async () => {
-    if (pc.signalingState !== "stable") return;
-    try {
-      pc._makingOffer = true;
-      const offer = await pc.createOffer();
-      if (pc.signalingState !== "stable") return; // re-check after async gap
-      await pc.setLocalDescription(offer);
-      convWs?.readyState === WebSocket.OPEN &&
-        convWs.send(
-          JSON.stringify({
-            type: "webrtc_offer",
-            target_id: userId,
-            sdp: {
-              type: pc.localDescription.type,
-              sdp: pc.localDescription.sdp,
-            },
-          }),
-        );
-    } catch (e) {
-      console.error("[WebRTC] negotiate:", e);
-    } finally {
-      pc._makingOffer = false;
-    }
-  };
-
-  pc.ontrack = ({ track }) => {
-    if (track.kind === "video") rtcShowRemoteVideo(userId, track);
-    else rtcPlayRemoteAudio(userId, track);
-  };
-
-  pc.onicecandidate = ({ candidate }) => {
-    if (candidate && convWs?.readyState === WebSocket.OPEN) {
-      convWs.send(
-        JSON.stringify({
-          type: "webrtc_ice",
-          target_id: userId,
-          candidate: candidate.toJSON(),
-        }),
-      );
-    }
-  };
-
-  pc.onconnectionstatechange = () => {
-    if (pc.connectionState === "failed") {
-      rtcRemoveRemote(userId);
-      pc.close();
-      delete rtcPeers[userId];
-    }
-  };
-
-  return pc;
-}
-
-async function rtcHandleOffer(fromId, sdp) {
-  let pc = rtcPeers[fromId];
-  if (!pc) pc = rtcCreatePeer(fromId);
-
-  // Polite = joiner (!convIsHost); impolite = host.
-  // Collision: we already sent an offer that hasn't been answered yet.
-  const polite = !convIsHost;
-  const collision = pc._makingOffer || pc.signalingState !== "stable";
-
-  if (!polite && collision) return; // impolite peer drops the colliding offer
-
-  try {
-    // Polite peer: setRemoteDescription auto-rolls back the pending local offer
-    // (implicit rollback — Chrome 80+, Firefox 75+, Safari 14.1+).
-    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    convWs?.readyState === WebSocket.OPEN &&
-      convWs.send(
-        JSON.stringify({
-          type: "webrtc_answer",
-          target_id: fromId,
-          sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
-        }),
-      );
-  } catch (e) {
-    console.error("[WebRTC] handle offer:", e);
-  }
-}
-
-async function rtcHandleAnswer(fromId, sdp) {
-  try {
-    await rtcPeers[fromId]?.setRemoteDescription(
-      new RTCSessionDescription(sdp),
-    );
-  } catch (e) {
-    console.error("[WebRTC] handle answer:", e);
-  }
-}
-
-async function rtcHandleIce(fromId, candidate) {
-  if (!candidate || !rtcPeers[fromId]) return;
-  try {
-    await rtcPeers[fromId].addIceCandidate(new RTCIceCandidate(candidate));
-  } catch (e) {
-    console.error("[WebRTC] ICE:", e);
-  }
-}
-
-function rtcShowRemoteVideo(userId, track) {
-  // Remote video goes directly into the participant's carousel card video box
-  const vid = document.getElementById(`conv-card-vid-${userId}`);
-  const ph = document.getElementById(`conv-card-ph-${userId}`);
-  if (!vid) return;
-
-  const _bind = () => {
-    // Always re-create the MediaStream so the video element gets a fresh
-    // decode pipeline. Safari/iOS otherwise leaves the element in a paused
-    // state after the sender pauses (replaceTrack(null)) and resumes.
-    vid.srcObject = new MediaStream([track]);
-    vid.style.display = "block";
-    if (ph) ph.style.display = "none";
-    vid.play().catch(() => {});
-  };
-
-  _bind();
-
-  // Zoom-style: when the broadcaster turns camera OFF (replaceTrack(null)
-  // mutes the track), participants see the initials placeholder. When the
-  // broadcaster turns camera ON again (replaceTrack(newTrack) unmutes),
-  // the live video replaces the placeholder.
-  track.onunmute = _bind;
-  track.onmute = () => {
-    vid.style.display = "none";
-    if (ph) ph.style.display = "";
-  };
-}
-
 function convUpdateCaption(userId, text, isFinal) {
   const el = document.getElementById(`conv-caption-${userId}`);
   if (!el) return;
@@ -5889,135 +5694,6 @@ function convUpdateCaption(userId, text, isFinal) {
       el.textContent = "";
     }, 4000);
   }
-}
-
-function rtcPlayRemoteAudio(userId, track) {
-  // Raw WebRTC audio is intentionally suppressed.
-  // Each listener hears a TTS voice in their own language instead, driven by
-  // the translated text that arrives via the anti-hallucination pipeline.
-  // We accept the track so the peer connection stays healthy, but never route
-  // it to a speaker.
-  rtcAudioSources[userId]?.disconnect();
-  delete rtcAudioSources[userId];
-}
-
-function rtcRemoveRemote(userId) {
-  const vid = document.getElementById(`conv-card-vid-${userId}`);
-  const ph = document.getElementById(`conv-card-ph-${userId}`);
-  if (vid) {
-    vid.srcObject = null;
-    vid.style.display = "";
-  }
-  if (ph) ph.style.display = "";
-  rtcAudioSources[userId]?.disconnect();
-  delete rtcAudioSources[userId];
-}
-
-async function webrtcStartAudio() {
-  if (rtcAudioTrack) return;
-  try {
-    const s = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: false,
-    });
-    rtcAudioTrack = s.getAudioTracks()[0];
-    // Voice-clone enrollment from the live audio stream — best-effort, no-op
-    // if already enrolled or the server doesn't support cloning.
-    convVoiceCloneEnroll(s);
-    for (const [uid, pc] of Object.entries(rtcPeers)) {
-      let sender = rtcAudioSenders[uid];
-      if (sender) {
-        sender.replaceTrack(rtcAudioTrack);
-      } else {
-        sender = pc.addTrack(rtcAudioTrack);
-        rtcAudioSenders[uid] = sender;
-      }
-    }
-    Object.keys(convUsers)
-      .filter((uid) => uid !== convUserId && !rtcPeers[uid])
-      .forEach((uid) => rtcCreatePeer(uid)); // onnegotiationneeded fires when track added
-  } catch (e) {
-    console.error("[WebRTC] audio start:", e);
-    if (e.name === "NotAllowedError" && _isSafari) {
-      convStopListening();
-      alert(
-        "Safari mic conflict:\n\n" +
-          "Safari allows only ONE tab to use the mic at a time.\n" +
-          "Another tab in this Safari window already holds the mic.\n\n" +
-          "► Use Chrome or Firefox to test multiple participants in separate tabs.\n" +
-          "► On real devices (separate phones/computers) this is not a problem.",
-      );
-    }
-  }
-}
-
-function webrtcStopAudio() {
-  if (!rtcAudioTrack) return;
-  rtcAudioTrack.stop();
-  rtcAudioTrack = null;
-  // Same pause-by-replaceTrack pattern as video so re-enabling the mic
-  // doesn't accumulate duplicate senders.
-  for (const sender of Object.values(rtcAudioSenders)) {
-    try {
-      sender.replaceTrack(null);
-    } catch {}
-  }
-}
-
-function webrtcStartVideo(stream) {
-  const vt = stream.getVideoTracks()[0];
-  if (!vt) return;
-  rtcVideoTrack = vt;
-  for (const [uid, pc] of Object.entries(rtcPeers)) {
-    let sender = rtcVideoSenders[uid];
-    if (sender) {
-      sender.replaceTrack(vt); // resume: no renegotiation needed
-    } else {
-      sender = pc.addTrack(vt); // first time for this peer — triggers onnegotiationneeded
-      rtcVideoSenders[uid] = sender;
-    }
-  }
-  Object.keys(convUsers)
-    .filter((uid) => uid !== convUserId && !rtcPeers[uid])
-    .forEach((uid) => rtcCreatePeer(uid));
-}
-
-function webrtcStopVideo() {
-  rtcVideoTrack = null;
-  // Pause by clearing the track but keep the sender so re-opening the camera
-  // reuses the same m-line and doesn't add a duplicate sender. Without this,
-  // the second open created a phantom sender and remote peers saw blank video.
-  for (const sender of Object.values(rtcVideoSenders)) {
-    try {
-      sender.replaceTrack(null);
-    } catch {}
-  }
-}
-
-function webrtcOnUserJoined(userId) {
-  if (rtcAudioTrack || rtcVideoTrack) rtcCreatePeer(userId);
-}
-
-function webrtcOnUserLeft(userId) {
-  rtcPeers[userId]?.close();
-  delete rtcPeers[userId];
-  delete rtcVideoSenders[userId];
-  delete rtcAudioSenders[userId];
-  rtcRemoveRemote(userId);
-}
-
-function webrtcCloseAll() {
-  Object.keys(rtcPeers).forEach((uid) => {
-    rtcPeers[uid].close();
-    rtcRemoveRemote(uid);
-  });
-  rtcPeers = {};
-  rtcAudioTrack?.stop();
-  rtcAudioTrack = null;
-  rtcVideoTrack = null;
-  rtcAudioSources = {};
-  rtcVideoSenders = {};
-  rtcAudioSenders = {};
 }
 
 // ── Enterprise Vocabulary Manager ─────────────────────────────────────────────
