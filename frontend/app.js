@@ -3424,6 +3424,7 @@ function convIsAudioJoined() {
 
 function convJoinComputerAudio() {
   _unlockTts();
+  convAudioSelectChoice("computer");
   convAudioModalClose();
   convCloseToolbarPopovers();
   if (convIsAudioJoined()) return;
@@ -3442,11 +3443,21 @@ function convLeaveComputerAudio() {
   }
 }
 
-function convAudioModalOpen(status = "Choose an audio option to continue.") {
+function convAudioSelectChoice(choice) {
+  const choices = convAudioModal?.querySelectorAll("[data-audio-choice]");
+  choices?.forEach((button) => {
+    const isSelected = button.dataset.audioChoice === choice;
+    button.classList.toggle("selected", isSelected);
+    button.setAttribute("aria-pressed", String(isSelected));
+  });
+}
+
+function convAudioModalOpen(status = "Select your choice.") {
   if (!convAudioModal) return;
   convCloseToolbarPopovers();
   convAudioModal.style.display = "flex";
   if (convAudioTestStatus) convAudioTestStatus.textContent = status;
+  convAudioSelectChoice(convIsAudioJoined() ? "computer" : null);
   lucide.createIcons({ nodes: [convAudioModal] });
 }
 
@@ -3457,6 +3468,7 @@ function convAudioModalClose() {
 
 async function convTestSpeaker() {
   if (!convAudioTestStatus) return;
+  convAudioSelectChoice("speaker");
   convAudioTestStatus.textContent = "Playing a test tone...";
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -3487,6 +3499,7 @@ async function convTestSpeaker() {
 
 async function convTestMicrophone() {
   if (!convAudioTestStatus) return;
+  convAudioSelectChoice("microphone");
   if (convIsAudioJoined()) {
     convAudioTestStatus.textContent =
       "Microphone is already joined and listening.";

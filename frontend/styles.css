@@ -3033,41 +3033,44 @@ footer p {
   font-size: 1rem;
   font-weight: 700;
 }
-.conv-audio-primary {
+.conv-audio-choice {
   width: min(240px, 100%);
-  min-height: 104px;
-  margin-top: 1.5rem;
+  min-height: 44px;
+  margin-top: 0.75rem;
   padding: 0.9rem 1rem;
-  border: 0;
+  border: 1px solid #d4d4d8;
   border-radius: 8px;
-  background: #4f46e5;
-  color: #ffffff;
+  background: #ffffff;
+  color: #27272a;
   cursor: pointer;
   font: inherit;
-  font-size: 0.98rem;
-  font-weight: 800;
+  font-size: 0.94rem;
+  font-weight: 700;
   line-height: 1.35;
   transition:
+    border-color 0.15s ease,
     background 0.15s ease,
+    color 0.15s ease,
     transform 0.12s ease;
 }
-.conv-audio-primary:hover {
-  background: #4338ca;
+.conv-audio-title + .conv-audio-choice {
+  margin-top: 1.5rem;
+}
+.conv-audio-choice:hover {
+  border-color: #a5b4fc;
+  background: #eef2ff;
+  color: #3730a3;
   transform: translateY(-1px);
 }
-.conv-audio-link {
-  margin-top: 0.8rem;
-  border: 0;
-  background: transparent;
-  color: #4f46e5;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 700;
+.conv-audio-choice.selected {
+  border-color: #4f46e5;
+  background: #4f46e5;
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(79, 70, 229, 0.24);
 }
-.conv-audio-link:hover {
-  color: #3730a3;
-  text-decoration: underline;
+.conv-audio-choice.selected:hover {
+  background: #4338ca;
+  color: #ffffff;
 }
 .conv-audio-status {
   min-height: 20px;

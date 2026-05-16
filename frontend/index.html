@@ -594,10 +594,10 @@
               <i data-lucide="x"></i>
             </button>
             <div class="conv-audio-title">Join audio</div>
-            <button type="button" class="conv-audio-primary" id="convAudioJoinBtn">Join with computer audio</button>
-            <button type="button" class="conv-audio-link" id="convAudioTestSpeakerBtn">Test speaker</button>
-            <button type="button" class="conv-audio-link" id="convAudioTestMicBtn">Test microphone</button>
-            <div class="conv-audio-status" id="convAudioTestStatus" aria-live="polite">Choose an audio option to continue.</div>
+            <button type="button" class="conv-audio-choice" id="convAudioJoinBtn" data-audio-choice="computer" aria-pressed="false">Join with computer audio</button>
+            <button type="button" class="conv-audio-choice" id="convAudioTestSpeakerBtn" data-audio-choice="speaker" aria-pressed="false">Test speaker</button>
+            <button type="button" class="conv-audio-choice" id="convAudioTestMicBtn" data-audio-choice="microphone" aria-pressed="false">Test microphone</button>
+            <div class="conv-audio-status" id="convAudioTestStatus" aria-live="polite">Select your choice.</div>
             <label class="conv-audio-checkbox">
               <input type="checkbox" id="convAudioAutoJoin" checked>
               <span>Automatically join computer audio when joining</span>
