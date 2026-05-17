@@ -461,6 +461,34 @@ function getPlanLabel(plan) {
   return "Free Trial";
 }
 
+function setupPasswordVisibilityToggles(root = document) {
+  root.querySelectorAll("[data-password-toggle]").forEach((button) => {
+    if (button.dataset.bound === "true") return;
+    button.dataset.bound = "true";
+    const input = document.getElementById(button.dataset.passwordToggle);
+    if (!input) return;
+
+    const renderIcon = () => {
+      const visible = input.type === "text";
+      button.setAttribute(
+        "aria-label",
+        visible ? "Hide password" : "Show password",
+      );
+      button.setAttribute("aria-pressed", String(visible));
+      button.innerHTML = `<i data-lucide="${visible ? "eye-off" : "eye"}"></i>`;
+      lucide.createIcons({ nodes: [button] });
+    };
+
+    button.addEventListener("click", () => {
+      input.type = input.type === "password" ? "text" : "password";
+      renderIcon();
+      input.focus();
+    });
+
+    renderIcon();
+  });
+}
+
 function showSignupModal(plan = "trial") {
   const overlay = document.getElementById("authOverlay");
   if (!overlay) return;
@@ -500,11 +528,21 @@ function showSignupModal(plan = "trial") {
             </div>
             <div class="auth-input-group">
               <label>Password</label>
-              <input type="password" id="signupPass" class="auth-input" placeholder="Password" autocomplete="new-password">
+              <div class="auth-password-field">
+                <input type="password" id="signupPass" class="auth-input" placeholder="Password" autocomplete="new-password">
+                <button type="button" class="auth-password-toggle" data-password-toggle="signupPass" aria-label="Show password">
+                  <i data-lucide="eye"></i>
+                </button>
+              </div>
             </div>
             <div class="auth-input-group">
               <label>Confirm Password</label>
-              <input type="password" id="signupPassConfirm" class="auth-input" placeholder="Confirm password" autocomplete="new-password">
+              <div class="auth-password-field">
+                <input type="password" id="signupPassConfirm" class="auth-input" placeholder="Confirm password" autocomplete="new-password">
+                <button type="button" class="auth-password-toggle" data-password-toggle="signupPassConfirm" aria-label="Show password">
+                  <i data-lucide="eye"></i>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -545,6 +583,7 @@ function showSignupModal(plan = "trial") {
   `;
 
   lucide.createIcons({ nodes: [overlay] });
+  setupPasswordVisibilityToggles(overlay);
 
   document.getElementById("signupCardNumber").addEventListener("input", (e) => {
     const digits = e.target.value.replace(/\D/g, "").slice(0, 16);
@@ -873,7 +912,12 @@ function showAuthModal(mode = "login") {
                 ? `
             <div class="auth-input-group">
               <label>Password</label>
-              <input type="password" id="authPass" class="auth-input" placeholder="Password" autocomplete="${isLogin ? "current-password" : "new-password"}">
+              <div class="auth-password-field">
+                <input type="password" id="authPass" class="auth-input" placeholder="Password" autocomplete="${isLogin ? "current-password" : "new-password"}">
+                <button type="button" class="auth-password-toggle" data-password-toggle="authPass" aria-label="Show password">
+                  <i data-lucide="eye"></i>
+                </button>
+              </div>
             </div>`
                 : ""
             }
@@ -917,6 +961,7 @@ function showAuthModal(mode = "login") {
   updateCopyrightYear();
   // Re-initialize icons for the new HTML
   lucide.createIcons({ nodes: [overlay] });
+  setupPasswordVisibilityToggles(overlay);
   if (isPricing) loadPricing();
 
   if (isPricing) {
