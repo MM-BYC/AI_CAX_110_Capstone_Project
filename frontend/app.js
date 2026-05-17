@@ -530,8 +530,8 @@ function showSignupModal(plan = "trial") {
               <label>Password</label>
               <div class="auth-password-field">
                 <input type="password" id="signupPass" class="auth-input" placeholder="Password" autocomplete="new-password">
-                <button type="button" class="auth-password-toggle" data-password-toggle="signupPass" aria-label="Show password">
-                  <i data-lucide="eye"></i>
+                <button type="button" class="auth-password-toggle" data-password-toggle="signupPass" aria-label="Password hidden">
+                  <i data-lucide="eye-off"></i>
                 </button>
               </div>
             </div>
@@ -539,8 +539,8 @@ function showSignupModal(plan = "trial") {
               <label>Confirm Password</label>
               <div class="auth-password-field">
                 <input type="password" id="signupPassConfirm" class="auth-input" placeholder="Confirm password" autocomplete="new-password">
-                <button type="button" class="auth-password-toggle" data-password-toggle="signupPassConfirm" aria-label="Show password">
-                  <i data-lucide="eye"></i>
+                <button type="button" class="auth-password-toggle" data-password-toggle="signupPassConfirm" aria-label="Password hidden">
+                  <i data-lucide="eye-off"></i>
                 </button>
               </div>
             </div>
@@ -914,8 +914,8 @@ function showAuthModal(mode = "login") {
               <label>Password</label>
               <div class="auth-password-field">
                 <input type="password" id="authPass" class="auth-input" placeholder="Password" autocomplete="${isLogin ? "current-password" : "new-password"}">
-                <button type="button" class="auth-password-toggle" data-password-toggle="authPass" aria-label="Show password">
-                  <i data-lucide="eye"></i>
+                <button type="button" class="auth-password-toggle" data-password-toggle="authPass" aria-label="Password hidden">
+                  <i data-lucide="eye-off"></i>
                 </button>
               </div>
             </div>`
