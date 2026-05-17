@@ -4,13 +4,15 @@ from typing import Callable, Iterable
 
 from voice_engine.audio import EnergyVAD, JitterBuffer, PassthroughDenoiser
 from voice_engine.config import EngineConfig, ParticipantConfig
-from voice_engine.engines import DebugStreamingASR, GlossaryTranslator, SpeakerEmbeddingEngine, ToneTTS
+from voice_engine.engines import DebugStreamingASR, GlossaryTranslator, GroqTranslationEngine, SpeakerEmbeddingEngine, ToneTTS
 from voice_engine.engines.asr import StreamingASR
 from voice_engine.engines.guard import TerminologyGuard
 from voice_engine.engines.translation import TranslationEngine
 from voice_engine.engines.tts import TTSEngine
 from voice_engine.exceptions import GuardRejectedOutput
+from voice_engine.feedback import GroqTranslationReviewer, TranslationFeedbackModel
 from voice_engine.memory import MemoryAugmentedTranslator, TranslationMemory
+from voice_engine.memory.storage import default_training_path
 from voice_engine.metrics import LatencyTrace, StageTimer
 from voice_engine.models import AudioFrame, CommittedPhrase, SynthAudioEvent, TranslationEvent
 from voice_engine.pipeline.phrase_committer import PhraseCommitter
@@ -112,18 +114,32 @@ class VoiceEngineOrchestrator:
         translation_memory: TranslationMemory | None = None,
         memory_namespace: str | None = None,
         memory_domain: str = "general",
+        feedback_model: TranslationFeedbackModel | None = None,
+        feedback_correction_provider=None,
     ):
         self.room_id = room_id
         self.config = config or EngineConfig()
         self.translation_memory = translation_memory or TranslationMemory.create_default(
             min_similarity=self.config.translation_memory_min_similarity
         )
+        self.memory_namespace = memory_namespace or room_id
+        self.memory_domain = memory_domain
+        base_translator = translator or GroqTranslationEngine.from_environment() or GlossaryTranslator()
         self.translator = MemoryAugmentedTranslator(
-            translator or GlossaryTranslator(),
+            base_translator,
             memory=self.translation_memory,
             min_accept_confidence=self.config.translation_min_confidence,
-            namespace=memory_namespace or room_id,
+            namespace=self.memory_namespace,
             domain=memory_domain,
+        )
+        correction_provider = feedback_correction_provider
+        if correction_provider is None:
+            correction_provider = GroqTranslationReviewer.from_environment()
+        self.feedback_model = feedback_model or TranslationFeedbackModel(
+            memory=self.translation_memory,
+            correction_provider=correction_provider,
+            review_all_with_provider=correction_provider is not None,
+            training_path=default_training_path(),
         )
         self.tts = tts or ToneTTS(self.config.sample_rate_hz)
         self.speaker_profiles = speaker_profiles or SpeakerEmbeddingEngine()
@@ -320,6 +336,18 @@ class VoiceEngineOrchestrator:
             source_language=source.source_language,
             target_language=target_language,
         )
+        if self.feedback_model is not None:
+            feedback = await self.feedback_model.apply(
+                translation,
+                namespace=self.memory_namespace,
+                domain=self.memory_domain,
+                metadata={
+                    "room_id": self.room_id,
+                    "source_participant_id": source.participant_id,
+                    "recipient_id": recipient.participant_id,
+                },
+            )
+            translation = feedback.translation
         try:
             translation = self.guard.validate(translation)
         except GuardRejectedOutput as exc:

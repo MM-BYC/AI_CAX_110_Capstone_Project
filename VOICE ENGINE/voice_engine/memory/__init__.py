@@ -12,6 +12,7 @@ from .storage import (
     PineconeVectorMemoryStore,
     TextVectorizer,
     default_memory_path,
+    default_training_path,
 )
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "TranslationMemoryEntry",
     "TranslationMemoryMatch",
     "default_memory_path",
+    "default_training_path",
 ]

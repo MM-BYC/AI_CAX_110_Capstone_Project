@@ -19,7 +19,9 @@ It does not use OpenAI, external LLM APIs, or hosted AI services.
 - Streaming ASR interface.
 - Phrase commit logic.
 - Translation interface.
+- Built-in Groq translation engine for package-owned translation.
 - Translation memory and confidence guard layer.
+- Automatic translation feedback model before TTS.
 - Terminology and anti-hallucination guard.
 - Speaker profile and voice-clone interface.
 - TTS interface.
@@ -236,6 +238,60 @@ python3 -m pip install -e "VOICE ENGINE"
 ```
 
 This installs `pinecone[grpc]` with the package. If Pinecone credentials are not configured, VOICE ENGINE still uses its persistent local memory and local vector retrieval.
+
+## Automatic Feedback Model
+
+VOICE ENGINE includes its own Groq translation engine plus a feedback model that runs after translation and before TTS. This replaces the manual in-room Correct button flow for normal meeting use.
+
+Runtime behavior:
+
+- Check approved translation memory first.
+- Run deterministic safety checks for copied source text, empty output, missing numbers, and low confidence.
+- Optionally call a fast correction provider supplied by the host application.
+- Use the built-in `GroqTranslationReviewer` when `VOICE_ENGINE_GROQ_API_KEY` or `GROQ_API_KEY` is configured.
+- Replace the translation before synthesis when the provider returns a higher-confidence correction.
+- Save accepted corrections back to translation memory.
+- Append correction examples to the training dataset.
+
+Default training dataset path:
+
+```text
+VOICE ENGINE/data/training/feedback_corrections.jsonl
+```
+
+Installed-package fallback:
+
+```text
+~/.voice_engine/training/feedback_corrections.jsonl
+```
+
+Override with:
+
+```bash
+export VOICE_ENGINE_TRAINING_DATASET_PATH="/absolute/path/feedback_corrections.jsonl"
+```
+
+The package-level APIs are `GroqTranslationEngine`, `GroqTranslationReviewer`, and `TranslationFeedbackModel`. Apps may pass custom engines into `VoiceEngineOrchestrator`, but they do not have to. By default, VOICE ENGINE creates its own Groq translator and reviewer from environment variables when available:
+
+```bash
+export VOICE_ENGINE_GROQ_API_KEY="..."
+export VOICE_ENGINE_TRANSLATION_MODEL="llama-3.3-70b-versatile"
+export VOICE_ENGINE_REVIEW_MODEL="llama-3.1-8b-instant"
+export VOICE_ENGINE_CORRECTION_MODEL="llama-3.3-70b-versatile"
+```
+
+If `VOICE_ENGINE_GROQ_API_KEY` is not set, `GROQ_API_KEY` is used. If neither exists, VOICE ENGINE still runs memory and deterministic feedback checks, but it cannot call the built-in Groq translator/reviewer and falls back to deterministic placeholder translation.
+
+VOICE ENGINE owns translation generation, review, correction generation, persistence, and the training-data path. Host apps only configure credentials and call the orchestrator.
+
+The package-local agent modules are:
+
+```text
+voice_engine/agents/translation_agent.py
+voice_engine/agents/quality_review_agent.py
+```
+
+`GroqTranslationEngine` uses the package translation agent. `GroqTranslationReviewer` uses the package quality-review agent and the package translation agent for correction generation. These agents do not import backend app modules.
 
 ## Production Rule
 

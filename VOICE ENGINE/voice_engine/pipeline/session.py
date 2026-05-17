@@ -1,6 +1,8 @@
 from voice_engine.config import EngineConfig, ParticipantConfig
 from voice_engine.engines import DebugStreamingASR, GlossaryTranslator, SpeakerEmbeddingEngine, ToneTTS
+from voice_engine.feedback import TranslationFeedbackModel
 from voice_engine.memory import MemoryAugmentedTranslator, TranslationMemory
+from voice_engine.memory.storage import default_training_path
 from voice_engine.metrics import LatencyTrace
 from voice_engine.models import AudioFrame, Direction, SynthAudioEvent
 from voice_engine.pipeline.direction import DirectionPipeline, DirectionResult
@@ -16,6 +18,7 @@ class CallSession:
         config: EngineConfig | None = None,
         phrase_table: dict[tuple[str, str, str], str] | None = None,
         translation_memory: TranslationMemory | None = None,
+        feedback_model: TranslationFeedbackModel | None = None,
     ):
         self.config = config or EngineConfig()
         self.participant_a = participant_a
@@ -37,6 +40,10 @@ class CallSession:
             min_accept_confidence=self.config.translation_min_confidence,
         )
         self.translator = translator
+        self.feedback_model = feedback_model or TranslationFeedbackModel(
+            memory=memory,
+            training_path=default_training_path(),
+        )
         tts = ToneTTS(self.config.sample_rate_hz)
 
         self.a_to_b = DirectionPipeline(
@@ -48,6 +55,7 @@ class CallSession:
             translator=translator,
             tts=tts,
             speaker_profiles=self.speaker_profiles,
+            feedback_model=self.feedback_model,
         )
         self.b_to_a = DirectionPipeline(
             direction=Direction.B_TO_A,
@@ -58,6 +66,7 @@ class CallSession:
             translator=translator,
             tts=tts,
             speaker_profiles=self.speaker_profiles,
+            feedback_model=self.feedback_model,
         )
 
     async def accept_audio(self, frame: AudioFrame) -> DirectionResult:

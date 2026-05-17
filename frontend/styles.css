@@ -1494,9 +1494,8 @@ footer p {
   padding-left: 0.3rem;
 }
 
-/* Toggle and Action buttons inside bubbles */
-.conv-toggle-original,
-.conv-correct-btn {
+/* Toggle button inside bubbles */
+.conv-toggle-original {
   font-size: 0.67rem;
   font-weight: 500;
   color: #6366f1;
@@ -1509,8 +1508,7 @@ footer p {
   text-decoration: none;
   text-underline-offset: 2px;
 }
-.conv-toggle-original:hover,
-.conv-correct-btn:hover {
+.conv-toggle-original:hover {
   opacity: 1;
   text-decoration: underline;
 }

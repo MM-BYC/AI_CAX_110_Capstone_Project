@@ -362,6 +362,32 @@ confidence-gated translation, and silence or delay when the candidate cannot be
 justified. The same persisted examples become the offline dataset for later
 fine-tuning of translation and grammar scoring models.
 
+The runtime package also owns an automatic feedback model. After a candidate
+translation is produced and before TTS runs, this model checks approved memory,
+deterministic safety signals, and an optional host-provided correction provider.
+When a higher-confidence correction is available, it replaces the candidate,
+persists the corrected pair into translation memory, and appends the example to
+the training dataset for offline model improvement.
+
+The fast LLM reviewer and correction generator live inside VOICE ENGINE as
+`GroqTranslationReviewer`. The app should not own this review loop; it only
+configures credentials or model names. The orchestrator creates the reviewer per
+room when `VOICE_ENGINE_GROQ_API_KEY` or `GROQ_API_KEY` is available.
+
+The Groq translation agent also lives inside VOICE ENGINE as
+`GroqTranslationEngine`. The app should not provide its backend translation
+agent for room audio. The orchestrator creates the package translator per room
+when credentials are available, then runs feedback and memory learning before
+TTS.
+
+The agent implementations live under `voice_engine/agents/`:
+
+- `translation_agent.py`
+- `quality_review_agent.py`
+
+The engine and reviewer wrappers call these package-local agents. No backend app
+agent is required for VOICE ENGINE feedback or correction.
+
 ### 11. Speaker Embedding Engine
 
 Builds a compact voice identity representation from each participant's speech.

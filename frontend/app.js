@@ -2549,24 +2549,7 @@ function convAddMessage(msg) {
     });
   }
 
-  // "Correct" button for translations
-  const correctBtn = document.createElement("button");
-  correctBtn.className = "conv-correct-btn";
-  if (msg.is_self) {
-    correctBtn.style.display = "none";
-  } else {
-    correctBtn.textContent = "Correct";
-    correctBtn.addEventListener("click", () => {
-      const fixed = prompt(
-        `Correct this translation:\n"${msg.translation}"`,
-        msg.translation,
-      );
-      if (fixed && fixed !== msg.translation) convSubmitCorrection(msg, fixed);
-    });
-  }
-
   actionsEl.appendChild(toggleBtn);
-  actionsEl.appendChild(correctBtn);
 
   bubble.appendChild(nameEl);
   bubble.appendChild(mainEl);
@@ -2652,36 +2635,6 @@ function convAddSystemMsg(text) {
   el.textContent = text;
   convMessages.appendChild(el);
   convMessages.scrollTop = convMessages.scrollHeight;
-}
-
-async function convSubmitCorrection(msg, newTranslation) {
-  if (!newTranslation || !newTranslation.trim()) return;
-
-  const myLang = convUsers[convUserId]?.language || "en";
-  const speakerLang = convUsers[msg.from_id]?.language || "en";
-
-  try {
-    const res = await fetch(`${API_BASE}/api/v1/translation/correction`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        source_text: msg.original,
-        source_lang: speakerLang,
-        target_lang: myLang,
-        correct_translation: newTranslation.trim(),
-        bad_translation: msg.translation,
-      }),
-    });
-
-    if (res.ok) {
-      alert(
-        "Correction saved! The system will use this for future translations.",
-      );
-      vocabRefresh(); // Refresh the vocab badge if visible
-    }
-  } catch (e) {
-    console.error("Failed to submit correction:", e);
-  }
 }
 
 // ── Mic UI ─────────────────────────────────────────────────────────────────

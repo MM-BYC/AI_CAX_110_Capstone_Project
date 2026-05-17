@@ -174,7 +174,7 @@ try:
     from voice_engine import EngineConfig, ParticipantConfig, VoiceEngineOrchestrator  # noqa: E402
     from voice_engine.audio.frames import synth_sine_pcm16  # noqa: E402
     from voice_engine.engines.neural_tts import VoiceEngineNeuralTTSPlatform  # noqa: E402
-    from voice_engine.models import AudioFrame, SynthAudioEvent, TranslationEvent  # noqa: E402
+    from voice_engine.models import AudioFrame, SynthAudioEvent  # noqa: E402
     _VOICE_ENGINE_AVAILABLE = True
 except Exception as e:
     # Production should install VOICE ENGINE as a normal Python package.
@@ -185,12 +185,12 @@ except Exception as e:
         from voice_engine import EngineConfig, ParticipantConfig, VoiceEngineOrchestrator  # noqa: E402
         from voice_engine.audio.frames import synth_sine_pcm16  # noqa: E402
         from voice_engine.engines.neural_tts import VoiceEngineNeuralTTSPlatform  # noqa: E402
-        from voice_engine.models import AudioFrame, SynthAudioEvent, TranslationEvent  # noqa: E402
+        from voice_engine.models import AudioFrame, SynthAudioEvent  # noqa: E402
         _VOICE_ENGINE_AVAILABLE = True
     except Exception as fallback_error:
         EngineConfig = ParticipantConfig = VoiceEngineOrchestrator = None
         VoiceEngineNeuralTTSPlatform = None
-        AudioFrame = SynthAudioEvent = TranslationEvent = None
+        AudioFrame = SynthAudioEvent = None
         synth_sine_pcm16 = None
         _VOICE_ENGINE_AVAILABLE = False
         logging.getLogger(__name__).warning(
@@ -217,30 +217,6 @@ def _get_voice_engine_tts_platform():
         vendor_dir=vendor_dir if vendor_dir.exists() else None,
     )
     return _voice_engine_tts_platform
-
-
-class _ConversationVoiceTranslator:
-    """Adapter from VOICE ENGINE translation calls to this app's pipeline."""
-
-    async def translate(self, phrase, source_language: str, target_language: str):
-        if source_language == target_language:
-            translated = phrase.source_text
-        else:
-            result = await asyncio.to_thread(
-                run_conversation_pipeline,
-                phrase.source_text,
-                source_language,
-                target_language,
-                "",
-            )
-            translated = result.get("translation", phrase.source_text)
-        return TranslationEvent(
-            source_text=phrase.source_text,
-            target_text=translated,
-            confidence=0.99,
-            source_language=source_language,
-            target_language=target_language,
-        )
 
 
 class _ConversationVoiceTTS:
@@ -302,7 +278,10 @@ class _ConversationVoiceTTS:
             duration_ms=max(120, min(15_000, len(translation.target_text) * 55)),
             text=translation.target_text,
             audio_format=audio_format,
-            metadata={"synthesizer": method} if method else {},
+            metadata={
+                **getattr(translation, "metadata", {}),
+                **({"synthesizer": method} if method else {}),
+            },
         )
 
 
@@ -339,7 +318,6 @@ def _get_voice_engine_orchestrator(room_id: str):
         room_id=room_id,
         participants=participants,
         config=config,
-        translator=_ConversationVoiceTranslator(),
         tts=_ConversationVoiceTTS(config.sample_rate_hz),
     )
     _voice_engine_rooms[room_id] = orchestrator
@@ -366,6 +344,75 @@ def _voice_engine_remove_participant(room_id: str, user_id: str) -> None:
 
 def _voice_engine_dispose_room(room_id: str) -> None:
     _voice_engine_rooms.pop(room_id, None)
+
+
+def _voice_engine_learn_translation_correction(
+    room_id: str,
+    source_participant_id: str,
+    recipient_id: str,
+    source_text: str,
+    target_text: str,
+    source_language: str,
+    target_language: str,
+    metadata: dict | None = None,
+) -> bool:
+    if not _VOICE_ENGINE_AVAILABLE:
+        return False
+    learned = False
+    if room_id and source_participant_id and recipient_id:
+        orchestrator = _get_voice_engine_orchestrator(room_id)
+        if orchestrator is not None:
+            try:
+                room = _rooms.get(room_id) or {}
+                info = room.get("info", {})
+                if source_participant_id in info:
+                    _voice_engine_register_participant(room_id, source_participant_id, info[source_participant_id])
+                if recipient_id in info:
+                    _voice_engine_register_participant(room_id, recipient_id, info[recipient_id])
+                orchestrator.learn_translation_correction(
+                    source_participant_id=source_participant_id,
+                    recipient_id=recipient_id,
+                    source_text=source_text,
+                    target_text=target_text,
+                    metadata=metadata,
+                )
+                learned = True
+            except Exception as e:
+                logger.warning("VOICE ENGINE room correction skipped: room=%s error=%s", room_id, e)
+
+    if not learned and VoiceEngineOrchestrator is not None:
+        try:
+            config = EngineConfig(jitter_buffer_ms=20)
+            orchestrator = VoiceEngineOrchestrator(
+                room_id=room_id or "corrections",
+                participants=[
+                    ParticipantConfig(
+                        participant_id=source_participant_id or "source",
+                        display_name=source_participant_id or "source",
+                        source_language=source_language,
+                        target_language=target_language,
+                    ),
+                    ParticipantConfig(
+                        participant_id=recipient_id or "recipient",
+                        display_name=recipient_id or "recipient",
+                        source_language=target_language,
+                        target_language=target_language,
+                    ),
+                ],
+                config=config,
+                tts=_ConversationVoiceTTS(config.sample_rate_hz),
+            )
+            orchestrator.learn_translation_correction(
+                source_participant_id=source_participant_id or "source",
+                recipient_id=recipient_id or "recipient",
+                source_text=source_text,
+                target_text=target_text,
+                metadata=metadata,
+            )
+            learned = True
+        except Exception as e:
+            logger.warning("VOICE ENGINE persistent correction skipped: %s", e)
+    return learned
 
 
 async def _voice_engine_accept_transcript(room_id: str, user_id: str, text: str):
@@ -946,6 +993,9 @@ class TranslationCorrection(BaseModel):
     target_lang: str
     correct_translation: str
     bad_translation: str = ""
+    room_id: str = ""
+    source_participant_id: str = ""
+    recipient_id: str = ""
 
 
 class ConversationSummaryMessage(BaseModel):
@@ -1129,9 +1179,23 @@ async def translation_correction(body: TranslationCorrection):
         domain="correction",
         translations={body.target_lang: correct},
     )
-    logger.info("Translation correction saved: %r [%s→%s] = %r",
-                source_text[:60], body.source_lang, body.target_lang, correct[:60])
-    return entry
+    voice_engine_saved = _voice_engine_learn_translation_correction(
+        room_id=body.room_id.strip(),
+        source_participant_id=body.source_participant_id.strip(),
+        recipient_id=body.recipient_id.strip(),
+        source_text=source_text,
+        target_text=correct,
+        source_language=body.source_lang,
+        target_language=body.target_lang,
+        metadata={
+            "source": "conversation_correct_button",
+            "bad_translation": body.bad_translation[:240],
+            "vocabulary_entry_id": entry.get("id", ""),
+        },
+    )
+    logger.info("Translation correction saved: %r [%s→%s] = %r voice_engine=%s",
+                source_text[:60], body.source_lang, body.target_lang, correct[:60], voice_engine_saved)
+    return {**entry, "voice_engine_memory_saved": voice_engine_saved}
 
 
 def _get_summary_client() -> Groq:

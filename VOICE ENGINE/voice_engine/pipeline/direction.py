@@ -8,6 +8,7 @@ from voice_engine.engines.translation import TranslationEngine
 from voice_engine.engines.tts import TTSEngine
 from voice_engine.engines.voice_clone import SpeakerEmbeddingEngine
 from voice_engine.exceptions import GuardRejectedOutput
+from voice_engine.feedback import TranslationFeedbackModel
 from voice_engine.metrics import LatencyTrace, StageTimer
 from voice_engine.models import AudioFrame, Direction, SynthAudioEvent
 from voice_engine.pipeline.phrase_committer import PhraseCommitter
@@ -31,6 +32,7 @@ class DirectionPipeline:
         translator: TranslationEngine,
         tts: TTSEngine,
         speaker_profiles: SpeakerEmbeddingEngine,
+        feedback_model: TranslationFeedbackModel | None = None,
     ):
         self.direction = direction
         self.source = source
@@ -39,6 +41,7 @@ class DirectionPipeline:
         self.asr = asr
         self.translator = translator
         self.tts = tts
+        self.feedback_model = feedback_model
         self.speaker_profiles = speaker_profiles
         self.jitter = JitterBuffer(config.jitter_buffer_ms)
         self.denoiser = PassthroughDenoiser()
@@ -84,6 +87,19 @@ class DirectionPipeline:
                     source_language=self.source.source_language,
                     target_language=self.source.target_language,
                 )
+
+            if self.feedback_model is not None:
+                with timer.stage("feedback"):
+                    feedback = await self.feedback_model.apply(
+                        translation,
+                        namespace="global",
+                        domain="general",
+                        metadata={
+                            "source_participant_id": self.source.participant_id,
+                            "recipient_id": self.recipient.participant_id,
+                        },
+                    )
+                    translation = feedback.translation
 
             try:
                 with timer.stage("guard"):

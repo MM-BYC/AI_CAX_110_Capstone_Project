@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "gTTS>=2.5.4",
+  "groq>=0.13.0",
   "pinecone[grpc]>=7.0.0",
 ]
 

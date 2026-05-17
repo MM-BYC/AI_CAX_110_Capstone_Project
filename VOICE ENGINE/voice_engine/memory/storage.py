@@ -24,6 +24,18 @@ def default_memory_path() -> Path:
     return Path.home() / ".voice_engine" / "translation_memory" / "approved_corrections.jsonl"
 
 
+def default_training_path() -> Path:
+    configured = os.getenv("VOICE_ENGINE_TRAINING_DATASET_PATH")
+    if configured:
+        return Path(configured).expanduser()
+
+    package_root = Path(__file__).resolve().parents[2]
+    if package_root.name == "VOICE ENGINE":
+        return package_root / "data" / "training" / "feedback_corrections.jsonl"
+
+    return Path.home() / ".voice_engine" / "training" / "feedback_corrections.jsonl"
+
+
 class TextVectorizer:
     """Deterministic local text vectorizer for fast retrieval and Pinecone upsert."""
 
