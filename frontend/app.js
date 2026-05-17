@@ -472,10 +472,10 @@ function setupPasswordVisibilityToggles(root = document) {
       const visible = input.type === "text";
       button.setAttribute(
         "aria-label",
-        visible ? "Hide password" : "Show password",
+        visible ? "Password visible" : "Password hidden",
       );
       button.setAttribute("aria-pressed", String(visible));
-      button.innerHTML = `<i data-lucide="${visible ? "eye-off" : "eye"}"></i>`;
+      button.innerHTML = `<i data-lucide="${visible ? "eye" : "eye-off"}"></i>`;
       lucide.createIcons({ nodes: [button] });
     };
 
