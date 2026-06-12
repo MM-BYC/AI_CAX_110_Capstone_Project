@@ -1682,19 +1682,19 @@ async def api_stats():
 # Legacy root-level routes kept for backward compatibility.
 
 @app.post("/api/v1/translate/text")
-async def api_translate_text(source: str, target: str, text: str, email: str = "guest", request: Request = None):
-    _check_trial_access(email)
+async def api_translate_text(source: str, target: str, text: str, request: Request):
+    _bearer_email(request)
     """Translate text (SDK/API-first endpoint)."""
-    if request:
-        security.audit("translate_text", request, source=source, target=target,
-                       chars=len(text))
+    security.audit("translate_text", request, source=source, target=target,
+                   chars=len(text))
     result = run_text_pipeline(text, source, target)
     return result
 
 
 @app.post("/api/v1/translate/audio")
 async def api_translate_audio(source: str, target: str, file: UploadFile,
-                               request: Request = None):
+                               request: Request):
+    _bearer_email(request)
     """Translate an uploaded audio file (SDK/API-first endpoint)."""
     filepath = f"temp_api_{file.filename}"
     with open(filepath, "wb") as f:
@@ -1704,8 +1704,7 @@ async def api_translate_audio(source: str, target: str, file: UploadFile,
     finally:
         if os.path.exists(filepath):
             os.remove(filepath)
-    if request:
-        security.audit("translate_audio", request, source=source, target=target)
+    security.audit("translate_audio", request, source=source, target=target)
     return result
 
 

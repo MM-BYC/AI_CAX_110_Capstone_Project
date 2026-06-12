@@ -1147,6 +1147,12 @@ async function liveTranslate(sourceOverride) {
       },
     );
 
+    if (res.status === 402) {
+      const err = await res.json();
+      showPricingModal(err.detail?.message || "Payment required");
+      return;
+    }
+
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Unknown error" }));
       throw new Error(err.detail || `HTTP ${res.status}`);
@@ -1285,15 +1291,15 @@ async function translateAudio() {
       },
     );
 
+    if (res.status === 402) {
+      const err = await res.json();
+      showPricingModal(err.detail?.message || "Payment required");
+      return;
+    }
+
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Unknown error" }));
       throw new Error(err.detail || `HTTP ${res.status}`);
-    }
-
-    if (res.status === 402) {
-      const err = await res.json();
-      showPricingModal(err.detail.message);
-      return;
     }
 
     const data = await res.json();
@@ -1366,6 +1372,11 @@ audioTargetLang.addEventListener("change", async () => {
         headers: { Authorization: `Bearer ${currentUserToken}` },
       },
     );
+    if (res.status === 402) {
+      const err = await res.json();
+      showPricingModal(err.detail?.message || "Payment required");
+      return;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     setAudioOutput(data.translation);
