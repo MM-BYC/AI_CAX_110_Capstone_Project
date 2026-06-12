@@ -2686,8 +2686,8 @@ function convAddSystemMsg(text) {
 function convSetMicUI(isOn) {
   convMicBtn.classList.toggle("active", isOn);
   convMicBtn.innerHTML = isOn
-    ? '<i data-lucide="mic"></i><span id="convMicLabel">Mute</span><i data-lucide="chevron-up" class="conv-toolbar-caret"></i>'
-    : '<i data-lucide="mic-off"></i><span id="convMicLabel">Join Audio</span><i data-lucide="chevron-up" class="conv-toolbar-caret"></i>';
+    ? '<i data-lucide="mic"></i><span id="convMicLabel">Mute</span>'
+    : '<i data-lucide="mic-off"></i><span id="convMicLabel">Join Audio</span>';
   lucide.createIcons({ nodes: [convMicBtn] });
   if (convUserId && convUsers[convUserId]) {
     convUsers[convUserId].mic_on = isOn;
@@ -3530,22 +3530,12 @@ async function convTestMicrophone() {
   }
 }
 
-convMicBtn.addEventListener("click", (e) => {
-  const clickedCaret = Boolean(e.target.closest(".conv-toolbar-caret"));
-  if (clickedCaret) {
-    const isOpen = convAudioPopover?.style.display === "flex";
-    convCloseToolbarPopovers(isOpen ? null : "audio");
-    if (!convAudioPopover) return;
-    convAudioPopover.style.display = isOpen ? "none" : "flex";
-    convMicBtn.classList.toggle("open", !isOpen);
-    lucide.createIcons({ nodes: [convAudioPopover] });
-    return;
-  }
+convMicBtn.addEventListener("click", () => {
   if (convIsAudioJoined()) {
     convLeaveComputerAudio();
     return;
   }
-  convAudioModalOpen();
+  convJoinComputerAudio();
 });
 
 convAudioJoinMenuBtn?.addEventListener("click", convJoinComputerAudio);

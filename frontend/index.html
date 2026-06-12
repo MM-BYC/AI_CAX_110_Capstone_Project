@@ -512,24 +512,12 @@
               </button>
             </div>
 
-            <div class="conv-toolbar-popover conv-audio-popover" id="convAudioPopover" style="display:none">
-              <button type="button" class="conv-more-action" id="convAudioJoinMenuBtn">
-                <i data-lucide="headphones"></i>
-                <span>Join with computer audio</span>
-              </button>
-              <button type="button" class="conv-more-action" id="convAudioTestMenuBtn">
-                <i data-lucide="sliders-horizontal"></i>
-                <span>Test speaker &amp; microphone</span>
-              </button>
-            </div>
-
             <!-- Zoom-style meeting toolbar -->
             <div class="conv-mic-bar">
               <div class="conv-toolbar-left">
                 <button type="button" class="conv-toolbar-btn" id="convMicBtn">
                   <i data-lucide="mic-off"></i>
                   <span id="convMicLabel">Join Audio</span>
-                  <i data-lucide="chevron-up" class="conv-toolbar-caret"></i>
                 </button>
                 <button type="button" class="conv-toolbar-btn" id="convCamBtn">
                   <i data-lucide="video-off"></i>
@@ -584,24 +572,6 @@
               </div>
             </div>
             <div class="conv-summary-body" id="convSummaryBody"></div>
-          </div>
-        </div>
-
-        <!-- Join audio modal -->
-        <div id="convAudioModal" class="conv-audio-modal" style="display:none" aria-modal="true" role="dialog">
-          <div class="conv-audio-card">
-            <button type="button" class="conv-audio-close" id="convAudioCloseBtn" title="Close">
-              <i data-lucide="x"></i>
-            </button>
-            <div class="conv-audio-title">Join audio</div>
-            <button type="button" class="conv-audio-choice" id="convAudioJoinBtn" data-audio-choice="computer" aria-pressed="false">Join with computer audio</button>
-            <button type="button" class="conv-audio-choice" id="convAudioTestSpeakerBtn" data-audio-choice="speaker" aria-pressed="false">Test speaker</button>
-            <button type="button" class="conv-audio-choice" id="convAudioTestMicBtn" data-audio-choice="microphone" aria-pressed="false">Test microphone</button>
-            <div class="conv-audio-status" id="convAudioTestStatus" aria-live="polite">Select your choice.</div>
-            <label class="conv-audio-checkbox">
-              <input type="checkbox" id="convAudioAutoJoin" checked>
-              <span>Automatically join computer audio when joining</span>
-            </label>
           </div>
         </div>
 

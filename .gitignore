@@ -17,3 +17,6 @@ backend/temp_*
 # uv
 .venv/
 uv.lock
+
+# Local agent state
+.refact/
