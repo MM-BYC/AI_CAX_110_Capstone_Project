@@ -8,6 +8,7 @@ An agentic AI translation system powered by **Groq AI**, **OpenAI Whisper large-
 
 ## Recent Updates
 
+- **Live Language Detection:** The Live tab now includes a "Detect Language" source option that detects speech language automatically, displays the detected language, and uses it for live translation.
 - **Language Badges:** Participant cards now display full language names (e.g., "English", "Spanish") with blue badges for better readability.
 - **Speaking Indicators:** Active speakers have a bright green border that flashes in sync with audio volume for clear visual feedback.
 - **Chat Panel Default:** The chat panel now opens automatically by default on all devices for immediate access to messages.
@@ -30,7 +31,7 @@ Upload audio files for transcription + translation with word-level synchronizati
 
 ### Live Translation
 
-Real-time speech recognition and translation with streaming results.
+Real-time speech recognition and translation with streaming results, including automatic source-language detection.
 
 ### Live Conversation
 
@@ -83,6 +84,7 @@ The app has **four tabs** for different translation modes.
 
 - Mic button to start/stop listening
 - Browser-based speech recognition
+- Optional automatic source-language detection
 - Streaming transcription display
 - Live translation output
 - Reset button to clear session
@@ -506,6 +508,7 @@ Test the real-time conversation feature using two different devices or two **Chr
 
 | Area | Change |
 | --- | --- |
+| **Live language detection** | Added "Detect Language" to the Live tab source selector; detected language is shown in the selector and used for speech recognition + translation while keeping auto-detect mode active |
 | **Anti-hallucination pipeline** | All conversation messages (speech + keyboard) pass through ConversationAgent → strict TranslationAgent (temperature 0) → QualityReviewAgent → retry with critique |
 | **ConversationAgent** | Strips English filler words (um, uh, like, you know…) and normalises whitespace before translation |
 | **TranslationAgent strict mode** | System-level prompt + `temperature=0` for deterministic, faithful translations |

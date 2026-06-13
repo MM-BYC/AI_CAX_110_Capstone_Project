@@ -1099,6 +1099,10 @@ function resetTextDetectOption() {
   updateDetectOption(textSourceLang, null);
 }
 
+function resetLiveDetectOption() {
+  updateDetectOption(liveSourceLang, null);
+}
+
 function updateCharCount(len) {
   charCount.textContent = `${len} character${len !== 1 ? "s" : ""}`;
 }
@@ -1479,6 +1483,12 @@ let liveXlateTimer = null;
 let liveDetectTimer = null;
 let liveDetectedLang = null;
 
+function getLiveSourceLang() {
+  return liveSourceLang.value === "auto"
+    ? liveDetectedLang || "en"
+    : liveSourceLang.value;
+}
+
 function startListening() {
   if (!SpeechRecognition) {
     liveStatus.textContent =
@@ -1488,6 +1498,7 @@ function startListening() {
 
   finalText = "";
   liveDetectedLang = null;
+  if (liveSourceLang.value === "auto") resetLiveDetectOption();
   liveTranscript.innerHTML = '<span class="placeholder">Listening…</span>';
   liveOutputText.innerHTML =
     '<span class="placeholder">Translation will appear here…</span>';
@@ -1497,7 +1508,7 @@ function startListening() {
   recognition = new SpeechRecognition();
   recognition.continuous = true;
   recognition.interimResults = true;
-  recognition.lang = LANG_LOCALES[liveSourceLang.value] || "en-US";
+  recognition.lang = LANG_LOCALES[getLiveSourceLang()] || "en-US";
 
   recognition.onresult = (e) => {
     let interim = "";
@@ -1579,6 +1590,7 @@ liveResetBtn.addEventListener("click", () => {
   stopListening();
   finalText = "";
   liveDetectedLang = null;
+  if (liveSourceLang.value === "auto") resetLiveDetectOption();
   clearTimeout(liveXlateTimer);
   clearTimeout(liveDetectTimer);
   liveTranscript.innerHTML =
@@ -1602,7 +1614,9 @@ async function detectLiveLanguage(text) {
     const detected = data.detected_language;
     if (detected && detected !== liveDetectedLang) {
       liveDetectedLang = detected;
-      liveSourceLang.value = detected;
+      if (liveSourceLang.value === "auto") {
+        updateDetectOption(liveSourceLang, detected);
+      }
     }
   } catch (_) {}
 }
@@ -1611,7 +1625,7 @@ async function translateLiveText(text) {
   if (!text.trim()) return;
   try {
     const params = new URLSearchParams({
-      source: liveSourceLang.value,
+      source: getLiveSourceLang(),
       target: liveTargetLang.value,
       text,
     });
@@ -1631,6 +1645,8 @@ async function translateLiveText(text) {
 
 // Restart recognition with new language if changed mid-session
 liveSourceLang.addEventListener("change", () => {
+  liveDetectedLang = null;
+  if (liveSourceLang.value === "auto") resetLiveDetectOption();
   if (isListening) {
     stopListening();
     startListening();
